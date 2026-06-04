@@ -5,6 +5,8 @@ import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'
 import ComparisonPanel from './components/ComparisonPanel'
 import QuoteHistory from './components/QuoteHistory'
+import ManageCylinders from './components/ManageCylinders'
+import ManageSubstrates from './components/ManageSubstrates'
 
 const DEFAULTS = {
   width: 64.5,
@@ -17,7 +19,7 @@ const DEFAULTS = {
   exchange_rate: 85,
 }
 
-function buildPayload(inputs) {
+function buildPayload(inputs, { save = false, clientId = null, orderId = null } = {}) {
   return {
     width: parseFloat(inputs.width) || 1,
     height: parseFloat(inputs.height) || 1,
@@ -26,7 +28,9 @@ function buildPayload(inputs) {
     substrate_price: parseFloat(inputs.substrate_price) || 0,
     foil_cost: parseFloat(inputs.foil_cost) || 0,
     exchange_rate: parseFloat(inputs.exchange_rate) || 85,
-    save: false,
+    save,
+    client_id: clientId,
+    order_id: orderId,
   }
 }
 
@@ -36,15 +40,22 @@ const NAV_LINKS = [
   { id: 'history',    label: 'Quote History',       icon: '🕘' },
 ]
 
+const ADMIN_LINKS = [
+  { id: 'cylinders',  label: 'Manage Cylinders',  icon: '⚙' },
+  { id: 'substrates', label: 'Manage Substrates',  icon: '▤' },
+]
+
 export default function App() {
-  const [inputs, setInputs]       = useState(DEFAULTS)
+  const [inputs, setInputs]         = useState(DEFAULTS)
   const [substrates, setSubstrates] = useState([])
-  const [result, setResult]       = useState(null)
-  const [resultB, setResultB]     = useState(null)
-  const [error, setError]         = useState(null)
-  const [loading, setLoading]     = useState(false)
-  const [navOpen, setNavOpen]     = useState(true)
+  const [result, setResult]         = useState(null)
+  const [resultB, setResultB]       = useState(null)
+  const [error, setError]           = useState(null)
+  const [loading, setLoading]       = useState(false)
+  const [navOpen, setNavOpen]       = useState(true)
   const [activeView, setActiveView] = useState('calculator')
+  const [clientId, setClientId]     = useState(null)
+  const [orderId, setOrderId]       = useState(null)
 
   useEffect(() => {
     api.getSubstrates()
@@ -59,8 +70,13 @@ export default function App() {
 
   const handleCalculate = () => {
     setLoading(true)
+    const shouldSave = Boolean(orderId)
+    const opts = { save: shouldSave, clientId, orderId }
     const inputsB = { ...inputs, width: inputs.height, height: inputs.width }
-    Promise.all([api.calculate(buildPayload(inputs)), api.calculate(buildPayload(inputsB))])
+    Promise.all([
+      api.calculate(buildPayload(inputs, opts)),
+      api.calculate(buildPayload(inputsB, opts)),
+    ])
       .then(([a, b]) => { setResult(a); setResultB(b); setError(null) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -133,6 +149,18 @@ export default function App() {
               <span className="nav-link-text">{link.label}</span>
             </button>
           ))}
+
+          <div className="nav-section-label" style={{ marginTop: '1.2rem' }}>Admin</div>
+          {ADMIN_LINKS.map((link) => (
+            <button
+              key={link.id}
+              className={`nav-link${activeView === link.id ? ' active' : ''}`}
+              onClick={() => setActiveView(link.id)}
+            >
+              <span className="nav-link-icon">{link.icon}</span>
+              <span className="nav-link-text">{link.label}</span>
+            </button>
+          ))}
         </nav>
 
         {activeView === 'calculator' && (
@@ -144,6 +172,8 @@ export default function App() {
               onSubstrateSelect={handleSubstrateSelect}
               onCalculate={handleCalculate}
               loading={loading}
+              onClientChange={setClientId}
+              onOrderChange={setOrderId}
             />
           </aside>
         )}
@@ -155,6 +185,7 @@ export default function App() {
             <>
               <CylinderTable result={result} />
               <PricingPanel result={result} />
+              <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} />
             </>
           )}
 
@@ -162,7 +193,9 @@ export default function App() {
             <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} />
           )}
 
-          {activeView === 'history' && <QuoteHistory />}
+          {activeView === 'history'    && <QuoteHistory />}
+          {activeView === 'cylinders'  && <ManageCylinders />}
+          {activeView === 'substrates' && <ManageSubstrates />}
         </div>
       </div>
 

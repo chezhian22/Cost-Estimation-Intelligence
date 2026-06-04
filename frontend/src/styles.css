@@ -703,6 +703,153 @@ tbody tr.matched.best-paper td {
 .summary-icon { color: var(--amber); flex-shrink: 0; margin-top: 0.05rem }
 .summary-text strong { color: var(--amber-bright) }
 
+/* ─── CLIENT / ORDER SELECTOR ─── */
+.client-order-selector { margin-bottom: 0.4rem }
+
+.selector-section-title {
+  display: flex; align-items: center; gap: 0.7rem;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--amber-light);
+  margin-bottom: 1rem;
+}
+
+.combobox-row {
+  position: relative;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.combobox-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid rgba(249,115,22,0.16);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  color: var(--text-bright);
+  font-size: 0.9rem;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.combobox-input:focus {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-dim);
+}
+.combobox-clear {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid rgba(249,115,22,0.18);
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  transition: color 0.12s, border-color 0.12s;
+}
+.combobox-clear:hover { color: var(--amber); border-color: var(--amber-mid) }
+
+.combobox-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 200;
+  background: var(--bg-raised);
+  border: 1px solid rgba(249,115,22,0.22);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.50);
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.combobox-option {
+  display: flex; align-items: center; gap: 0.6rem;
+  width: 100%; padding: 0.6rem 0.9rem;
+  background: none; border: none;
+  color: var(--text); font-size: 0.85rem;
+  text-align: left; cursor: pointer;
+  transition: background 0.10s;
+}
+.combobox-option:hover { background: var(--amber-dim) }
+.combobox-option--new { color: var(--amber-light); font-weight: 600 }
+.option-icon { font-size: 0.75rem; color: var(--text-dim); flex-shrink: 0 }
+.combobox-option--new .option-icon { color: var(--amber) }
+
+.order-section { margin-top: 0.6rem }
+
+.new-order-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.8rem;
+  background: none;
+  border: 1px dashed rgba(249,115,22,0.28);
+  border-radius: var(--radius-sm);
+  color: var(--amber-light);
+  font-size: 0.82rem; font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+.new-order-btn:hover { border-color: var(--amber); background: var(--amber-dim) }
+
+.new-order-row {
+  display: flex; gap: 0.4rem; margin-top: 0.5rem;
+}
+.new-order-row input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid rgba(249,115,22,0.22);
+  border-radius: var(--radius-sm);
+  padding: 0.52rem 0.75rem;
+  color: var(--text-bright);
+  font-size: 0.85rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.new-order-row input:focus { border-color: var(--amber) }
+.new-order-save-btn {
+  padding: 0.5rem 0.75rem;
+  background: var(--amber);
+  border: none; border-radius: var(--radius-sm);
+  color: #fff; font-weight: 700; font-size: 0.8rem;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: opacity 0.15s;
+}
+.new-order-save-btn:disabled { opacity: 0.45; cursor: not-allowed }
+.new-order-save-btn:not(:disabled):hover { opacity: 0.85 }
+.new-order-cancel-btn {
+  padding: 0.5rem 0.6rem;
+  background: none;
+  border: 1px solid rgba(249,115,22,0.18);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim); cursor: pointer; font-size: 0.8rem;
+  transition: color 0.12s;
+  font-family: 'Inter', sans-serif;
+}
+.new-order-cancel-btn:hover { color: var(--text) }
+
+.active-order-badge {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-mid);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem; color: var(--text);
+}
+.active-order-badge strong { color: var(--amber-bright) }
+
+.no-order-note {
+  margin-top: 0.6rem;
+  font-size: 0.74rem; color: var(--text-dim);
+  font-style: italic;
+}
+
+.selector-error {
+  margin-top: 0.4rem;
+  font-size: 0.75rem; color: #fca5a5;
+}
+
 /* ─── QUOTE HISTORY ─── */
 .history-state {
   display: flex;
@@ -722,6 +869,124 @@ tbody tr.matched.best-paper td {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
+
+/* History accordion */
+.history-list { display: flex; flex-direction: column }
+
+.history-client {
+  border-bottom: 1px solid var(--border);
+}
+.history-client:last-child { border-bottom: none }
+
+.history-client-header {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 1rem 1.4rem;
+  background: var(--bg-raised);
+}
+.history-client-icon { color: var(--amber); font-size: 0.85rem }
+.history-client-name {
+  font-weight: 700; font-size: 0.95rem; color: var(--text-bright);
+  flex: 1;
+}
+.history-client-meta {
+  font-size: 0.68rem; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.history-order-empty {
+  padding: 0.75rem 1.4rem 0.75rem 2.4rem;
+  font-size: 0.80rem; color: var(--text-dim); font-style: italic;
+}
+
+.history-order { border-top: 1px solid var(--border-faint) }
+
+.history-order-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  width: 100%; padding: 0.7rem 1.4rem 0.7rem 2rem;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 0.85rem;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  font-family: 'Inter', sans-serif;
+}
+.history-order-header:hover,
+.history-order-header.open {
+  background: var(--amber-dim);
+  color: var(--amber-bright);
+}
+.history-order-icon { font-size: 0.75rem; flex-shrink: 0 }
+.history-order-name { flex: 1; font-weight: 500 }
+.history-order-chevron { font-size: 0.6rem; color: var(--text-dim) }
+
+.order-calc-table { padding: 0 }
+.order-calc-table table { font-size: 0.80rem }
+.order-calc-table thead th { font-size: 0.63rem }
+.order-calc-table tbody td { padding: 0.48rem 0.75rem }
+.order-calc-table thead th:first-child { padding-left: 2.4rem }
+.order-calc-table tbody td:first-child { padding-left: 2.4rem; text-align: left }
+
+/* ─── MANAGE CYLINDERS ─── */
+.cyl-add-form {
+  padding: 1.4rem;
+  border-bottom: 1px solid var(--border);
+}
+.cyl-add-title {
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 0.9rem;
+}
+.cyl-form-row {
+  display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap;
+}
+.cyl-field {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  flex: 1; min-width: 130px;
+}
+.cyl-field input {
+  background: var(--bg-input);
+  border: 1px solid rgba(249,115,22,0.16);
+  border-radius: var(--radius-sm);
+  padding: 0.58rem 0.8rem;
+  color: var(--text-bright);
+  font-size: 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cyl-field input:focus {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-dim);
+}
+.cyl-add-btn {
+  padding: 0.58rem 1.1rem;
+  background: linear-gradient(135deg, #c95300 0%, #f97316 60%, #fb923c 100%);
+  border: none; border-radius: var(--radius-sm);
+  color: #fff; font-family: 'Inter', sans-serif;
+  font-size: 0.83rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  transition: opacity 0.15s, transform 0.12s;
+  box-shadow: 0 3px 14px rgba(249,115,22,0.40);
+}
+.cyl-add-btn:hover:not(:disabled) { opacity: 0.87; transform: translateY(-1px) }
+.cyl-add-btn:disabled { opacity: 0.45; cursor: not-allowed }
+
+.cyl-delete-btn {
+  background: none;
+  border: 1px solid rgba(239,68,68,0.22);
+  border-radius: var(--radius-xs);
+  color: rgba(239,68,68,0.55);
+  font-size: 0.75rem; cursor: pointer;
+  padding: 0.22rem 0.5rem;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  font-family: 'Inter', sans-serif;
+}
+.cyl-delete-btn:hover:not(:disabled) {
+  color: #fca5a5;
+  border-color: rgba(239,68,68,0.55);
+  background: rgba(239,68,68,0.07);
+}
+.cyl-delete-btn:disabled { opacity: 0.45; cursor: not-allowed }
 
 /* ─── FOOTER ─── */
 footer {

@@ -1,8 +1,17 @@
 import React from 'react'
+import ClientOrderSelector from './ClientOrderSelector'
 
-export default function InputPanel({ inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading }) {
+export default function InputPanel({
+  inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading,
+  onClientChange, onOrderChange,
+}) {
   return (
     <div className="sidebar-form">
+      <ClientOrderSelector
+        onClientChange={onClientChange}
+        onOrderChange={onOrderChange}
+      />
+
       <div className="sidebar-title">
         <span className="sidebar-title-bar" />
         Input Parameters

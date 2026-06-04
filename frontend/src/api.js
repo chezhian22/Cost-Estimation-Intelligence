@@ -1,7 +1,3 @@
-// Thin API client for the FastAPI backend.
-// In dev, Vite proxies /api -> http://localhost:8000 (see vite.config.js).
-// In production, set VITE_API_BASE to your backend origin.
-
 const BASE = import.meta.env.VITE_API_BASE || ''
 
 async function request(path, options = {}) {
@@ -13,16 +9,39 @@ async function request(path, options = {}) {
     const detail = await res.json().catch(() => ({}))
     throw new Error(detail.detail || `Request failed: ${res.status}`)
   }
+  if (res.status === 204) return null
   return res.json()
 }
 
 export const api = {
+  // Substrates
   getSubstrates: () => request('/api/substrates'),
+  createSubstrate: (name, price) =>
+    request('/api/substrates', { method: 'POST', body: JSON.stringify({ name, price }) }),
+  deleteSubstrate: (id) => request(`/api/substrates/${id}`, { method: 'DELETE' }),
+
+  // Teeth / Cylinders
   getTeeth: () => request('/api/teeth'),
-  calculate: (payload) =>
-    request('/api/calculate', {
+  createTooth: (teeth, paper_size) =>
+    request('/api/teeth', { method: 'POST', body: JSON.stringify({ teeth, paper_size }) }),
+  deleteTooth: (id) => request(`/api/teeth/${id}`, { method: 'DELETE' }),
+
+  // Clients
+  getClients: () => request('/api/clients'),
+  createClient: (name) =>
+    request('/api/clients', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  // Orders
+  getOrders: (clientId) => request(`/api/clients/${clientId}/orders`),
+  createOrder: (clientId, name) =>
+    request(`/api/clients/${clientId}/orders`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ name }),
     }),
+  getOrderCalculations: (orderId) => request(`/api/orders/${orderId}/calculations`),
+
+  // Calculations
+  calculate: (payload) =>
+    request('/api/calculate', { method: 'POST', body: JSON.stringify(payload) }),
   getHistory: () => request('/api/calculations'),
 }
