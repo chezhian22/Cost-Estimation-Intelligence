@@ -8,65 +8,74 @@ export default function PricingPanel({ result }) {
 
   return (
     <section className="card pricing-card">
-      <h2><span className="card-icon">💰</span> Pricing</h2>
-      <div className="pricing-grid">
-        <div className="price-item label-size">
-          <span className="price-label">Label Size</span>
-          <span className="price-value">{fmt(p.label_w_cm)} × {fmt(p.label_h_cm)} cm</span>
-        </div>
-        <div className="price-item">
-          <span className="price-label">Labels / m²</span>
-          <span className="price-value">{fmt(p.labels_sqm)}</span>
-        </div>
-        <div className="price-item">
-          <span className="price-label">Adjusted Labels / m²</span>
-          <span className="price-value">{fmt(p.adj_labels)}</span>
-        </div>
+      <div className="card-header">
+        <div className="card-icon-wrap">◉</div>
+        <span className="card-title">Pricing Output</span>
+        <span className="card-number">SYS-03</span>
+      </div>
 
-        <div className="divider"></div>
+      <div className="pricing-meta">
+        <div className="meta-item">
+          <span className="meta-label">Label Size</span>
+          <span className="meta-value">{fmt(p.label_w_cm)} × {fmt(p.label_h_cm)} cm</span>
+        </div>
+        <div className="meta-item">
+          <span className="meta-label">Labels / m²</span>
+          <span className="meta-value">{fmt(p.labels_sqm)}</span>
+        </div>
+        <div className="meta-item">
+          <span className="meta-label">Adjusted Labels / m²</span>
+          <span className="meta-value">{fmt(p.adj_labels)}</span>
+        </div>
+      </div>
 
-        <div className="rates-section">
-          <h3>Rate Tiers</h3>
-          <div className="rates-grid">
-            <div className="rate-item">
-              <span className="rate-label">Rate 1 : 1.5</span>
-              <span className="rate-value">₹ {fmt(p.rate_15)}</span>
-            </div>
-            <div className="rate-item">
-              <span className="rate-label">Rate 1 : 1.75</span>
-              <span className="rate-value">₹ {fmt(p.rate_175)}</span>
-            </div>
-            <div className="rate-item highlight">
-              <span className="rate-label">Rate 1 : 2</span>
-              <span className="rate-value">₹ {fmt(p.rate_2)}</span>
-            </div>
+      <div className="section-label">Rate Tiers</div>
+      <div className="rates-grid">
+        <div className="rate-card">
+          <span className="rate-ratio">1 : 1.5</span>
+          <span className="rate-amount">₹ {fmt(p.rate_15)}</span>
+        </div>
+        <div className="rate-card">
+          <span className="rate-ratio">1 : 1.75</span>
+          <span className="rate-amount">₹ {fmt(p.rate_175)}</span>
+        </div>
+        <div className="rate-card active">
+          <span className="rate-ratio">1 : 2</span>
+          <span className="rate-amount">₹ {fmt(p.rate_2)}</span>
+        </div>
+      </div>
+
+      <div className="section-divider" />
+
+      <div className="section-label">Final Pricing</div>
+      <div className="currency-row">
+        <div className="currency-block inr-block">
+          <div className="currency-symbol">
+            <span className="currency-symbol-dot" />
+            ₹ INR
+          </div>
+          <div className="price-row">
+            <span className="price-row-label">Price per Label</span>
+            <span className="price-amount">₹ {fmt(p.price_inr_label, 3)}</span>
+          </div>
+          <div className="price-row featured">
+            <span className="price-row-label">Per 1000 Labels</span>
+            <span className="price-amount">₹ {fmt(p.price_inr_1000, 3)}</span>
           </div>
         </div>
 
-        <div className="divider"></div>
-
-        <div className="final-prices">
-          <div className="currency-block inr-block">
-            <h3>₹ INR</h3>
-            <div className="price-row">
-              <span>Price per Label</span>
-              <span className="price-big">₹ {fmt(p.price_inr_label, 3)}</span>
-            </div>
-            <div className="price-row featured">
-              <span>Price per 1000 Labels</span>
-              <span className="price-big">₹ {fmt(p.price_inr_1000, 3)}</span>
-            </div>
+        <div className="currency-block usd-block">
+          <div className="currency-symbol">
+            <span className="currency-symbol-dot" />
+            $ USD
           </div>
-          <div className="currency-block usd-block">
-            <h3>$ USD</h3>
-            <div className="price-row">
-              <span>Price per Label</span>
-              <span className="price-big">$ {fmt(p.price_usd_label, 3)}</span>
-            </div>
-            <div className="price-row featured">
-              <span>Price per 1000 Labels</span>
-              <span className="price-big">$ {fmt(p.price_usd_1000, 3)}</span>
-            </div>
+          <div className="price-row">
+            <span className="price-row-label">Price per Label</span>
+            <span className="price-amount">$ {fmt(p.price_usd_label, 3)}</span>
+          </div>
+          <div className="price-row featured">
+            <span className="price-row-label">Per 1000 Labels</span>
+            <span className="price-amount">$ {fmt(p.price_usd_1000, 3)}</span>
           </div>
         </div>
       </div>

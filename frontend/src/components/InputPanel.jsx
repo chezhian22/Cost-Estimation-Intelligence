@@ -1,12 +1,16 @@
 import React from 'react'
 
-export default function InputPanel({ inputs, substrates, onChange, onSubstrateSelect }) {
+export default function InputPanel({ inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading }) {
   return (
-    <section className="card inputs-card">
-      <h2><span className="card-icon">⚙️</span> Input Parameters</h2>
-      <div className="input-grid">
-        <div className="input-group">
-          <label htmlFor="input-width">Width <span className="unit">(mm)</span></label>
+    <div className="sidebar-form">
+      <div className="sidebar-title">
+        <span className="sidebar-title-bar" />
+        Input Parameters
+      </div>
+
+      <div className="field-stack">
+        <div className="field">
+          <label className="field-label" htmlFor="input-width">↔ Width <span className="unit">(mm)</span></label>
           <input
             type="number" id="input-width" step="0.1" min="1"
             value={inputs.width}
@@ -14,8 +18,8 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-height">Height <span className="unit">(mm)</span></label>
+        <div className="field">
+          <label className="field-label" htmlFor="input-height">↕ Height <span className="unit">(mm)</span></label>
           <input
             type="number" id="input-height" step="0.1" min="1"
             value={inputs.height}
@@ -23,8 +27,8 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-waste">Waste <span className="unit">(%)</span></label>
+        <div className="field">
+          <label className="field-label" htmlFor="input-waste">◎ Waste <span className="unit">(%)</span></label>
           <input
             type="number" id="input-waste" step="1" min="1" max="100"
             value={inputs.waste_pct}
@@ -32,8 +36,10 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-substrate">Substrate</label>
+        <div className="field-divider" />
+
+        <div className="field">
+          <label className="field-label" htmlFor="input-substrate">▤ Substrate</label>
           <select
             id="input-substrate"
             value={inputs.substrateId}
@@ -41,15 +47,13 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           >
             <option value="custom">— Custom —</option>
             {substrates.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.price}/m²)
-              </option>
+              <option key={s.id} value={s.id}>{s.name} ({s.price}/m²)</option>
             ))}
           </select>
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-substrate-price">Substrate Price <span className="unit">(per m²)</span></label>
+        <div className="field">
+          <label className="field-label" htmlFor="input-substrate-price">₹ Substrate Price <span className="unit">(/ m²)</span></label>
           <input
             type="number" id="input-substrate-price" step="0.5" min="0"
             value={inputs.substrate_price}
@@ -57,8 +61,8 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-foil">Foil Cost</label>
+        <div className="field">
+          <label className="field-label" htmlFor="input-foil">✦ Foil Cost</label>
           <input
             type="number" id="input-foil" step="0.5" min="0"
             value={inputs.foil_cost}
@@ -66,8 +70,8 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="input-exchange">Exchange Rate <span className="unit">(₹ / $)</span></label>
+        <div className="field">
+          <label className="field-label" htmlFor="input-exchange">⇄ Exchange Rate <span className="unit">(₹ / $)</span></label>
           <input
             type="number" id="input-exchange" step="0.5" min="1"
             value={inputs.exchange_rate}
@@ -75,6 +79,18 @@ export default function InputPanel({ inputs, substrates, onChange, onSubstrateSe
           />
         </div>
       </div>
-    </section>
+
+      <button
+        className={`calc-btn${loading ? ' calc-btn--loading' : ''}`}
+        onClick={onCalculate}
+        disabled={loading}
+      >
+        {loading ? (
+          <><span className="calc-btn-spinner" /> Calculating…</>
+        ) : (
+          <>◈ Run Calculation</>
+        )}
+      </button>
+    </div>
   )
 }

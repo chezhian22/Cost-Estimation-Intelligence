@@ -1,8 +1,7 @@
 import React from 'react'
 
-const fmt = (v, d = 2) => Number(v).toFixed(d)
-const fmtC = (v) =>
-  Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmt  = (v, d = 2) => Number(v).toFixed(d)
+const fmtC = (v) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 export default function CylinderTable({ result }) {
   if (!result) return null
@@ -11,18 +10,25 @@ export default function CylinderTable({ result }) {
 
   return (
     <section className="card table-card">
-      <h2><span className="card-icon">📐</span> Cylinder Calculation Table</h2>
+      <div className="card-header">
+        <div className="card-icon-wrap">◈</div>
+        <span className="card-title">Cylinder Calculation Matrix</span>
+        <span className="card-number">SYS-02</span>
+      </div>
 
-      <div className="matched-label">
-        ✦ Best match:{' '}
-        <strong>
-          {fmt(matched.matched_width)} mm × {fmt(matched.matched_height)} mm
-        </strong>{' '}
-        (Teeth: {matched.matched_teeth})
+      <div className="best-match-badge">
+        <span className="badge-dot" />
+        <span className="badge-label">Best Match</span>
+        <span className="badge-sep">·</span>
+        <span className="badge-value">
+          {fmt(matched.matched_width)} × {fmt(matched.matched_height)} mm
+        </span>
+        <span className="badge-sep">·</span>
+        <span className="badge-label">Teeth {matched.matched_teeth}</span>
       </div>
 
       <div className="table-wrapper">
-        <table id="cylinder-table">
+        <table>
           <thead>
             <tr>
               <th>Teeth</th>
@@ -40,7 +46,7 @@ export default function CylinderTable({ result }) {
           <tbody>
             {rows.map((r, i) => {
               const cls = [
-                i === matchedIdx ? 'matched' : '',
+                i === matchedIdx   ? 'matched'    : '',
                 i === bestPaperIdx ? 'best-paper' : '',
               ].join(' ').trim()
               return (
