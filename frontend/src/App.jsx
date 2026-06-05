@@ -4,6 +4,7 @@ import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'
 import ComparisonPanel from './components/ComparisonPanel'
+import ComparisonPage from './components/ComparisonPage'
 import QuoteHistory from './components/QuoteHistory'
 import ManageCylinders from './components/ManageCylinders'
 import ManageSubstrates from './components/ManageSubstrates'
@@ -189,9 +190,7 @@ export default function App() {
             </>
           )}
 
-          {activeView === 'comparison' && (
-            <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} />
-          )}
+          {activeView === 'comparison' && <ComparisonPage />}
 
           {activeView === 'history'    && <QuoteHistory />}
           {activeView === 'cylinders'  && <ManageCylinders />}

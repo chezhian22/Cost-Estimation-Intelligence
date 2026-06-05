@@ -24,6 +24,10 @@ def _migrate():
             conn.execute(text("ALTER TABLE calculations ADD COLUMN client_id INT NULL"))
         if "order_id" not in existing:
             conn.execute(text("ALTER TABLE calculations ADD COLUMN order_id INT NULL"))
+        if "status" not in existing:
+            conn.execute(text(
+                "ALTER TABLE calculations ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'"
+            ))
 
 _migrate()
 
@@ -256,6 +260,7 @@ def get_order_calculations(order_id: int, db: Session = Depends(get_db)):
             "foil_cost": c.foil_cost,
             "exchange_rate": c.exchange_rate,
             "created_at": c.created_at,
+            "status": c.status or "pending",
             "pricing": c.result.get("pricing") if c.result else None,
         }
         for c in calcs
@@ -482,8 +487,39 @@ def get_calculations(db: Session = Depends(get_db)):
             order_id=c.order_id,
             client_name=client_name,
             order_name=order_name,
+            status=c.status or "pending",
         ))
     return out
+
+
+@app.patch(
+    "/api/calculations/{calc_id}/status",
+    tags=["history"],
+    summary="Update quote status",
+    response_description="The updated calculation record with the new status.",
+)
+def update_status(calc_id: int, body: schemas.StatusUpdate, db: Session = Depends(get_db)):
+    """
+    Changes the status of a saved quote.
+
+    Valid values for `status`:
+    - `pending` — not yet decided (default)
+    - `confirmed` — quote accepted and order confirmed
+    - `rejected` — quote not accepted
+
+    Returns `404` if the calculation does not exist.
+    Returns `400` if an invalid status value is supplied.
+    """
+    valid = {"pending", "confirmed", "rejected"}
+    if body.status not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{body.status}'. Must be one of: {', '.join(sorted(valid))}",
+        )
+    obj = crud.update_calculation_status(db, calc_id, body.status)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    return {"id": obj.id, "status": obj.status}
 
 
 @app.get(
@@ -515,5 +551,6 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "created_at": obj.created_at,
         "client_id": obj.client_id,
         "order_id": obj.order_id,
+        "status": obj.status or "pending",
         "result": obj.result,
     }

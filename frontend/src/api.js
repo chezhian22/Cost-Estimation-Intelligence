@@ -44,4 +44,10 @@ export const api = {
   calculate: (payload) =>
     request('/api/calculate', { method: 'POST', body: JSON.stringify(payload) }),
   getHistory: () => request('/api/calculations'),
+  getCalculation: (id) => request(`/api/calculations/${id}`),
+  updateQuoteStatus: (id, status) =>
+    request(`/api/calculations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 }

@@ -136,3 +136,15 @@ def list_order_calculations(db: Session, order_id: int) -> List[models.Calculati
 
 def get_calculation(db: Session, calc_id: int) -> Optional[models.Calculation]:
     return db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
+
+
+def update_calculation_status(
+    db: Session, calc_id: int, status: str
+) -> Optional[models.Calculation]:
+    obj = db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
+    if not obj:
+        return None
+    obj.status = status
+    db.commit()
+    db.refresh(obj)
+    return obj

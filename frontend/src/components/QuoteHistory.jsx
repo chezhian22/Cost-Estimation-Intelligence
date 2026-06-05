@@ -3,7 +3,61 @@ import { api } from '../api'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
-function OrderCalcTable({ orderId, orderName }) {
+const STATUS_CONFIG = {
+  pending:   { label: 'Pending',   cls: 'status-pending'   },
+  confirmed: { label: 'Confirmed', cls: 'status-confirmed' },
+  rejected:  { label: 'Rejected',  cls: 'status-rejected'  },
+}
+
+function StatusBadge({ calcId, initial }) {
+  const [status, setStatus]   = useState(initial || 'pending')
+  const [saving, setSaving]   = useState(false)
+  const [open, setOpen]       = useState(false)
+
+  async function choose(next) {
+    setOpen(false)
+    if (next === status) return
+    setSaving(true)
+    try {
+      await api.updateQuoteStatus(calcId, next)
+      setStatus(next)
+    } catch { /* keep current on error */ }
+    finally { setSaving(false) }
+  }
+
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
+
+  return (
+    <div className="status-wrap">
+      <button
+        className={`status-badge ${cfg.cls}${saving ? ' status-saving' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        title="Click to change status"
+        disabled={saving}
+      >
+        {saving ? '…' : cfg.label}
+        <span className="status-caret">▾</span>
+      </button>
+
+      {open && (
+        <div className="status-dropdown">
+          {Object.entries(STATUS_CONFIG).map(([key, c]) => (
+            <button
+              key={key}
+              className={`status-option ${c.cls}${status === key ? ' current' : ''}`}
+              onClick={() => choose(key)}
+            >
+              {status === key && <span className="status-check">✓ </span>}
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OrderCalcTable({ orderId }) {
   const [calcs, setCalcs] = useState(null)
   const [err, setErr]     = useState(null)
 
@@ -13,8 +67,14 @@ function OrderCalcTable({ orderId, orderName }) {
       .catch((e) => setErr(e.message))
   }, [orderId])
 
-  if (err) return <div className="history-state error-banner" style={{ margin: '1rem' }}>⚠ {err}</div>
-  if (!calcs) return <div className="history-state" style={{ padding: '1.5rem' }}><div className="history-spinner" /></div>
+  if (err) return (
+    <div className="history-state error-banner" style={{ margin: '1rem' }}>⚠ {err}</div>
+  )
+  if (!calcs) return (
+    <div className="history-state" style={{ padding: '1.5rem' }}>
+      <div className="history-spinner" />
+    </div>
+  )
   if (calcs.length === 0) return (
     <div className="history-state" style={{ padding: '1.5rem', fontSize: '0.82rem' }}>
       No calculations saved under this order yet.
@@ -33,6 +93,7 @@ function OrderCalcTable({ orderId, orderName }) {
             <th>₹ / 1000</th>
             <th>$ / 1000</th>
             <th>Saved</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -51,6 +112,9 @@ function OrderCalcTable({ orderId, orderName }) {
                     })
                   : '—'}
               </td>
+              <td>
+                <StatusBadge calcId={c.id} initial={c.status} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -67,7 +131,9 @@ function ClientAccordion({ client, orders }) {
       <div className="history-client-header">
         <span className="history-client-icon">◉</span>
         <span className="history-client-name">{client.name}</span>
-        <span className="history-client-meta">{orders.length} order{orders.length !== 1 ? 's' : ''}</span>
+        <span className="history-client-meta">
+          {orders.length} order{orders.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {orders.length === 0 ? (
@@ -83,9 +149,7 @@ function ClientAccordion({ client, orders }) {
               <span className="history-order-name">{o.name}</span>
               <span className="history-order-chevron">{openOrder === o.id ? '▲' : '▼'}</span>
             </button>
-            {openOrder === o.id && (
-              <OrderCalcTable orderId={o.id} orderName={o.name} />
-            )}
+            {openOrder === o.id && <OrderCalcTable orderId={o.id} />}
           </div>
         ))
       )}
@@ -95,7 +159,7 @@ function ClientAccordion({ client, orders }) {
 
 export default function QuoteHistory() {
   const [clients, setClients] = useState(null)
-  const [orders, setOrders]   = useState({})   // { clientId: [orders] }
+  const [orders, setOrders]   = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
@@ -145,11 +209,7 @@ export default function QuoteHistory() {
       {!loading && !error && clients?.length > 0 && (
         <div className="history-list">
           {clients.map((c) => (
-            <ClientAccordion
-              key={c.id}
-              client={c}
-              orders={orders[c.id] ?? []}
-            />
+            <ClientAccordion key={c.id} client={c} orders={orders[c.id] ?? []} />
           ))}
         </div>
       )}

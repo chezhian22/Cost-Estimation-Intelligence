@@ -270,6 +270,21 @@ class CalculationResponse(BaseModel):
     )
 
 
+# ── Status update ────────────────────────────────────────────────────────────
+class StatusUpdate(BaseModel):
+    """Body for PATCH /api/calculations/{id}/status."""
+
+    status: str = Field(
+        ...,
+        description="New status value. Must be one of: `pending`, `confirmed`, `rejected`.",
+        examples=["confirmed"],
+    )
+
+    model_config = {
+        "json_schema_extra": {"example": {"status": "confirmed"}}
+    }
+
+
 # ── Saved calculation history ────────────────────────────────────────────────
 class CalculationHistoryOut(BaseModel):
     """A row in the saved-calculation history list."""
@@ -289,3 +304,4 @@ class CalculationHistoryOut(BaseModel):
     order_id: Optional[int]    = Field(None, description="Linked order ID, if any.")
     client_name: Optional[str] = Field(None, description="Client name (denormalised for display).")
     order_name: Optional[str]  = Field(None, description="Order name (denormalised for display).")
+    status: str                = Field("pending", description="Quote status: `pending`, `confirmed`, or `rejected`.")

@@ -66,4 +66,7 @@ class Calculation(Base):
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     order_id  = Column(Integer, ForeignKey("orders.id"),  nullable=True)
 
+    # Quote status: pending | confirmed | rejected
+    status = Column(String(20), nullable=False, default="pending")
+
     order = relationship("Order", back_populates="calculations")
