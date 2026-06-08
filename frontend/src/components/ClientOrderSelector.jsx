@@ -2,38 +2,28 @@ import React, { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 
 export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
-  const [clients, setClients]           = useState([])
-  const [query, setQuery]               = useState('')
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [clients, setClients]               = useState([])
+  const [query, setQuery]                   = useState('')
+  const [dropdownOpen, setDropdownOpen]     = useState(false)
   const [selectedClient, setSelectedClient] = useState(null)
-
-  const [orders, setOrders]               = useState([])
-  const [selectedOrder, setSelectedOrder] = useState(null)
-
-  const [savingClient, setSavingClient] = useState(false)
-  const [savingOrder, setSavingOrder]   = useState(false)
-  const [clientError, setClientError]   = useState(null)
-  const [orderError, setOrderError]     = useState(null)
+  const [orders, setOrders]                 = useState([])
+  const [selectedOrder, setSelectedOrder]   = useState(null)
 
   const wrapRef = useRef(null)
 
-  // Load client list on mount
   useEffect(() => {
     api.getClients().then(setClients).catch(() => {})
   }, [])
 
-  // Load orders whenever client changes
   useEffect(() => {
     if (!selectedClient) { setOrders([]); return }
     api.getOrders(selectedClient.id).then(setOrders).catch(() => {})
   }, [selectedClient])
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target))
         setDropdownOpen(false)
-      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -42,33 +32,14 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
   const filteredClients = clients.filter((c) =>
     c.name.toLowerCase().includes(query.toLowerCase())
   )
-  const isNew = query.trim() &&
-    !clients.some((c) => c.name.toLowerCase() === query.trim().toLowerCase())
 
   function pickClient(client) {
     setSelectedClient(client)
     setQuery(client.name)
     setDropdownOpen(false)
     setSelectedOrder(null)
-    setClientError(null)
     onClientChange(client.id)
     onOrderChange(null)
-  }
-
-  async function handleCreateClient() {
-    const name = query.trim()
-    if (!name) return
-    setSavingClient(true)
-    setClientError(null)
-    try {
-      const c = await api.createClient(name)
-      setClients((prev) => [...prev, c].sort((a, b) => a.name.localeCompare(b.name)))
-      pickClient(c)
-    } catch (e) {
-      setClientError(e.message)
-    } finally {
-      setSavingClient(false)
-    }
   }
 
   function clearClient() {
@@ -76,32 +47,13 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
     setQuery('')
     setOrders([])
     setSelectedOrder(null)
-    setClientError(null)
-    setOrderError(null)
     onClientChange(null)
     onOrderChange(null)
   }
 
   function pickOrder(order) {
     setSelectedOrder(order)
-    setOrderError(null)
     onOrderChange(order.id)
-  }
-
-  async function handleCreateOrder() {
-    if (!selectedClient) return
-    const name = `Order #${orders.length + 1}`
-    setSavingOrder(true)
-    setOrderError(null)
-    try {
-      const o = await api.createOrder(selectedClient.id, name)
-      setOrders((prev) => [o, ...prev])
-      pickOrder(o)
-    } catch (e) {
-      setOrderError(e.message)
-    } finally {
-      setSavingOrder(false)
-    }
   }
 
   return (
@@ -111,14 +63,14 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
         Client &amp; Order
       </div>
 
-      {/* ── Client combobox ── */}
+      {/* Client combobox */}
       <div className="field" ref={wrapRef} style={{ position: 'relative' }}>
         <label className="field-label">◉ Client</label>
         <div className="combobox-row">
           <input
             className="combobox-input"
             type="text"
-            placeholder="Search or type new name…"
+            placeholder="Search clients…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -135,39 +87,36 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
             autoComplete="off"
           />
           {selectedClient && (
-            <button className="combobox-clear" onClick={clearClient} title="Clear client">✕</button>
+            <button className="combobox-clear" onClick={clearClient} title="Clear">✕</button>
           )}
         </div>
 
-        {dropdownOpen && (filteredClients.length > 0 || isNew) && (
+        {dropdownOpen && filteredClients.length > 0 && (
           <div className="combobox-dropdown">
             {filteredClients.map((c) => (
               <button key={c.id} className="combobox-option" onMouseDown={() => pickClient(c)}>
                 <span className="option-icon">◉</span> {c.name}
               </button>
             ))}
-            {isNew && (
-              <button
-                className="combobox-option combobox-option--new"
-                onMouseDown={handleCreateClient}
-                disabled={savingClient}
-              >
-                <span className="option-icon">＋</span>
-                {savingClient ? 'Creating…' : `Add "${query.trim()}"`}
-              </button>
-            )}
           </div>
         )}
 
-        {clientError && <div className="selector-error">{clientError}</div>}
+        {dropdownOpen && query.trim() && filteredClients.length === 0 && (
+          <div className="combobox-dropdown">
+            <div className="combobox-option" style={{ cursor: 'default', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+              No clients found
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ── Order selector ── */}
+      {/* Order selector */}
       {selectedClient && (
         <div className="field order-section">
           <label className="field-label">◈ Order</label>
-
-          {orders.length > 0 && (
+          {orders.length === 0 ? (
+            <div className="no-order-note">No orders for this client yet.</div>
+          ) : (
             <select
               value={selectedOrder?.id ?? ''}
               onChange={(e) => {
@@ -182,20 +131,10 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
               ))}
             </select>
           )}
-
-          <button
-            className="new-order-btn"
-            onClick={handleCreateOrder}
-            disabled={savingOrder}
-          >
-            {savingOrder ? 'Creating…' : '＋ New Order'}
-          </button>
-
-          {orderError && <div className="selector-error">{orderError}</div>}
         </div>
       )}
 
-      {/* ── Active save badge ── */}
+      {/* Active save badge */}
       {selectedOrder && (
         <div className="active-order-badge">
           <span className="badge-dot" />
@@ -206,10 +145,8 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
         </div>
       )}
 
-      {selectedClient && !selectedOrder && (
-        <div className="no-order-note">
-          Select or create an order to save calculations.
-        </div>
+      {selectedClient && !selectedOrder && orders.length > 0 && (
+        <div className="no-order-note">Select an order to save calculations.</div>
       )}
 
       <div className="field-divider" style={{ marginTop: '1rem' }} />

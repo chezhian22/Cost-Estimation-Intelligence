@@ -2,11 +2,48 @@ import React from 'react'
 
 const fmt  = (v, d = 2) => Number(v).toFixed(d)
 const fmtC = (v) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmtN = (v, d = 0) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 
-export default function CylinderTable({ result }) {
+function fmtTime(minutes) {
+  if (minutes <= 0) return '—'
+  if (minutes < 1) return `${Math.ceil(minutes * 60)} sec`
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  return h === 0 ? `${m} min` : `${h}h ${m}min`
+}
+
+function buildEfficiency(rows, matched, qty, speed) {
+  const mRow    = rows[matched.index]
+  const bRow    = rows[matched.best_paper_index]
+  const isSame  = matched.index === matched.best_paper_index
+  const mLabels = mRow.around * mRow.across
+  const bLabels = bRow.around * bRow.across
+  const diff    = bLabels - mLabels
+  const diffPct = mLabels > 0 ? (diff / mLabels * 100) : 0
+
+  let production = null
+  if (qty > 0 && speed > 0) {
+    const mRepeats = Math.ceil(qty / mLabels)
+    const mMeters  = mRepeats * mRow.circumference / 1000
+    const bRepeats = Math.ceil(qty / bLabels)
+    const bMeters  = bRepeats * bRow.circumference / 1000
+    production = {
+      matched:   { repeats: mRepeats, meters: mMeters, time: mMeters / speed },
+      bestPaper: { repeats: bRepeats, meters: bMeters, time: bMeters / speed },
+    }
+  }
+
+  return { mRow, bRow, isSame, mLabels, bLabels, diff, diffPct, production }
+}
+
+export default function CylinderTable({ result, orderQty, pressSpeed }) {
   if (!result) return null
   const { rows, matched } = result
   const { index: matchedIdx, best_paper_index: bestPaperIdx } = matched
+
+  const qty   = parseFloat(orderQty)   || 0
+  const speed = parseFloat(pressSpeed) || 50
+  const eff   = buildEfficiency(rows, matched, qty, speed)
 
   return (
     <section className="card table-card">
@@ -66,6 +103,117 @@ export default function CylinderTable({ result }) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Cylinder Efficiency ── */}
+      <div className="ceff-section">
+        <div className="ceff-section-title">
+          <span className="ceff-section-title-bar" />
+          Cylinder Efficiency
+        </div>
+
+        {eff.isSame && (
+          <div className="ceff-same-note">
+            Best Match and Best Paper are the same cylinder ({eff.mRow.teeth} teeth).
+          </div>
+        )}
+
+        <div className="ceff-grid">
+          {/* Best Match */}
+          <div className="ceff-block ceff-match">
+            <div className="ceff-block-head">
+              <span className="ceff-block-title">Best Match</span>
+              <span className="ceff-block-teeth">{eff.mRow.teeth} teeth</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Around × Across</span>
+              <span className="ceff-val">{eff.mRow.around} × {eff.mRow.across}</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Labels / Repeat</span>
+              <span className="ceff-val ceff-big">{eff.mLabels}</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Circumference</span>
+              <span className="ceff-val">{fmt(eff.mRow.circumference)} mm</span>
+            </div>
+            {eff.production && (
+              <>
+                <div className="ceff-divider" />
+                <div className="ceff-row">
+                  <span className="ceff-label">Repeats Needed</span>
+                  <span className="ceff-val">{fmtN(eff.production.matched.repeats)}</span>
+                </div>
+                <div className="ceff-row">
+                  <span className="ceff-label">Web Meters</span>
+                  <span className="ceff-val">{fmtN(eff.production.matched.meters, 1)} m</span>
+                </div>
+                <div className="ceff-row ceff-time-row">
+                  <span className="ceff-label">Time @ {speed} m/min</span>
+                  <span className="ceff-val ceff-time">{fmtTime(eff.production.matched.time)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="ceff-vs">VS</div>
+
+          {/* Best Paper */}
+          <div className="ceff-block ceff-paper">
+            <div className="ceff-block-head">
+              <span className="ceff-block-title">Best Paper ★</span>
+              <span className="ceff-block-teeth">{eff.bRow.teeth} teeth</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Around × Across</span>
+              <span className="ceff-val">{eff.bRow.around} × {eff.bRow.across}</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Labels / Repeat</span>
+              <span className="ceff-val ceff-big">{eff.bLabels}</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Circumference</span>
+              <span className="ceff-val">{fmt(eff.bRow.circumference)} mm</span>
+            </div>
+            {eff.production && (
+              <>
+                <div className="ceff-divider" />
+                <div className="ceff-row">
+                  <span className="ceff-label">Repeats Needed</span>
+                  <span className="ceff-val">{fmtN(eff.production.bestPaper.repeats)}</span>
+                </div>
+                <div className="ceff-row">
+                  <span className="ceff-label">Web Meters</span>
+                  <span className="ceff-val">{fmtN(eff.production.bestPaper.meters, 1)} m</span>
+                </div>
+                <div className="ceff-row ceff-time-row">
+                  <span className="ceff-label">Time @ {speed} m/min</span>
+                  <span className="ceff-val ceff-time">{fmtTime(eff.production.bestPaper.time)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {!eff.isSame && (
+          <div className="ceff-diff-bar">
+            <span className="ceff-diff-icon">{eff.diff > 0 ? '▲' : '▼'}</span>
+            <span className="ceff-diff-text">
+              Best Paper yields{' '}
+              <strong>
+                {Math.abs(eff.diff)} {Math.abs(eff.diff) === 1 ? 'label' : 'labels'}{' '}
+                {eff.diff > 0 ? 'more' : 'fewer'} per repeat
+              </strong>
+              {' '}({Math.abs(eff.diffPct).toFixed(1)}%{eff.diff > 0 ? ' more efficient' : ' less efficient'})
+            </span>
+            {eff.production && Math.abs(eff.production.matched.time - eff.production.bestPaper.time) >= 0.5 && (
+              <span className="ceff-diff-time">
+                · saves {fmtTime(Math.abs(eff.production.matched.time - eff.production.bestPaper.time))} press time
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </section>
   )

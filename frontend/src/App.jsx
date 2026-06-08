@@ -8,11 +8,14 @@ import ComparisonPage from './components/ComparisonPage'
 import QuoteHistory from './components/QuoteHistory'
 import ManageCylinders from './components/ManageCylinders'
 import ManageSubstrates from './components/ManageSubstrates'
+import ClientOrderManagement from './components/ClientOrderManagement'
 
 const DEFAULTS = {
   width: 64.5,
   height: 136,
-  waste_pct: 85,
+  yield_pct: 85,
+  order_qty: '',
+  press_speed: 50,
   substrateId: 'custom',
   substrate_name: null,
   substrate_price: 45,
@@ -24,7 +27,7 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null } 
   return {
     width: parseFloat(inputs.width) || 1,
     height: parseFloat(inputs.height) || 1,
-    waste_pct: parseFloat(inputs.waste_pct) || 85,
+    yield_pct: parseFloat(inputs.yield_pct) || 85,
     substrate_name: inputs.substrate_name,
     substrate_price: parseFloat(inputs.substrate_price) || 0,
     foil_cost: parseFloat(inputs.foil_cost) || 0,
@@ -36,14 +39,15 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null } 
 }
 
 const NAV_LINKS = [
-  { id: 'calculator', label: 'Pricing Calculator', icon: '◈' },
-  { id: 'comparison', label: 'Quote Comparison',   icon: '⇄' },
-  { id: 'history',    label: 'Quote History',       icon: '🕘' },
+  { id: 'calculator',    label: 'Pricing Calculator' },
+  { id: 'comparison',   label: 'Quote Comparison'},
+  { id: 'history',      label: 'Quote History' },
+  { id: 'client-orders',label: 'Client & Orders'},
 ]
 
 const ADMIN_LINKS = [
-  { id: 'cylinders',  label: 'Manage Cylinders',  icon: '⚙' },
-  { id: 'substrates', label: 'Manage Substrates',  icon: '▤' },
+  { id: 'cylinders',  label: 'Manage Cylinders'},
+  { id: 'substrates', label: 'Manage Substrates' },
 ]
 
 export default function App() {
@@ -129,7 +133,7 @@ export default function App() {
                 </svg>
               </div>
               <div className="logo-text">
-                <div className="logo-title">Cost <span className="accent">Intelligence</span></div>
+                <div className="logo-title">Cost <span className="accent">Estimation</span> Intelligence</div>
                 <div className="logo-sub">Chroma Print — Label Estimator</div>
               </div>
             </div>
@@ -184,17 +188,18 @@ export default function App() {
 
           {activeView === 'calculator' && (
             <>
-              <CylinderTable result={result} />
-              <PricingPanel result={result} />
-              <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} />
+              <CylinderTable result={result} orderQty={inputs.order_qty} pressSpeed={inputs.press_speed} />
+              <PricingPanel result={result} orderQty={inputs.order_qty} />
+              <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} orderQty={inputs.order_qty} />
             </>
           )}
 
           {activeView === 'comparison' && <ComparisonPage />}
 
           {activeView === 'history'    && <QuoteHistory />}
-          {activeView === 'cylinders'  && <ManageCylinders />}
-          {activeView === 'substrates' && <ManageSubstrates />}
+          {activeView === 'cylinders'          && <ManageCylinders />}
+          {activeView === 'substrates'         && <ManageSubstrates />}
+          {activeView === 'client-orders' && <ClientOrderManagement />}
         </div>
       </div>
 

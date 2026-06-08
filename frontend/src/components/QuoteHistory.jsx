@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { api } from '../api'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
@@ -10,9 +10,9 @@ const STATUS_CONFIG = {
 }
 
 function StatusBadge({ calcId, initial }) {
-  const [status, setStatus]   = useState(initial || 'pending')
-  const [saving, setSaving]   = useState(false)
-  const [open, setOpen]       = useState(false)
+  const [status, setStatus] = useState(initial || 'pending')
+  const [saving, setSaving] = useState(false)
+  const [open, setOpen]     = useState(false)
 
   async function choose(next) {
     setOpen(false)
@@ -32,13 +32,12 @@ function StatusBadge({ calcId, initial }) {
       <button
         className={`status-badge ${cfg.cls}${saving ? ' status-saving' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        title="Click to change status"
         disabled={saving}
+        title="Click to change status"
       >
         {saving ? '…' : cfg.label}
         <span className="status-caret">▾</span>
       </button>
-
       {open && (
         <div className="status-dropdown">
           {Object.entries(STATUS_CONFIG).map(([key, c]) => (
@@ -57,128 +56,51 @@ function StatusBadge({ calcId, initial }) {
   )
 }
 
-function OrderCalcTable({ orderId }) {
-  const [calcs, setCalcs] = useState(null)
-  const [err, setErr]     = useState(null)
-
-  useEffect(() => {
-    api.getOrderCalculations(orderId)
-      .then(setCalcs)
-      .catch((e) => setErr(e.message))
-  }, [orderId])
-
-  if (err) return (
-    <div className="history-state error-banner" style={{ margin: '1rem' }}>⚠ {err}</div>
-  )
-  if (!calcs) return (
-    <div className="history-state" style={{ padding: '1.5rem' }}>
-      <div className="history-spinner" />
-    </div>
-  )
-  if (calcs.length === 0) return (
-    <div className="history-state" style={{ padding: '1.5rem', fontSize: '0.82rem' }}>
-      No calculations saved under this order yet.
-    </div>
-  )
-
-  return (
-    <div className="table-wrapper order-calc-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Size <span className="th-unit">mm</span></th>
-            <th>Waste%</th>
-            <th>Substrate</th>
-            <th>Labels/m²</th>
-            <th>₹ / 1000</th>
-            <th>$ / 1000</th>
-            <th>Saved</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {calcs.map((c, i) => (
-            <tr key={c.id ?? i}>
-              <td style={{ textAlign: 'left' }}>{fmt(c.width, 1)} × {fmt(c.height, 1)}</td>
-              <td>{c.waste_pct != null ? `${c.waste_pct}%` : '—'}</td>
-              <td style={{ textAlign: 'left' }}>{c.substrate_name ?? 'Custom'}</td>
-              <td>{fmt(c.pricing?.adj_labels)}</td>
-              <td>{fmt(c.pricing?.price_inr_1000)}</td>
-              <td>{fmt(c.pricing?.price_usd_1000, 3)}</td>
-              <td>
-                {c.created_at
-                  ? new Date(c.created_at).toLocaleDateString('en-IN', {
-                      day: '2-digit', month: 'short', year: 'numeric',
-                    })
-                  : '—'}
-              </td>
-              <td>
-                <StatusBadge calcId={c.id} initial={c.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function ClientAccordion({ client, orders }) {
-  const [openOrder, setOpenOrder] = useState(null)
-
-  return (
-    <div className="history-client">
-      <div className="history-client-header">
-        <span className="history-client-icon">◉</span>
-        <span className="history-client-name">{client.name}</span>
-        <span className="history-client-meta">
-          {orders.length} order{orders.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {orders.length === 0 ? (
-        <div className="history-order-empty">No orders yet.</div>
-      ) : (
-        orders.map((o) => (
-          <div key={o.id} className="history-order">
-            <button
-              className={`history-order-header${openOrder === o.id ? ' open' : ''}`}
-              onClick={() => setOpenOrder(openOrder === o.id ? null : o.id)}
-            >
-              <span className="history-order-icon">◈</span>
-              <span className="history-order-name">{o.name}</span>
-              <span className="history-order-chevron">{openOrder === o.id ? '▲' : '▼'}</span>
-            </button>
-            {openOrder === o.id && <OrderCalcTable orderId={o.id} />}
-          </div>
-        ))
-      )}
-    </div>
-  )
-}
-
 export default function QuoteHistory() {
-  const [clients, setClients] = useState(null)
-  const [orders, setOrders]   = useState({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [quotes, setQuotes]               = useState(null)
+  const [clients, setClients]             = useState([])
+  const [orders, setOrders]               = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [error, setError]                 = useState(null)
+  const [selectedClient, setSelectedClient] = useState('')
+  const [selectedOrder, setSelectedOrder]   = useState('')
 
   useEffect(() => {
-    api.getClients()
-      .then(async (clientList) => {
-        setClients(clientList)
-        const orderMap = {}
-        await Promise.all(
-          clientList.map(async (c) => {
-            const os = await api.getOrders(c.id).catch(() => [])
-            orderMap[c.id] = os
-          })
-        )
-        setOrders(orderMap)
-      })
+    Promise.all([api.getHistory(), api.getClients()])
+      .then(([qs, cs]) => { setQuotes(qs); setClients(cs) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // When client changes, fetch its orders and reset order selection
+  useEffect(() => {
+    setSelectedOrder('')
+    setOrders([])
+    if (!selectedClient) return
+    setOrdersLoading(true)
+    api.getOrders(Number(selectedClient))
+      .then(setOrders)
+      .catch(() => setOrders([]))
+      .finally(() => setOrdersLoading(false))
+  }, [selectedClient])
+
+  const filtered = useMemo(() => {
+    if (!quotes) return []
+    return quotes.filter((q) => {
+      const matchClient = !selectedClient || q.client_id === Number(selectedClient)
+      const matchOrder  = !selectedOrder  || q.order_id  === Number(selectedOrder)
+      return matchClient && matchOrder
+    })
+  }, [quotes, selectedClient, selectedOrder])
+
+  function clearFilters() {
+    setSelectedClient('')
+    setSelectedOrder('')
+    setOrders([])
+  }
+
+  const hasFilters = selectedClient || selectedOrder
 
   return (
     <section className="card">
@@ -196,22 +118,138 @@ export default function QuoteHistory() {
       )}
 
       {error && (
-        <div className="history-state error-banner" style={{ margin: '1.4rem' }}>⚠ {error}</div>
+        <div className="history-state error-banner" style={{ margin: '1.4rem' }}>
+          ⚠ {error}
+        </div>
       )}
 
-      {!loading && !error && clients?.length === 0 && (
+      {!loading && !error && quotes?.length === 0 && (
         <div className="history-state">
           <span className="history-empty-icon">📋</span>
-          <span>No clients yet. Add a client and create an order to save quotes.</span>
+          <span>No quotes saved yet. Run a calculation with a client and order to save it.</span>
         </div>
       )}
 
-      {!loading && !error && clients?.length > 0 && (
-        <div className="history-list">
-          {clients.map((c) => (
-            <ClientAccordion key={c.id} client={c} orders={orders[c.id] ?? []} />
-          ))}
-        </div>
+      {!loading && !error && quotes?.length > 0 && (
+        <>
+          {/* ── Cascading filter bar ── */}
+          <div className="qh-filter-bar">
+
+            {/* Step 1 — Client */}
+            <div className="qh-filter-group">
+              <label className="qh-filter-label">① Client</label>
+              <select
+                className="qh-filter-select"
+                value={selectedClient}
+                onChange={(e) => setSelectedClient(e.target.value)}
+              >
+                <option value="">All clients</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Step 2 — Order (only active after client is picked) */}
+            <div className="qh-filter-group">
+              <label className={`qh-filter-label${!selectedClient ? ' qh-filter-label--dim' : ''}`}>
+                ② Order
+              </label>
+              <select
+                className="qh-filter-select"
+                value={selectedOrder}
+                onChange={(e) => setSelectedOrder(e.target.value)}
+                disabled={!selectedClient || ordersLoading}
+              >
+                <option value="">
+                  {!selectedClient
+                    ? 'Select a client first'
+                    : ordersLoading
+                    ? 'Loading…'
+                    : 'All orders'}
+                </option>
+                {orders.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {hasFilters && (
+              <button className="qh-filter-clear" onClick={clearFilters}>
+                ✕ Clear
+              </button>
+            )}
+
+            <span className="qh-filter-count">
+              {filtered.length} / {quotes.length} quotes
+            </span>
+          </div>
+
+          {/* ── Flat table ── */}
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left' }}>Client</th>
+                  <th style={{ textAlign: 'left' }}>Order</th>
+                  <th>Size <span className="th-unit">mm</span></th>
+                  <th>Yield%</th>
+                  <th style={{ textAlign: 'left' }}>Substrate</th>
+                  <th>₹ / 1000</th>
+                  <th>$ / 1000</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      style={{
+                        textAlign: 'center',
+                        padding: '2.5rem',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'Inter, sans-serif',
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      No quotes match the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((q, i) => (
+                    <tr key={q.id ?? i}>
+                      <td style={{ textAlign: 'left' }}>
+                        {q.client_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 500 }}>
+                        {q.order_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td>{fmt(q.width, 1)} × {fmt(q.height, 1)}</td>
+                      <td>{q.yield_pct != null ? `${q.yield_pct}%` : '—'}</td>
+                      <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 400 }}>
+                        {q.substrate_name ?? 'Custom'}
+                      </td>
+                      <td>{fmt(q.pricing?.price_inr_1000)}</td>
+                      <td>{fmt(q.pricing?.price_usd_1000, 3)}</td>
+                      <td>
+                        {q.created_at
+                          ? new Date(q.created_at).toLocaleDateString('en-IN', {
+                              day: '2-digit', month: 'short', year: 'numeric',
+                            })
+                          : '—'}
+                      </td>
+                      <td>
+                        <StatusBadge calcId={q.id} initial={q.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   )

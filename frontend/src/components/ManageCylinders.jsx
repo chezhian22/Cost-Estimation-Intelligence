@@ -6,11 +6,12 @@ export default function ManageCylinders() {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
 
-  const [newTeeth, setNewTeeth]         = useState('')
-  const [newPaper, setNewPaper]         = useState('')
-  const [adding, setAdding]             = useState(false)
-  const [addError, setAddError]         = useState(null)
-  const [deletingId, setDeletingId]     = useState(null)
+  const [newTeeth, setNewTeeth]     = useState('')
+  const [newPaper, setNewPaper]     = useState('')
+  const [adding, setAdding]         = useState(false)
+  const [addError, setAddError]     = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [togglingId, setTogglingId] = useState(null)
 
   useEffect(() => {
     api.getTeeth()
@@ -28,9 +29,7 @@ export default function ManageCylinders() {
     setAddError(null)
     try {
       const created = await api.createTooth(teeth, paper_size)
-      setCylinders((prev) =>
-        [...prev, created].sort((a, b) => a.teeth - b.teeth)
-      )
+      setCylinders((prev) => [...prev, created].sort((a, b) => a.teeth - b.teeth))
       setNewTeeth('')
       setNewPaper('')
     } catch (e) {
@@ -52,6 +51,18 @@ export default function ManageCylinders() {
     }
   }
 
+  async function handleToggleAvailability(c) {
+    setTogglingId(c.id)
+    try {
+      const updated = await api.setCylinderAvailability(c.id, !c.available)
+      setCylinders((prev) => prev.map((x) => x.id === updated.id ? updated : x))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
   return (
     <section className="card">
       <div className="card-header">
@@ -60,7 +71,6 @@ export default function ManageCylinders() {
         <span className="card-number">SYS-06</span>
       </div>
 
-      {/* ── Add form ── */}
       <div className="cyl-add-form">
         <div className="cyl-add-title">Add New Cylinder</div>
         <form className="cyl-form-row" onSubmit={handleAdd}>
@@ -84,25 +94,19 @@ export default function ManageCylinders() {
               required
             />
           </div>
-          <button
-            type="submit"
-            className="cyl-add-btn"
-            disabled={adding || !newTeeth || !newPaper}
-          >
+          <button type="submit" className="cyl-add-btn" disabled={adding || !newTeeth || !newPaper}>
             {adding ? 'Adding…' : '＋ Add'}
           </button>
         </form>
         {addError && <div className="selector-error" style={{ marginTop: '0.5rem' }}>{addError}</div>}
       </div>
 
-      {/* ── Table ── */}
       {loading && (
         <div className="history-state">
           <div className="history-spinner" />
           <span>Loading cylinders…</span>
         </div>
       )}
-
       {error && (
         <div className="history-state error-banner" style={{ margin: '1.4rem' }}>⚠ {error}</div>
       )}
@@ -117,28 +121,41 @@ export default function ManageCylinders() {
                 <th>Circumference <span className="th-unit">mm</span></th>
                 <th>Paper Size <span className="th-unit">mm</span></th>
                 <th>Paper +20% <span className="th-unit">mm</span></th>
+                <th>Availability</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {cylinders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>
                     No cylinders yet.
                   </td>
                 </tr>
               ) : (
                 cylinders.map((c, i) => {
-                  const circ     = +(c.teeth * 3.175).toFixed(3)
-                  const plus20   = Math.round(c.paper_size * 1.2)
+                  const circ   = +(c.teeth * 3.175).toFixed(3)
+                  const plus20 = Math.round(c.paper_size * 1.2)
+                  const avail  = c.available !== false
                   return (
-                    <tr key={c.id}>
+                    <tr key={c.id} className={!avail ? 'row-unavailable' : ''}>
                       <td style={{ textAlign: 'left' }}>{i + 1}</td>
                       <td>{c.teeth}</td>
                       <td>{circ}</td>
                       <td>{c.paper_size}</td>
                       <td>{plus20}</td>
-                      <td style={{ textAlign: 'right', paddingRight: '1.4rem' }}>
+                      <td>
+                        <button
+                          className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`}
+                          onClick={() => handleToggleAvailability(c)}
+                          disabled={togglingId === c.id}
+                          title="Click to toggle availability"
+                        >
+                          <span className="avail-dot" />
+                          {togglingId === c.id ? '…' : avail ? 'Available' : 'Unavailable'}
+                        </button>
+                      </td>
+                      {/* <td style={{ textAlign: 'right', paddingRight: '1.4rem' }}>
                         <button
                           className="cyl-delete-btn"
                           onClick={() => handleDelete(c.id)}
@@ -147,7 +164,7 @@ export default function ManageCylinders() {
                         >
                           {deletingId === c.id ? '…' : '✕'}
                         </button>
-                      </td>
+                      </td> */}
                     </tr>
                   )
                 })

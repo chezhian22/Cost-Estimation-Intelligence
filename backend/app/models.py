@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, JSON
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, JSON
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -24,6 +24,7 @@ class Order(Base):
     id         = Column(Integer, primary_key=True, index=True)
     name       = Column(String(200), nullable=False)
     client_id  = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    order_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     client       = relationship("Client", back_populates="orders")
@@ -33,9 +34,10 @@ class Order(Base):
 class Substrate(Base):
     __tablename__ = "substrates"
 
-    id    = Column(Integer, primary_key=True, index=True)
-    name  = Column(String(120), nullable=False, unique=True)
-    price = Column(Float, nullable=False)
+    id        = Column(Integer, primary_key=True, index=True)
+    name      = Column(String(120), nullable=False, unique=True)
+    price     = Column(Float, nullable=False)
+    available = Column(Boolean, nullable=False, default=True)
 
 
 class TeethData(Base):
@@ -44,6 +46,7 @@ class TeethData(Base):
     id         = Column(Integer, primary_key=True, index=True)
     teeth      = Column(Integer, nullable=False, unique=True)
     paper_size = Column(Integer, nullable=False)
+    available  = Column(Boolean, nullable=False, default=True)
 
 
 class Calculation(Base):
@@ -54,7 +57,7 @@ class Calculation(Base):
     id               = Column(Integer, primary_key=True, index=True)
     width            = Column(Float, nullable=False)
     height           = Column(Float, nullable=False)
-    waste_pct        = Column(Float, nullable=False)
+    yield_pct        = Column('waste_pct', Float, nullable=False)
     substrate_name   = Column(String(120), nullable=True)
     substrate_price  = Column(Float, nullable=False)
     foil_cost        = Column(Float, nullable=False, default=0)

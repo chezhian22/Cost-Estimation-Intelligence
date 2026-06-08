@@ -1,10 +1,24 @@
 import React from 'react'
 
-const fmt = (v, d = 2) => Number(v).toFixed(d)
+const fmt  = (v, d = 2) => Number(v).toFixed(d)
+const fmtN = (v, d = 2) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 
-export default function PricingPanel({ result }) {
+function orderAnalytics(pricing, matchedRow, qty) {
+  if (!qty || qty <= 0) return null
+  const paperSizeM = matchedRow.paper_size / 1000
+  const sqm        = qty / pricing.adj_labels
+  const meters     = sqm / paperSizeM
+  const totalInr   = qty * pricing.price_inr_label
+  const totalUsd   = qty * pricing.price_usd_label
+  return { sqm, meters, totalInr, totalUsd }
+}
+
+export default function PricingPanel({ result, orderQty }) {
   if (!result) return null
-  const p = result.pricing
+  const p          = result.pricing
+  const matchedRow = result.rows[result.matched.index]
+  const qty        = parseFloat(orderQty) || 0
+  const analytics  = orderAnalytics(p, matchedRow, qty)
 
   return (
     <section className="card pricing-card">
@@ -79,6 +93,36 @@ export default function PricingPanel({ result }) {
           </div>
         </div>
       </div>
+
+      {analytics && (
+        <>
+          <div className="section-divider" />
+          <div className="section-label">
+            Order Analytics{' '}
+            <span style={{ color: 'var(--amber)', fontFamily: 'JetBrains Mono', fontWeight: 700 }}>
+              × {Number(qty).toLocaleString('en-IN')}
+            </span>
+          </div>
+          <div className="order-analytics-grid">
+            <div className="oa-card">
+              <span className="oa-label">Substrate Area</span>
+              <span className="oa-value">{fmtN(analytics.sqm)} m²</span>
+            </div>
+            <div className="oa-card">
+              <span className="oa-label">Linear Meters</span>
+              <span className="oa-value">{fmtN(analytics.meters)} m</span>
+            </div>
+            <div className="oa-card oa-inr">
+              <span className="oa-label">Total Cost (INR)</span>
+              <span className="oa-value">₹ {fmtN(analytics.totalInr, 0)}</span>
+            </div>
+            <div className="oa-card oa-usd">
+              <span className="oa-label">Total Cost (USD)</span>
+              <span className="oa-value">$ {fmtN(analytics.totalUsd, 2)}</span>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

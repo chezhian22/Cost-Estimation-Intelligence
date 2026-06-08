@@ -14,20 +14,44 @@ from .database import Base, engine, get_db
 Base.metadata.create_all(bind=engine)
 
 def _migrate():
-    """Add client_id / order_id to calculations table if not present (safe on every startup)."""
+    """Safe column additions run on every startup."""
     insp = inspect(engine)
-    if "calculations" not in insp.get_table_names():
-        return
-    existing = {c["name"] for c in insp.get_columns("calculations")}
+    tables = insp.get_table_names()
+
     with engine.begin() as conn:
-        if "client_id" not in existing:
-            conn.execute(text("ALTER TABLE calculations ADD COLUMN client_id INT NULL"))
-        if "order_id" not in existing:
-            conn.execute(text("ALTER TABLE calculations ADD COLUMN order_id INT NULL"))
-        if "status" not in existing:
-            conn.execute(text(
-                "ALTER TABLE calculations ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'"
-            ))
+        # calculations table
+        if "calculations" in tables:
+            existing = {c["name"] for c in insp.get_columns("calculations")}
+            if "client_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN client_id INT NULL"))
+            if "order_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN order_id INT NULL"))
+            if "status" not in existing:
+                conn.execute(text(
+                    "ALTER TABLE calculations ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'"
+                ))
+
+        # orders table — order_date
+        if "orders" in tables:
+            ord_cols = {c["name"] for c in insp.get_columns("orders")}
+            if "order_date" not in ord_cols:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN order_date DATE NULL"))
+
+        # substrates table — availability flag
+        if "substrates" in tables:
+            sub_cols = {c["name"] for c in insp.get_columns("substrates")}
+            if "available" not in sub_cols:
+                conn.execute(text(
+                    "ALTER TABLE substrates ADD COLUMN available INTEGER NOT NULL DEFAULT 1"
+                ))
+
+        # teeth_data table — availability flag
+        if "teeth_data" in tables:
+            teeth_cols = {c["name"] for c in insp.get_columns("teeth_data")}
+            if "available" not in teeth_cols:
+                conn.execute(text(
+                    "ALTER TABLE teeth_data ADD COLUMN available INTEGER NOT NULL DEFAULT 1"
+                ))
 
 _migrate()
 
@@ -97,7 +121,7 @@ app = FastAPI(
 ## Cylinder Cost Estimation — REST API
 
 Built for **Chroma Print India Pvt Ltd**.
-Powers the *Cost Intelligence* label-estimator frontend.
+Powers the *igence* label-estimator frontend.
 
 ---
 
@@ -113,7 +137,7 @@ Powers the *Cost Intelligence* label-estimator frontend.
 
 ```
 circumference   = teeth × 3.175  (mm)
-adj_labels/m²   = raw_labels × (waste_pct / 100)
+adj_labels/m²   = raw_labels × (yield_pct / 100)   ← higher yield = more labels = lower cost
 price_inr_1000  = (substrate_price + foil_cost) / adj_labels × 1000
 price_usd_1000  = price_inr_1000 / exchange_rate
 ```
@@ -254,7 +278,7 @@ def get_order_calculations(order_id: int, db: Session = Depends(get_db)):
             "id": c.id,
             "width": c.width,
             "height": c.height,
-            "waste_pct": c.waste_pct,
+            "yield_pct": c.yield_pct,
             "substrate_name": c.substrate_name,
             "substrate_price": c.substrate_price,
             "foil_cost": c.foil_cost,
@@ -322,6 +346,23 @@ def remove_substrate(substrate_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Substrate not found")
 
 
+@app.patch(
+    "/api/substrates/{substrate_id}/availability",
+    tags=["substrates"],
+    summary="Update substrate availability",
+    response_model=schemas.SubstrateOut,
+)
+def set_substrate_availability(
+    substrate_id: int,
+    body: schemas.AvailabilityUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = crud.set_substrate_availability(db, substrate_id, body.available)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Substrate not found")
+    return obj
+
+
 # ── Cylinders (Teeth) ─────────────────────────────────────────────────────────
 @app.get(
     "/api/teeth",
@@ -379,6 +420,23 @@ def remove_teeth(teeth_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cylinder not found")
 
 
+@app.patch(
+    "/api/teeth/{teeth_id}/availability",
+    tags=["cylinders"],
+    summary="Update cylinder availability",
+    response_model=schemas.TeethOut,
+)
+def set_teeth_availability(
+    teeth_id: int,
+    body: schemas.AvailabilityUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = crud.set_teeth_availability(db, teeth_id, body.available)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Cylinder not found")
+    return obj
+
+
 # ── Calculate ────────────────────────────────────────────────────────────────
 @app.post(
     "/api/calculate",
@@ -403,7 +461,7 @@ def run_calculation(req: schemas.CalculationRequest, db: Session = Depends(get_d
     |---|---|---|
     | `width` | yes | Label width in mm |
     | `height` | yes | Label height in mm |
-    | `waste_pct` | yes | Effective web utilisation % (e.g. `85`) |
+    | `yield_pct` | yes | Effective web utilisation % (e.g. `85`) |
     | `substrate_price` | yes | ₹ per m² |
     | `foil_cost` | no | Extra ₹ per m², default `0` |
     | `exchange_rate` | yes | ₹ per USD, e.g. `85` |
@@ -430,7 +488,7 @@ def run_calculation(req: schemas.CalculationRequest, db: Session = Depends(get_d
     result = calculator.calculate(
         width=req.width,
         height=req.height,
-        waste_pct=req.waste_pct,
+        yield_pct=req.yield_pct,
         substrate_price=req.substrate_price,
         foil_cost=req.foil_cost,
         exchange_rate=req.exchange_rate,
@@ -477,7 +535,7 @@ def get_calculations(db: Session = Depends(get_db)):
             id=c.id,
             width=c.width,
             height=c.height,
-            waste_pct=c.waste_pct,
+            yield_pct=c.yield_pct,
             substrate_name=c.substrate_name,
             substrate_price=c.substrate_price,
             foil_cost=c.foil_cost,
@@ -488,6 +546,7 @@ def get_calculations(db: Session = Depends(get_db)):
             client_name=client_name,
             order_name=order_name,
             status=c.status or "pending",
+            pricing=c.result.get("pricing") if c.result else None,
         ))
     return out
 
@@ -543,7 +602,7 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "id": obj.id,
         "width": obj.width,
         "height": obj.height,
-        "waste_pct": obj.waste_pct,
+        "yield_pct": obj.yield_pct,
         "substrate_name": obj.substrate_name,
         "substrate_price": obj.substrate_price,
         "foil_cost": obj.foil_cost,

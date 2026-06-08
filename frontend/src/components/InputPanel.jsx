@@ -37,11 +37,11 @@ export default function InputPanel({
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="input-waste">◎ Waste <span className="unit">(%)</span></label>
+          <label className="field-label" htmlFor="input-waste">◎ Yield <span className="unit">(%)</span></label>
           <input
             type="number" id="input-waste" step="1" min="1" max="100"
-            value={inputs.waste_pct}
-            onChange={(e) => onChange('waste_pct', e.target.value)}
+            value={inputs.yield_pct}
+            onChange={(e) => onChange('yield_pct', e.target.value)}
           />
         </div>
 
@@ -87,6 +87,28 @@ export default function InputPanel({
             onChange={(e) => onChange('exchange_rate', e.target.value)}
           />
         </div>
+
+        <div className="field-divider" />
+
+        <div className="field">
+          <label className="field-label" htmlFor="input-order-qty">⊞ Order Quantity <span className="unit">(labels)</span></label>
+          <input
+            type="number" id="input-order-qty" step="100" min="0"
+            placeholder="e.g. 10000"
+            value={inputs.order_qty}
+            onChange={(e) => onChange('order_qty', e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label className="field-label" htmlFor="input-press-speed">▶ Press Speed <span className="unit">(m / min)</span></label>
+          <input
+            type="number" id="input-press-speed" step="5" min="1"
+            placeholder="e.g. 50"
+            value={inputs.press_speed}
+            onChange={(e) => onChange('press_speed', e.target.value)}
+          />
+        </div>
       </div>
 
       <button
@@ -97,7 +119,7 @@ export default function InputPanel({
         {loading ? (
           <><span className="calc-btn-spinner" /> Calculating…</>
         ) : (
-          <>◈ Run Calculation</>
+          <>Run Calculation</>
         )}
       </button>
     </div>

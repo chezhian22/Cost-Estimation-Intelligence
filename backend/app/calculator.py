@@ -30,7 +30,7 @@ def xlookup_closest(target: float, lookup: Sequence[float], result: Sequence[flo
 def calculate(
     width: float,
     height: float,
-    waste_pct: float,
+    yield_pct: float,
     substrate_price: float,
     foil_cost: float,
     exchange_rate: float,
@@ -42,7 +42,7 @@ def calculate(
     Parameters
     ----------
     width, height       : label target dimensions in mm
-    waste_pct           : usable percentage (e.g. 85)
+    yield_pct           : yield/utilisation percentage (e.g. 85 means 85% of substrate becomes labels)
     substrate_price     : substrate cost per square metre
     foil_cost           : foil cost (kept for parity with the original sheet;
                           not added into the per-label cost, matching the
@@ -56,7 +56,7 @@ def calculate(
     """
     width = width or 1
     height = height or 1
-    waste_pct = waste_pct or 85
+    yield_pct = yield_pct or 85
     substrate_price = substrate_price or 0
     exchange_rate = exchange_rate or 85
 
@@ -106,7 +106,7 @@ def calculate(
     label_w_cm = matched_width / 10
     label_h_cm = matched_height / 10
     labels_sqm = (10000 / label_w_cm) / label_h_cm
-    adj_labels = labels_sqm * waste_pct / 100
+    adj_labels = labels_sqm * yield_pct / 100
 
     cost_per_label = substrate_price / adj_labels if adj_labels > 0 else 0
     rate_15 = cost_per_label * 1500

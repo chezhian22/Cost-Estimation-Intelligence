@@ -1,6 +1,6 @@
 """Pydantic schemas for API request and response bodies."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,10 +46,11 @@ class OrderCreate(BaseModel):
         description="Human-readable order label (e.g. 'Order #1' or 'Jan 2025 Batch').",
         examples=["Order #1"],
     )
+    order_date: Optional[date] = Field(None, description="Optional order date (YYYY-MM-DD).")
 
     model_config = {
         "json_schema_extra": {
-            "example": {"name": "Order #1"}
+            "example": {"name": "Order #1", "order_date": "2025-06-08"}
         }
     }
 
@@ -62,6 +63,7 @@ class OrderOut(BaseModel):
     id: int        = Field(..., description="Auto-incremented primary key.")
     name: str      = Field(..., description="Order label.")
     client_id: int = Field(..., description="ID of the parent client.")
+    order_date: Optional[date] = Field(None, description="Order date if set.")
     created_at: datetime = Field(..., description="UTC timestamp when the order was created.")
 
 
@@ -85,7 +87,8 @@ class SubstrateOut(SubstrateBase):
     """Substrate record returned by the API."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int = Field(..., description="Auto-incremented primary key.")
+    id: int        = Field(..., description="Auto-incremented primary key.")
+    available: bool = Field(True, description="Whether this substrate is currently in stock.")
 
 
 # ── Teeth ────────────────────────────────────────────────────────────────────
@@ -108,7 +111,14 @@ class TeethOut(TeethBase):
     """Cylinder (teeth) record returned by the API."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int = Field(..., description="Auto-incremented primary key.")
+    id: int        = Field(..., description="Auto-incremented primary key.")
+    available: bool = Field(True, description="Whether this cylinder is currently available on the press floor.")
+
+
+# ── Availability update ───────────────────────────────────────────────────────
+class AvailabilityUpdate(BaseModel):
+    """Body for PATCH availability endpoints."""
+    available: bool = Field(..., description="Set to true to mark as available, false to mark as unavailable.")
 
 
 # ── Calculation request ──────────────────────────────────────────────────────
@@ -133,11 +143,11 @@ class CalculationRequest(BaseModel):
         description="Label height in mm (the dimension that runs *across* the web).",
         examples=[136],
     )
-    waste_pct: float = Field(
+    yield_pct: float = Field(
         85, gt=0, le=100,
         description=(
-            "Effective web-utilisation percentage (0–100). "
-            "85 means 85 % of the web area is usable label; 15 % is waste/gap."
+            "Yield / web-utilisation percentage (0–100). "
+            "85 means 85 % of the substrate becomes usable labels; 15 % is gap/trim/waste."
         ),
         examples=[85],
     )
@@ -188,7 +198,7 @@ class CalculationRequest(BaseModel):
             "example": {
                 "width": 64.5,
                 "height": 136,
-                "waste_pct": 85,
+                "yield_pct": 85,
                 "substrate_name": "PP Gloss",
                 "substrate_price": 45,
                 "foil_cost": 0,
@@ -242,7 +252,7 @@ class PricingInfo(BaseModel):
     label_w_cm: float        = Field(..., description="Matched label width in cm.")
     label_h_cm: float        = Field(..., description="Matched label height in cm.")
     labels_sqm: float        = Field(..., description="Raw labels per m² (before waste adjustment).")
-    adj_labels: float        = Field(..., description="Adjusted labels per m² after applying `waste_pct`.")
+    adj_labels: float        = Field(..., description="Adjusted labels per m² after applying `yield_pct` (yield %).")
     rate_15: float           = Field(..., description="Cylinder rate at 1 : 1.5 ratio (₹ per 1000 labels).")
     rate_175: float          = Field(..., description="Cylinder rate at 1 : 1.75 ratio (₹ per 1000 labels).")
     rate_2: float            = Field(..., description="Cylinder rate at 1 : 2.0 ratio (₹ per 1000 labels).")
@@ -294,7 +304,7 @@ class CalculationHistoryOut(BaseModel):
     id: int                    = Field(..., description="Database ID.")
     width: float               = Field(..., description="Label width that was calculated (mm).")
     height: float              = Field(..., description="Label height that was calculated (mm).")
-    waste_pct: float           = Field(..., description="Waste percentage used.")
+    yield_pct: float           = Field(..., description="Yield percentage used (higher = less waste).")
     substrate_name: Optional[str] = Field(None, description="Substrate name at time of calculation.")
     substrate_price: float     = Field(..., description="Substrate price used (₹/m²).")
     foil_cost: float           = Field(..., description="Foil cost used (₹/m²).")
@@ -305,3 +315,4 @@ class CalculationHistoryOut(BaseModel):
     client_name: Optional[str] = Field(None, description="Client name (denormalised for display).")
     order_name: Optional[str]  = Field(None, description="Order name (denormalised for display).")
     status: str                = Field("pending", description="Quote status: `pending`, `confirmed`, or `rejected`.")
+    pricing: Optional[dict]    = Field(None, description="Pricing summary from the saved result JSON.")

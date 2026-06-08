@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 
+
 const LABELS      = ['A', 'B', 'C', 'D']
 const SLOT_COLORS = ['#f97316', '#38bdf8', '#34d399', '#a78bfa']
 
@@ -11,7 +12,7 @@ function makeSlot(i) {
   return {
     label: '',
     width: '', height: '',
-    waste_pct: 85,
+    yield_pct: 85,
     substrate_name: '',
     substrate_price: 45,
     foil_cost: 0,
@@ -127,12 +128,12 @@ function SlotCard({ index, slot, color, onChange }) {
   }
 
   function onQuoteLoaded(full) {
-    // full = { id, width, height, waste_pct, substrate_name, substrate_price,
+    // full = { id, width, height, yield_pct, substrate_name, substrate_price,
     //           foil_cost, exchange_rate, result: { rows, matched, pricing } }
     onChange({
       width:           full.width,
       height:          full.height,
-      waste_pct:       full.waste_pct,
+      yield_pct:       full.yield_pct,
       substrate_name:  full.substrate_name ?? '',
       substrate_price: full.substrate_price,
       foil_cost:       full.foil_cost,
@@ -179,8 +180,8 @@ function SlotCard({ index, slot, color, onChange }) {
               <input type="number" min="1" step="0.1" value={slot.height} onChange={f('height')} />
             </div>
             <div className="field">
-              <label className="field-label">◎ Waste <span className="unit">(%)</span></label>
-              <input type="number" min="1" max="100" step="1" value={slot.waste_pct} onChange={f('waste_pct')} />
+              <label className="field-label">◎ Yield <span className="unit">(%)</span></label>
+              <input type="number" min="1" max="100" step="1" value={slot.yield_pct} onChange={f('yield_pct')} />
             </div>
             <div className="field">
               <label className="field-label">▤ Substrate</label>
@@ -264,8 +265,8 @@ function ResultsTable({ slots, results }) {
               {slots.map((s, i) => <td key={i}>{s.substrate_name || '—'}</td>)}
             </tr>
             <tr>
-              <td style={{ textAlign: 'left' }}>Waste %</td>
-              {slots.map((s, i) => <td key={i}>{s.waste_pct}%</td>)}
+              <td style={{ textAlign: 'left' }}>Yield %</td>
+              {slots.map((s, i) => <td key={i}>{s.yield_pct ?? 85}%</td>)}
             </tr>
             <tr>
               <td style={{ textAlign: 'left' }}>Substrate Price</td>
@@ -356,7 +357,7 @@ export default function ComparisonPage() {
         return api.calculate({
           width:           parseFloat(slot.width)           || 1,
           height:          parseFloat(slot.height)          || 1,
-          waste_pct:       parseFloat(slot.waste_pct)       || 85,
+          yield_pct:       parseFloat(slot.yield_pct)       || 85,
           substrate_name:  slot.substrate_name || null,
           substrate_price: parseFloat(slot.substrate_price) || 0,
           foil_cost:       parseFloat(slot.foil_cost)       || 0,

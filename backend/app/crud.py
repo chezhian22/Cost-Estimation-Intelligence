@@ -43,7 +43,7 @@ def get_order(db: Session, order_id: int) -> Optional[models.Order]:
 
 
 def create_order(db: Session, client_id: int, data: schemas.OrderCreate) -> models.Order:
-    obj = models.Order(name=data.name.strip(), client_id=client_id)
+    obj = models.Order(name=data.name.strip(), client_id=client_id, order_date=data.order_date)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -72,6 +72,18 @@ def delete_substrate(db: Session, substrate_id: int) -> bool:
     return True
 
 
+def set_substrate_availability(
+    db: Session, substrate_id: int, available: bool
+) -> Optional[models.Substrate]:
+    obj = db.query(models.Substrate).filter(models.Substrate.id == substrate_id).first()
+    if not obj:
+        return None
+    obj.available = available
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 # ── Teeth ────────────────────────────────────────────────────────────────────
 def list_teeth(db: Session) -> List[models.TeethData]:
     return db.query(models.TeethData).order_by(models.TeethData.teeth).all()
@@ -94,6 +106,18 @@ def delete_teeth(db: Session, teeth_id: int) -> bool:
     return True
 
 
+def set_teeth_availability(
+    db: Session, teeth_id: int, available: bool
+) -> Optional[models.TeethData]:
+    obj = db.query(models.TeethData).filter(models.TeethData.id == teeth_id).first()
+    if not obj:
+        return None
+    obj.available = available
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 # ── Calculations ─────────────────────────────────────────────────────────────
 def save_calculation(
     db: Session, req: schemas.CalculationRequest, result: dict
@@ -101,7 +125,7 @@ def save_calculation(
     obj = models.Calculation(
         width=req.width,
         height=req.height,
-        waste_pct=req.waste_pct,
+        yield_pct=req.yield_pct,
         substrate_name=req.substrate_name,
         substrate_price=req.substrate_price,
         foil_cost=req.foil_cost,
