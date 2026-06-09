@@ -345,7 +345,7 @@ export default function ChartView({ slots, results }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12, fontSize: 12, color: 'var(--color-text-secondary)' }}>
         {slots.map((s, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: SLOT_COLORS[i], flexShrink: 0 }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: SLOT_COLORS[i], flexShrink: 0 }} />
             {s.label || `Quote ${LABELS[i]}`}
             {s.width && s.height ? ` · ${fmt(s.width, 1)} × ${fmt(s.height, 1)} mm` : ''}
           </span>

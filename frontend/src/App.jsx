@@ -190,7 +190,7 @@ export default function App() {
             <>
               <CylinderTable result={result} orderQty={inputs.order_qty} pressSpeed={inputs.press_speed} />
               <PricingPanel result={result} orderQty={inputs.order_qty} />
-              <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} orderQty={inputs.order_qty} />
+              {/* <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} orderQty={inputs.order_qty} /> */}
             </>
           )}
 
