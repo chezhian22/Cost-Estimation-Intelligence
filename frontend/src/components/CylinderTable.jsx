@@ -5,19 +5,14 @@ const fmt  = (v, d = 2) => Number(v).toFixed(d)
 function CylinderDotDiagram({ around, across, color, label, teeth }) {
   const BODY_W = 280
   const BODY_H = 160
-  const CAP_RY = 14  // ellipse cap height (radius)
-  const gap = 2
+  const CAP_RY = 14
+  const DOT = 8  // fixed dot size — never changes
 
-  // scale dot size so ALL labels always fit inside the fixed body area
-  const dot = Math.max(2, Math.min(
-    Math.floor((BODY_W - gap * (around - 1)) / around),
-    Math.floor((BODY_H - gap * (across - 1)) / across)
-  ))
+  // Spacing is distributed evenly including edges: [gap][dot][gap][dot]...[gap]
+  // N dots → N+1 equal gaps, so gap shrinks as label count grows
+  const sx = Math.max(1, (BODY_W - around * DOT) / (around + 1))
+  const sy = Math.max(1, (BODY_H - across * DOT) / (across + 1))
 
-  const gridW = around * dot + (around - 1) * gap
-  const gridH = across * dot + (across - 1) * gap
-  const ox = (BODY_W - gridW) / 2
-  const oy = CAP_RY + (BODY_H - gridH) / 2
   const SVG_H = BODY_H + CAP_RY * 2
 
   return (
@@ -54,16 +49,16 @@ function CylinderDotDiagram({ around, across, color, label, teeth }) {
           fill={color + '22'} stroke={color + '66'} strokeWidth={1}
         />
 
-        {/* label dots — every single label shown, dot size auto-scaled */}
+        {/* dots — fixed DOT size, spacing adjusts with label count */}
         {Array.from({ length: around * across }, (_, idx) => {
           const col = idx % around
           const row = Math.floor(idx / around)
           return (
             <circle
               key={idx}
-              cx={ox + col * (dot + gap) + dot / 2}
-              cy={oy + row * (dot + gap) + dot / 2}
-              r={dot / 2}
+              cx={sx + col * (DOT + sx) + DOT / 2}
+              cy={CAP_RY + sy + row * (DOT + sy) + DOT / 2}
+              r={DOT / 2}
               fill={color}
               opacity={0.85}
             />
@@ -205,6 +200,10 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
               <span className="ceff-block-teeth">{eff.mRow.teeth} teeth</span>
             </div>
             <div className="ceff-row">
+              <span className="ceff-label">Label Size</span>
+              <span className="ceff-val">{fmt(eff.mRow.label_width)} × {fmt(eff.mRow.label_height)} mm</span>
+            </div>
+            <div className="ceff-row">
               <span className="ceff-label">Around × Across</span>
               <span className="ceff-val">{eff.mRow.around} × {eff.mRow.across}</span>
             </div>
@@ -242,6 +241,10 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
             <div className="ceff-block-head">
               <span className="ceff-block-title">Best Yield ★</span>
               <span className="ceff-block-teeth">{eff.bRow.teeth} teeth</span>
+            </div>
+            <div className="ceff-row">
+              <span className="ceff-label">Label Size</span>
+              <span className="ceff-val">{fmt(eff.bRow.label_width)} × {fmt(eff.bRow.label_height)} mm</span>
             </div>
             <div className="ceff-row">
               <span className="ceff-label">Around × Across</span>
