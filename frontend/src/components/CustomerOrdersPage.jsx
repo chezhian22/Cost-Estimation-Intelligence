@@ -16,17 +16,27 @@ const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
 // ── Edit Client Modal ─────────────────────────────────────────────────────────
 function EditClientModal({ client, onUpdated, onClose }) {
-  const [name, setName] = useState(client.name)
+  const [name,     setName]     = useState(client.name)
+  const [location, setLocation] = useState(client.location || '')
+  const [industry, setIndustry] = useState(client.industry || '')
+  const [email,    setEmail]    = useState(client.email    || '')
+  const [phone,    setPhone]    = useState(client.phone    || '')
   const [busy, setBusy] = useState(false)
   const [err, setErr]   = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed || trimmed === client.name) { onClose(); return }
+    if (!trimmed) return
     setBusy(true); setErr(null)
     try {
-      const updated = await api.updateClient(client.id, trimmed)
+      const updated = await api.updateClient(client.id, {
+        name: trimmed,
+        location: location.trim() || null,
+        industry: industry.trim() || null,
+        email:    email.trim()    || null,
+        phone:    phone.trim()    || null,
+      })
       onUpdated(updated)
     } catch (ex) {
       setErr(ex.message)
@@ -43,17 +53,46 @@ function EditClientModal({ client, onUpdated, onClose }) {
           <div className="cop-field">
             <label className="cop-label">Company Name <span className="cop-required">*</span></label>
             <input
-              className="cop-input"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={busy}
-              maxLength={120}
-              autoFocus
+              className="cop-input" type="text"
+              value={name} onChange={(e) => setName(e.target.value)}
+              disabled={busy} maxLength={120} autoFocus
             />
           </div>
-          <div className="cop-drawer-note" style={{ marginTop: '0.75rem' }}>
-            ℹ Additional fields (location, email, industry) will be available once the backend is extended.
+          <div className="cop-field">
+            <label className="cop-label">Location</label>
+            <input
+              className="cop-input" type="text"
+              placeholder="e.g. Bengaluru"
+              value={location} onChange={(e) => setLocation(e.target.value)}
+              disabled={busy} maxLength={200}
+            />
+          </div>
+          <div className="cop-field">
+            <label className="cop-label">Industry</label>
+            <input
+              className="cop-input" type="text"
+              placeholder="e.g. Beverages"
+              value={industry} onChange={(e) => setIndustry(e.target.value)}
+              disabled={busy} maxLength={120}
+            />
+          </div>
+          <div className="cop-field">
+            <label className="cop-label">Email</label>
+            <input
+              className="cop-input" type="email"
+              placeholder="e.g. contact@company.com"
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              disabled={busy} maxLength={200}
+            />
+          </div>
+          <div className="cop-field">
+            <label className="cop-label">Phone</label>
+            <input
+              className="cop-input" type="tel"
+              placeholder="e.g. +91 98765 43210"
+              value={phone} onChange={(e) => setPhone(e.target.value)}
+              disabled={busy} maxLength={30}
+            />
           </div>
           {err && <div className="cop-inline-err">{err}</div>}
           <div className="cop-edit-actions">
@@ -597,9 +636,17 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
           <div className="cop-customer-info">
             <div className="cop-customer-name">{client.name}</div>
             <div className="cop-customer-meta">
+              {[client.industry, client.location].filter(Boolean).join(' · ')}
+              {(client.industry || client.location) ? ' · ' : ''}
               Added {fmtDate(client.created_at)}
               {orders !== null && ` · ${orders.length} order${orders.length !== 1 ? 's' : ''}`}
             </div>
+            {(client.email || client.phone) && (
+              <div className="cop-customer-contacts">
+                {client.email && <span className="cop-contact-item">✉ {client.email}</span>}
+                {client.phone && <span className="cop-contact-item">📞 {client.phone}</span>}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
@@ -607,7 +654,10 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
               onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
               title="Edit customer"
             >
-              ✎ Edit
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
             </button>
             <span className={`cop-chevron${expanded ? ' cop-chevron--open' : ''}`}>▼</span>
           </div>
@@ -680,7 +730,11 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
 
 // ── New Customer drawer ───────────────────────────────────────────────────────
 function NewCustomerDrawer({ onCreated, onClose }) {
-  const [name, setName]         = useState('')
+  const [name,     setName]     = useState('')
+  const [location, setLocation] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [email,    setEmail]    = useState('')
+  const [phone,    setPhone]    = useState('')
   const [busy, setBusy]         = useState(false)
   const [err, setErr]           = useState(null)
 
@@ -690,7 +744,13 @@ function NewCustomerDrawer({ onCreated, onClose }) {
     if (!trimmed) return
     setBusy(true); setErr(null)
     try {
-      const created = await api.createClient(trimmed)
+      const created = await api.createClient({
+        name: trimmed,
+        location: location.trim() || null,
+        industry: industry.trim() || null,
+        email:    email.trim()    || null,
+        phone:    phone.trim()    || null,
+      })
       onCreated(created)
     } catch (ex) {
       setErr(ex.message)
@@ -720,9 +780,44 @@ function NewCustomerDrawer({ onCreated, onClose }) {
             />
           </div>
 
-          <div className="cop-drawer-note">
-            ℹ Additional fields (location, industry, email, phone) will be added once
-            the backend is extended. You can edit the customer name anytime from the Customers page.
+          <div className="cop-field">
+            <label className="cop-label">Location</label>
+            <input
+              className="cop-input" type="text"
+              placeholder="e.g. Bengaluru"
+              value={location} onChange={(e) => setLocation(e.target.value)}
+              disabled={busy} maxLength={200}
+            />
+          </div>
+
+          <div className="cop-field">
+            <label className="cop-label">Industry</label>
+            <input
+              className="cop-input" type="text"
+              placeholder="e.g. Beverages"
+              value={industry} onChange={(e) => setIndustry(e.target.value)}
+              disabled={busy} maxLength={120}
+            />
+          </div>
+
+          <div className="cop-field">
+            <label className="cop-label">Email</label>
+            <input
+              className="cop-input" type="email"
+              placeholder="e.g. contact@company.com"
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              disabled={busy} maxLength={200}
+            />
+          </div>
+
+          <div className="cop-field">
+            <label className="cop-label">Phone</label>
+            <input
+              className="cop-input" type="tel"
+              placeholder="e.g. +91 98765 43210"
+              value={phone} onChange={(e) => setPhone(e.target.value)}
+              disabled={busy} maxLength={30}
+            />
           </div>
 
           {err && <div className="cop-inline-err">{err}</div>}

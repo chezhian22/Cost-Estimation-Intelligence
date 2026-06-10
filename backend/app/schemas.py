@@ -17,10 +17,14 @@ class ClientCreate(BaseModel):
         description="Unique display name for the client (e.g. company or person name).",
         examples=["Kingfisher Breweries"],
     )
+    location: Optional[str] = Field(None, max_length=200, description="Office/city location.")
+    industry: Optional[str] = Field(None, max_length=120, description="Industry or sector.")
+    email:    Optional[str] = Field(None, max_length=200, description="Primary contact email.")
+    phone:    Optional[str] = Field(None, max_length=30,  description="Primary contact phone.")
 
     model_config = {
         "json_schema_extra": {
-            "example": {"name": "Kingfisher Breweries"}
+            "example": {"name": "Kingfisher Breweries", "location": "Bengaluru", "industry": "Beverages", "email": "contact@kingfisher.com", "phone": "+91 98765 43210"}
         }
     }
 
@@ -32,6 +36,10 @@ class ClientOut(BaseModel):
 
     id: int = Field(..., description="Auto-incremented primary key.")
     name: str = Field(..., description="Unique client name.")
+    location: Optional[str] = Field(None, description="Office/city location.")
+    industry: Optional[str] = Field(None, description="Industry or sector.")
+    email: Optional[str] = Field(None, description="Primary contact email.")
+    phone: Optional[str] = Field(None, description="Primary contact phone.")
     created_at: datetime = Field(..., description="UTC timestamp when the client was created.")
 
 
@@ -283,7 +291,11 @@ class CalculationResponse(BaseModel):
 # ── Client update ────────────────────────────────────────────────────────────
 class ClientUpdate(BaseModel):
     """Body for PATCH /api/clients/{id}."""
-    name: str = Field(..., min_length=1, max_length=120, description="New unique display name.")
+    name:     str            = Field(..., min_length=1, max_length=120, description="New unique display name.")
+    location: Optional[str] = Field(None, max_length=200, description="Office/city location.")
+    industry: Optional[str] = Field(None, max_length=120, description="Industry or sector.")
+    email:    Optional[str] = Field(None, max_length=200, description="Primary contact email.")
+    phone:    Optional[str] = Field(None, max_length=30,  description="Primary contact phone.")
 
 
 # ── Status update ────────────────────────────────────────────────────────────

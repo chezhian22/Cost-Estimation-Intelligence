@@ -36,10 +36,10 @@ export const api = {
 
   // Clients
   getClients: () => request('/api/clients'),
-  createClient: (name) =>
-    request('/api/clients', { method: 'POST', body: JSON.stringify({ name }) }),
-  updateClient: (id, name) =>
-    request(`/api/clients/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  createClient: (fields) =>
+    request('/api/clients', { method: 'POST', body: JSON.stringify(fields) }),
+  updateClient: (id, fields) =>
+    request(`/api/clients/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
 
   // Orders
   getOrders: (clientId) => request(`/api/clients/${clientId}/orders`),

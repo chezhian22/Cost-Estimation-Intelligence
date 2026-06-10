@@ -19,6 +19,18 @@ def _migrate():
     tables = insp.get_table_names()
 
     with engine.begin() as conn:
+        # clients table — extended profile fields
+        if "clients" in tables:
+            cli_cols = {c["name"] for c in insp.get_columns("clients")}
+            for col, ddl in [
+                ("location", "VARCHAR(200) NULL"),
+                ("industry", "VARCHAR(120) NULL"),
+                ("email",    "VARCHAR(200) NULL"),
+                ("phone",    "VARCHAR(30)  NULL"),
+            ]:
+                if col not in cli_cols:
+                    conn.execute(text(f"ALTER TABLE clients ADD COLUMN {col} {ddl}"))
+
         # calculations table
         if "calculations" in tables:
             existing = {c["name"] for c in insp.get_columns("calculations")}
@@ -226,7 +238,7 @@ def update_client(client_id: int, data: schemas.ClientUpdate, db: Session = Depe
     existing = crud.get_client_by_name(db, data.name.strip())
     if existing and existing.id != client_id:
         raise HTTPException(status_code=409, detail="Client name already exists")
-    obj = crud.update_client(db, client_id, data.name)
+    obj = crud.update_client(db, client_id, data)
     return obj
 
 

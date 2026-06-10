@@ -13,6 +13,10 @@ class Client(Base):
 
     id         = Column(Integer, primary_key=True, index=True)
     name       = Column(String(120), nullable=False, unique=True)
+    location   = Column(String(200), nullable=True)
+    industry   = Column(String(120), nullable=True)
+    email      = Column(String(200), nullable=True)
+    phone      = Column(String(30),  nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     orders = relationship("Order", back_populates="client", cascade="all, delete-orphan")
