@@ -3,25 +3,28 @@ import React from 'react'
 const fmt  = (v, d = 2) => Number(v).toFixed(d)
 
 function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference }) {
-  const BODY_W = 420
-  const BODY_H = circumference > 0
-    ? Math.round(Math.min(Math.max(BODY_W * (paperSize / circumference), 80), 500))
-    : 260
-  const CAP_RY = 18
-  const DOT    = 10
+  // Scale proportionally: bigger circumference = wider, bigger paperSize = taller
+  const REF_CIRC = 400
+  const BODY_W   = Math.round(Math.min(240, Math.max(120, (240 * circumference) / REF_CIRC)))
+  const ratio    = circumference > 0 ? paperSize / circumference : 0.7
+  const BODY_H   = Math.round(Math.min(280, Math.max(60, BODY_W * ratio)))
+  const CAP_RY   = Math.max(10, Math.round(BODY_W * 0.07))
 
-  const sx = Math.max(1, (BODY_W - around * DOT) / (around + 1))
-  const sy = Math.max(1, (BODY_H - across * DOT) / (across + 1))
+  const PAD_T = 44, PAD_R = 60, PAD_B = 10, PAD_L = 8
+  const SVG_W = PAD_L + BODY_W + PAD_R
+  const SVG_H = PAD_T + CAP_RY + BODY_H + CAP_RY + PAD_B
 
-  const gox = sx
-  const goy = CAP_RY + sy
+  const BX = PAD_L
+  const BY = PAD_T + CAP_RY
+  const CX = BX + BODY_W / 2
+  const RX = BODY_W / 2
 
-  const SVG_H = BODY_H + CAP_RY * 2
+  const VDX = BX + BODY_W + 14
 
   return (
     <div style={{
       flex: '1 1 0',
-      minWidth: 340,
+      minWidth: 280,
       background: 'var(--bg-raised)',
       border: `1px solid ${color}33`,
       borderRadius: 'var(--radius-sm)',
@@ -42,36 +45,77 @@ function CylinderDotDiagram({ around, across, color, label, teeth, labelW, label
       )}
 
       <svg
-        viewBox={`0 0 ${BODY_W} ${SVG_H}`}
-        style={{ display: 'block', width: '100%', maxWidth: BODY_W }}
+        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+        style={{ display: 'block', width: '100%', maxWidth: SVG_W, margin: '0 auto' }}
+        aria-label={`Cylinder layout: ${around} labels around, ${across} across`}
       >
-        {/* cylinder body */}
-        <rect x={0} y={CAP_RY} width={BODY_W} height={BODY_H}
+        {/* Cylinder body */}
+        <rect x={BX} y={BY} width={BODY_W} height={BODY_H}
           fill={color + '0d'} stroke={color + '44'} strokeWidth={1} />
 
-        {/* top cap */}
-        <ellipse cx={BODY_W / 2} cy={CAP_RY} rx={BODY_W / 2} ry={CAP_RY}
-          fill={color + '22'} stroke={color + '66'} strokeWidth={1} />
+        {/* Top ellipse — circumference curve */}
+        <ellipse cx={CX} cy={BY} rx={RX} ry={CAP_RY}
+          fill={color + '22'} stroke={color} strokeWidth={1.8} />
 
-        {/* dots */}
-        {Array.from({ length: around * across }, (_, idx) => {
-          const col = idx % around
-          const row = Math.floor(idx / around)
+        {/* Bottom cap */}
+        <ellipse cx={CX} cy={BY + BODY_H} rx={RX} ry={CAP_RY}
+          fill={color + '18'} stroke={color + '55'} strokeWidth={1} />
+
+        {/* Column dividers on top ellipse showing "around" segments */}
+        {Array.from({ length: around - 1 }, (_, i) => {
+          const xFrac = (i + 1) / around
+          const xPos  = BX + xFrac * BODY_W
+          const dx    = xPos - CX
+          const yTop  = BY - CAP_RY * Math.sqrt(Math.max(0, 1 - (dx * dx) / (RX * RX)))
           return (
-            <circle
-              key={idx}
-              cx={gox + col * (DOT + sx) + DOT / 2}
-              cy={goy + row * (DOT + sy) + DOT / 2}
-              r={DOT / 2}
-              fill={color}
-              opacity={0.85}
+            <line key={i}
+              x1={xPos} y1={yTop} x2={xPos} y2={BY + 8}
+              stroke={color} strokeWidth={0.8} strokeOpacity={0.45}
+              strokeDasharray="3,2"
             />
           )
         })}
 
-        {/* bottom cap */}
-        <ellipse cx={BODY_W / 2} cy={CAP_RY + BODY_H} rx={BODY_W / 2} ry={CAP_RY}
-          fill={color + '22'} stroke={color + '66'} strokeWidth={1} />
+        {/* Top dimension line */}
+        <line x1={BX} y1={PAD_T - 8} x2={BX + BODY_W} y2={PAD_T - 8}
+          stroke={color} strokeWidth={0.9} strokeOpacity={0.55} />
+        <line x1={BX}          y1={PAD_T - 13} x2={BX}          y2={PAD_T - 3}
+          stroke={color} strokeWidth={0.9} strokeOpacity={0.55} />
+        <line x1={BX + BODY_W} y1={PAD_T - 13} x2={BX + BODY_W} y2={PAD_T - 3}
+          stroke={color} strokeWidth={0.9} strokeOpacity={0.55} />
+
+        {/* "Around" annotation above cylinder */}
+        <text x={CX} y={PAD_T - 18}
+          textAnchor="middle" fontSize={10}
+          fill={color} fillOpacity={0.92}
+          fontFamily="Inter,sans-serif" fontWeight={600}
+        >
+          {around} labels around · ⌀ {fmt(circumference, 1)} mm
+        </text>
+
+        {/* Right vertical dimension line for "across" */}
+        <line x1={VDX} y1={BY} x2={VDX} y2={BY + BODY_H}
+          stroke={color} strokeWidth={0.9} strokeOpacity={0.55} />
+
+        {/* Tick marks for each row boundary */}
+        {Array.from({ length: across + 1 }, (_, j) => (
+          <line key={j}
+            x1={VDX - 5} y1={BY + (j / across) * BODY_H}
+            x2={VDX + 5} y2={BY + (j / across) * BODY_H}
+            stroke={color} strokeWidth={0.9} strokeOpacity={0.65}
+          />
+        ))}
+
+        {/* "Across" label rotated along the dim line */}
+        <text
+          x={VDX + 15} y={BY + BODY_H / 2}
+          textAnchor="middle" fontSize={10}
+          fill={color} fillOpacity={0.92}
+          fontFamily="Inter,sans-serif" fontWeight={600}
+          transform={`rotate(-90, ${VDX + 15}, ${BY + BODY_H / 2})`}
+        >
+          {across} across · {fmt(paperSize, 0)} mm
+        </text>
       </svg>
     </div>
   )
