@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
@@ -9,49 +10,72 @@ const STATUS_CONFIG = {
   rejected:  { label: 'Rejected',  cls: 'status-rejected'  },
 }
 
-function StatusBadge({ calcId, initial }) {
-  const [status, setStatus] = useState(initial || 'pending')
-  const [saving, setSaving] = useState(false)
-  const [open, setOpen]     = useState(false)
+function StatusBadge({ calcId, status, onChoose }) {
+  const [saving, setSaving]       = useState(false)
+  const [dropdownPos, setDropdownPos] = useState(null)
+  const btnRef = useRef(null)
 
-  async function choose(next) {
-    setOpen(false)
+  function open(e) {
+    e.stopPropagation()
+    if (dropdownPos) { setDropdownPos(null); return }
+    const rect = btnRef.current.getBoundingClientRect()
+    setDropdownPos({ top: rect.bottom + 6, left: rect.left })
+  }
+
+  useEffect(() => {
+    if (!dropdownPos) return
+    const close = () => setDropdownPos(null)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [dropdownPos])
+
+  async function choose(e, next) {
+    e.stopPropagation()
+    setDropdownPos(null)
     if (next === status) return
     setSaving(true)
     try {
       await api.updateQuoteStatus(calcId, next)
-      setStatus(next)
+      onChoose(calcId, next)
     } catch { /* keep current on error */ }
     finally { setSaving(false) }
   }
 
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
 
+  const dropdown = dropdownPos && createPortal(
+    <div
+      className="status-dropdown"
+      style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {Object.entries(STATUS_CONFIG).map(([key, c]) => (
+        <button
+          key={key}
+          className={`status-option ${c.cls}${status === key ? ' current' : ''}`}
+          onClick={(e) => choose(e, key)}
+        >
+          {status === key && <span className="status-check">✓ </span>}
+          {c.label}
+        </button>
+      ))}
+    </div>,
+    document.body
+  )
+
   return (
     <div className="status-wrap">
       <button
+        ref={btnRef}
         className={`status-badge ${cfg.cls}${saving ? ' status-saving' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={open}
         disabled={saving}
         title="Click to change status"
       >
         {saving ? '…' : cfg.label}
         <span className="status-caret">▾</span>
       </button>
-      {open && (
-        <div className="status-dropdown">
-          {Object.entries(STATUS_CONFIG).map(([key, c]) => (
-            <button
-              key={key}
-              className={`status-option ${c.cls}${status === key ? ' current' : ''}`}
-              onClick={() => choose(key)}
-            >
-              {status === key && <span className="status-check">✓ </span>}
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   )
 }
@@ -93,6 +117,15 @@ export default function QuoteHistory() {
       return matchClient && matchOrder
     })
   }, [quotes, selectedClient, selectedOrder])
+
+  function handleStatusChange(calcId, next) {
+    setQuotes((prev) => prev.map((q) => {
+      if (q.id === calcId) return { ...q, status: next }
+      if (next === 'confirmed' && q.order_id === prev.find((x) => x.id === calcId)?.order_id)
+        return { ...q, status: 'pending' }
+      return q
+    }))
+  }
 
   function clearFilters() {
     setSelectedClient('')
@@ -241,7 +274,7 @@ export default function QuoteHistory() {
                           : '—'}
                       </td>
                       <td>
-                        <StatusBadge calcId={q.id} initial={q.status} />
+                        <StatusBadge calcId={q.id} status={q.status} onChoose={handleStatusChange} />
                       </td>
                     </tr>
                   ))

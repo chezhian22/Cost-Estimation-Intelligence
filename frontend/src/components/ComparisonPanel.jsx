@@ -5,11 +5,11 @@ const fmtN = (v, d = 0) => Number(v).toLocaleString('en-IN', { minimumFractionDi
 
 // ── SVG cylinder layout diagram ───────────────────────────────────────────────
 function CylinderDiagram({ row, matched, color }) {
-  const VW = 260, VH = 158
-  const PT = 30, PR = 10, PB = 24, PL = 30
+  const VW = 260, VH = 165
+  const PT = 50, PR = 10, PB = 22, PL = 14
 
-  const drawW = VW - PL - PR   // 220
-  const drawH = VH - PT - PB   // 104
+  const drawW = VW - PL - PR   // 236
+  const drawH = VH - PT - PB   // 93
 
   const { around, across } = row
 
@@ -66,38 +66,33 @@ function CylinderDiagram({ row, matched, color }) {
         />
       ))}
 
-      {/* ── "around" dimension line (top) ── */}
-      <line x1={PL} y1={PT - 12} x2={PL + drawW} y2={PT - 12}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
-      <line x1={PL}          y1={PT - 16} x2={PL}          y2={PT - 8}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
-      <line x1={PL + drawW}  y1={PT - 16} x2={PL + drawW}  y2={PT - 8}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+      {/* ── width label (top, line 1) ── */}
       <text
-        x={PL + drawW / 2} y={PT - 17}
+        x={PL + drawW / 2} y={PT - 36}
         textAnchor="middle" fontSize="9"
-        fill={color} fillOpacity="0.90"
+        fill={color} fillOpacity="0.95"
         fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.3"
       >
-        {around} × {lw} mm  →  around drum
+        ↔ Width: {lw} mm  ({around} around drum)
       </text>
 
-      {/* ── "across" dimension line (left) ── */}
-      <line x1={PL - 12} y1={PT} x2={PL - 12} y2={PT + drawH}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
-      <line x1={PL - 16} y1={PT}          x2={PL - 8} y2={PT}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
-      <line x1={PL - 16} y1={PT + drawH}  x2={PL - 8} y2={PT + drawH}
-        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+      {/* ── height label (top, line 2) ── */}
       <text
-        x={PL - 18} y={PT + drawH / 2}
+        x={PL + drawW / 2} y={PT - 23}
         textAnchor="middle" fontSize="9"
-        fill={color} fillOpacity="0.90"
+        fill={color} fillOpacity="0.95"
         fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.3"
-        transform={`rotate(-90, ${PL - 18}, ${PT + drawH / 2})`}
       >
-        {across} × {lh} mm  ↕  across web
+        ↕ Height: {lh} mm  ({across} across web)
       </text>
+
+      {/* ── "around" dimension line ── */}
+      <line x1={PL} y1={PT - 12} x2={PL + drawW} y2={PT - 12}
+        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+      <line x1={PL}         y1={PT - 16} x2={PL}         y2={PT - 8}
+        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+      <line x1={PL + drawW} y1={PT - 16} x2={PL + drawW} y2={PT - 8}
+        stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
 
       {/* ── bottom: circumference + paper size ── */}
       <text

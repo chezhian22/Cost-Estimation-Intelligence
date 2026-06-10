@@ -1385,10 +1385,6 @@ tbody tr.matched.best-paper td {
 .status-saving { opacity: 0.55; cursor: wait }
 
 .status-dropdown {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  z-index: 300;
   background: #ffffff;
   border: 1px solid rgba(54,229,194,0.35);
   border-radius: var(--radius-sm);

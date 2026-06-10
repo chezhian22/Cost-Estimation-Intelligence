@@ -212,22 +212,227 @@ function SlotCard({ index, slot, color, onChange }) {
   )
 }
 
-// ── Comparison results table ──────────────────────────────────────────────────
-const METRICS = [
-  { key: 'adj_labels',     label: 'Adj. Labels / m²', better: 'max', fmt: (v) => fmt(v)        },
-  { key: 'price_inr_1000', label: '₹ / 1000 Labels',  better: 'min', fmt: (v) => `₹ ${fmt(v)}` },
-  { key: 'price_usd_1000', label: '$ / 1000 Labels',  better: 'min', fmt: (v) => `$ ${fmt(v, 3)}` },
-  { key: 'rate_15',        label: 'Rate  1 : 1.5',    better: 'min', fmt: (v) => `₹ ${fmt(v)}` },
-  { key: 'rate_175',       label: 'Rate  1 : 1.75',   better: 'min', fmt: (v) => `₹ ${fmt(v)}` },
-  { key: 'rate_2',         label: 'Rate  1 : 2',      better: 'min', fmt: (v) => `₹ ${fmt(v)}` },
+// ── Profit bar chart (SVG) ────────────────────────────────────────────────────
+const PROFIT_RATES = [
+  { key: 'rate_15',  label: '1 : 1.5'  },
+  { key: 'rate_175', label: '1 : 1.75' },
+  { key: 'rate_2',   label: '1 : 2'    },
 ]
 
-function ResultsTable({ slots, results }) {
-  function getBest(metricKey, better) {
-    const vals = results.map((r) => r?.pricing?.[metricKey]).filter((v) => v != null)
-    if (vals.length < 2) return null
-    return better === 'max' ? Math.max(...vals) : Math.min(...vals)
+function niceAxisMax(rawMax) {
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)))
+  const steps = [1, 2, 2.5, 5, 10]
+  for (const s of steps) {
+    const candidate = Math.ceil(rawMax / (magnitude * s)) * magnitude * s
+    if (candidate >= rawMax) return candidate
   }
+  return Math.ceil(rawMax / magnitude) * magnitude
+}
+
+function ProfitBarChart({ slots, results }) {
+  const n = slots.length
+  const W = 620, H = 280
+  const PL = 54, PR = 14, PT = 44, PB = 38
+  const chartW = W - PL - PR
+  const chartH = H - PT - PB
+
+  const costs = results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2)
+
+  const groups = PROFIT_RATES.map(({ key, label }) => ({
+    label,
+    bars: results.map((r, qi) => {
+      const sell   = r?.pricing?.[key] ?? 0
+      const cost   = costs[qi]
+      const profit = Math.max(0, sell - cost)
+      const margin = sell > 0 ? Math.round((profit / sell) * 100) : 0
+      return { sell, cost, profit, margin }
+    }),
+  }))
+
+  const rawMax  = Math.max(...groups.flatMap((g) => g.bars.map((b) => b.profit)), 1)
+  const axisMax = niceAxisMax(rawMax)
+
+  const Y_TICKS = 4
+  const yTicks  = Array.from({ length: Y_TICKS + 1 }, (_, k) => (axisMax / Y_TICKS) * k)
+
+  const groupW   = chartW / groups.length
+  const barGap   = 8
+  const barW     = Math.min(46, (groupW - 20 - barGap * (n - 1)) / n)
+  const barsSpan = barW * n + barGap * (n - 1)
+
+  const bx  = (gi, qi) => PL + gi * groupW + (groupW - barsSpan) / 2 + qi * (barW + barGap)
+  const toY = (val)    => PT + chartH - (val / axisMax) * chartH
+
+  return (
+    <section className="card cmp-results-card">
+      <div className="card-header">
+        <div className="card-icon-wrap">₹</div>
+        <span className="card-title">Profit per 1000 Labels — by Rate</span>
+      </div>
+
+      {/* legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 16px', padding: '8px 1.4rem 4px' }}>
+        {slots.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#bbb' }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: SLOT_COLORS[i] }} />
+            <span style={{ color: SLOT_COLORS[i], fontWeight: 600 }}>{s.label || `Quote ${LABELS[i]}`}</span>
+          </div>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#555' }}>profit = sell − production cost</span>
+      </div>
+
+      {/* bar chart */}
+      <div style={{ padding: '2px 1.4rem 0', display: 'flex', justifyContent: 'center' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 640, display: 'block' }}>
+
+          {yTicks.map((val, k) => {
+            const y = toY(val)
+            return (
+              <g key={k}>
+                <line x1={PL} y1={y} x2={W - PR} y2={y}
+                  stroke={k === 0 ? 'rgba(128,128,128,0.3)' : 'rgba(128,128,128,0.08)'}
+                  strokeWidth={0.8} strokeDasharray={k === 0 ? 'none' : '3 3'} />
+                <text x={PL - 5} y={y + 3.5} textAnchor="end" fontSize={11} fill="#666"
+                  fontFamily="JetBrains Mono,monospace">
+                  {val === 0 ? '0' : `₹${Math.round(val)}`}
+                </text>
+              </g>
+            )
+          })}
+
+          {groups.map((group, gi) => (
+            <g key={gi}>
+              <text x={PL + gi * groupW + groupW / 2} y={H - 10}
+                textAnchor="middle" fontSize={12} fill="#888" fontFamily="Inter,sans-serif">
+                {group.label}
+              </text>
+
+              {group.bars.map(({ profit, margin }, qi) => {
+                const color    = SLOT_COLORS[qi]
+                const x        = bx(gi, qi)
+                const profitH  = (profit / axisMax) * chartH
+                const baseline = PT + chartH
+
+                return (
+                  <g key={qi}>
+                    <rect x={x} y={baseline - profitH} width={barW} height={profitH}
+                      fill={color} stroke={color} strokeWidth={0.7} rx={2} />
+                    {/* profit value above bar */}
+                    <text x={x + barW / 2} y={baseline - profitH - 14}
+                      textAnchor="middle" fontSize={11} fill={color}
+                      fontFamily="JetBrains Mono,monospace" fontWeight="700">
+                      ₹{Math.round(profit)}
+                    </text>
+                    {/* margin % below profit value */}
+                    <text x={x + barW / 2} y={baseline - profitH - 4}
+                      textAnchor="middle" fontSize={9.5} fill={color} opacity={0.7}
+                      fontFamily="Inter,sans-serif">
+                      {margin}%
+                    </text>
+                  </g>
+                )
+              })}
+            </g>
+          ))}
+
+        </svg>
+      </div>
+
+      {/* calculation breakdown */}
+      <div style={{ padding: '0.5rem 1.4rem 1rem', overflowX: 'auto' }}>
+        <div style={{ fontSize: 10, color: '#555', marginBottom: 6, fontFamily: 'Inter, sans-serif' }}>
+          Profit = Selling Price − Production Cost &nbsp;(per 1000 labels)
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <th style={{ textAlign: 'left', padding: '4px 8px', color: '#555', fontWeight: 500 }}>Rate</th>
+              {slots.map((s, i) => (
+                <th key={i} colSpan={4} style={{ textAlign: 'center', padding: '4px 8px', color: SLOT_COLORS[i], fontWeight: 600 }}>
+                  {s.label || `Quote ${LABELS[i]}`}
+                </th>
+              ))}
+            </tr>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <th />
+              {slots.map((_, i) => (
+                <React.Fragment key={i}>
+                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>Sell ₹</th>
+                  <th style={{ textAlign: 'center', padding: '2px 2px', color: '#444', fontWeight: 400, fontSize: 10 }}>−</th>
+                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>Cost ₹</th>
+                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>= Profit ₹</th>
+                </React.Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group, gi) => (
+              <tr key={gi} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <td style={{ padding: '5px 8px', color: '#777', whiteSpace: 'nowrap' }}>{group.label}</td>
+                {group.bars.map(({ sell, cost, profit, margin }, qi) => (
+                  <React.Fragment key={qi}>
+                    <td style={{ textAlign: 'right', padding: '5px 5px', color: '#aaa', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {Math.round(sell)}
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '5px 2px', color: '#444' }}>−</td>
+                    <td style={{ textAlign: 'right', padding: '5px 5px', color: '#666', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {Math.round(cost)}
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '5px 5px', fontFamily: 'JetBrains Mono, monospace',
+                      color: profit > 0 ? '#34d399' : '#f87171', fontWeight: 600 }}>
+                      {Math.round(profit)}
+                      <span style={{ color: '#555', fontSize: 9, marginLeft: 3, fontWeight: 400 }}>({margin}%)</span>
+                    </td>
+                  </React.Fragment>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// ── Comparison results table ──────────────────────────────────────────────────
+function ResultsTable({ slots, results }) {
+  const mRows = results.map((r) => (r ? r.rows[r.matched.index] : null))
+
+  function bestOf(vals, better) {
+    const clean = vals.filter((v) => v != null)
+    if (clean.length < 2) return null
+    return better === 'max' ? Math.max(...clean) : Math.min(...clean)
+  }
+
+  function NumCell({ vals, i, better, display }) {
+    const best = bestOf(vals, better)
+    const v    = vals[i]
+    const star = v != null && v === best
+    return (
+      <td className={star ? 'cmp-best-cell' : ''}>
+        {v != null ? display(v) : '—'}
+        {star && <span className="cmp-best-star"> ★</span>}
+      </td>
+    )
+  }
+
+  const pricingRows = [
+    // ── Efficiency ──
+    { label: 'Labels / m²',             vals: results.map((r) => r?.pricing?.labels_sqm),                    better: 'max', display: (v) => fmt(v) },
+    { label: 'Adj. Labels / m²',        vals: results.map((r) => r?.pricing?.adj_labels),                    better: 'max', display: (v) => fmt(v) },
+    // ── Production cost (substrate cost per 1000 labels) ──
+    { label: 'Production Cost / 1000',  vals: results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2),             better: 'min', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Production Cost / Label', vals: results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2000),          better: 'min', display: (v) => `₹ ${fmt(v, 4)}` },
+    // ── Selling rates ──
+    { label: 'Selling Rate 1 : 1.5',    vals: results.map((r) => r?.pricing?.rate_15),                       better: 'min', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 1.75',   vals: results.map((r) => r?.pricing?.rate_175),                      better: 'min', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 2',      vals: results.map((r) => r?.pricing?.rate_2),                        better: 'min', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 2 ($)',  vals: results.map((r) => r?.pricing?.price_usd_1000),                better: 'min', display: (v) => `$ ${fmt(v, 3)}` },
+    // ── Profit per 1000 labels at each rate ──
+    { label: 'Profit at 1 : 1.5',       vals: results.map((r) => (r?.pricing?.rate_15  ?? 0) - (r?.pricing?.rate_2 ?? 0) / 2), better: 'max', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Profit at 1 : 1.75',      vals: results.map((r) => (r?.pricing?.rate_175 ?? 0) - (r?.pricing?.rate_2 ?? 0) / 2), better: 'max', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Profit at 1 : 2',         vals: results.map((r) => (r?.pricing?.rate_2   ?? 0) / 2),           better: 'max', display: (v) => `₹ ${fmt(v)}` },
+  ]
 
   return (
     <section className="card cmp-results-card">
@@ -252,12 +457,11 @@ function ResultsTable({ slots, results }) {
             </tr>
           </thead>
           <tbody>
-            {/* info rows */}
-            <tr className="cmp-section-row">
-              <td colSpan={slots.length + 1}>Inputs</td>
-            </tr>
+
+            {/* ── Inputs ── */}
+            <tr className="cmp-section-row"><td colSpan={slots.length + 1}>Inputs</td></tr>
             <tr>
-              <td style={{ textAlign: 'left' }}>Size (mm)</td>
+              <td style={{ textAlign: 'left' }}>Label Size (mm)</td>
               {slots.map((s, i) => <td key={i}>{fmt(s.width,1)} × {fmt(s.height,1)}</td>)}
             </tr>
             <tr>
@@ -269,19 +473,23 @@ function ResultsTable({ slots, results }) {
               {slots.map((s, i) => <td key={i}>{s.yield_pct ?? 85}%</td>)}
             </tr>
             <tr>
-              <td style={{ textAlign: 'left' }}>Substrate Price</td>
+              <td style={{ textAlign: 'left' }}>Substrate Price (₹/m²)</td>
               {slots.map((s, i) => <td key={i}>₹ {fmt(s.substrate_price)}</td>)}
             </tr>
-
-            {/* matched cylinder */}
-            <tr className="cmp-section-row">
-              <td colSpan={slots.length + 1}>Best Match</td>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Foil Cost (₹)</td>
+              {slots.map((s, i) => <td key={i}>₹ {fmt(s.foil_cost)}</td>)}
             </tr>
             <tr>
-              <td style={{ textAlign: 'left' }}>Cylinder (Teeth)</td>
-              {results.map((r, i) => (
-                <td key={i}>{r?.matched?.matched_teeth ?? '—'} teeth</td>
-              ))}
+              <td style={{ textAlign: 'left' }}>Exchange Rate (₹/$)</td>
+              {slots.map((s, i) => <td key={i}>₹ {fmt(s.exchange_rate, 0)}</td>)}
+            </tr>
+
+            {/* ── Cylinder Match ── */}
+            <tr className="cmp-section-row"><td colSpan={slots.length + 1}>Cylinder Match</td></tr>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Teeth</td>
+              {results.map((r, i) => <td key={i}>{r?.matched?.matched_teeth ?? '—'}</td>)}
             </tr>
             <tr>
               <td style={{ textAlign: 'left' }}>Matched Size (mm)</td>
@@ -291,29 +499,42 @@ function ResultsTable({ slots, results }) {
                 </td>
               ))}
             </tr>
-
-            {/* pricing metrics */}
-            <tr className="cmp-section-row">
-              <td colSpan={slots.length + 1}>Pricing</td>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Around × Across</td>
+              {mRows.map((mr, i) => (
+                <td key={i}>{mr ? `${mr.around} × ${mr.across}` : '—'}</td>
+              ))}
             </tr>
-            {METRICS.map((m) => {
-              const best = getBest(m.key, m.better)
-              return (
-                <tr key={m.key}>
-                  <td style={{ textAlign: 'left' }}>{m.label}</td>
-                  {results.map((r, i) => {
-                    const val = r?.pricing?.[m.key]
-                    const isBest = val != null && val === best
-                    return (
-                      <td key={i} className={isBest ? 'cmp-best-cell' : ''}>
-                        {val != null ? m.fmt(val) : '—'}
-                        {isBest && <span className="cmp-best-star"> ★</span>}
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
+            <tr>
+              <td style={{ textAlign: 'left' }}>Labels / Repeat</td>
+              {mRows.map((mr, i) => (
+                <td key={i}>{mr ? mr.around * mr.across : '—'}</td>
+              ))}
+            </tr>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Circumference (mm)</td>
+              {mRows.map((mr, i) => <td key={i}>{mr ? fmt(mr.circumference) : '—'}</td>)}
+            </tr>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Paper Size (mm)</td>
+              {mRows.map((mr, i) => <td key={i}>{mr ? mr.paper_size : '—'}</td>)}
+            </tr>
+            <tr>
+              <td style={{ textAlign: 'left' }}>Paper +20 (mm)</td>
+              {mRows.map((mr, i) => <td key={i}>{mr ? mr.paper_plus_20 : '—'}</td>)}
+            </tr>
+
+            {/* ── Pricing ── */}
+            <tr className="cmp-section-row"><td colSpan={slots.length + 1}>Efficiency · Cost · Selling Rates · Profit</td></tr>
+            {pricingRows.map((row) => (
+              <tr key={row.label}>
+                <td style={{ textAlign: 'left' }}>{row.label}</td>
+                {row.vals.map((v, i) => (
+                  <NumCell key={i} vals={row.vals} i={i} better={row.better} display={row.display} />
+                ))}
+              </tr>
+            ))}
+
           </tbody>
         </table>
       </div>
@@ -419,7 +640,12 @@ export default function ComparisonPage() {
       </div>
 
       {/* results */}
-      {results && <ResultsTable slots={slots} results={results} />}
+      {results && (
+        <>
+          <ProfitBarChart slots={slots} results={results} />
+          <ResultsTable  slots={slots} results={results} />
+        </>
+      )}
     </div>
   )
 }

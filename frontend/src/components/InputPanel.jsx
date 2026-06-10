@@ -100,15 +100,6 @@ export default function InputPanel({
           />
         </div>
 
-        <div className="field">
-          <label className="field-label" htmlFor="input-press-speed">▶ Press Speed <span className="unit">(m / min)</span></label>
-          <input
-            type="number" id="input-press-speed" step="5" min="1"
-            placeholder="e.g. 50"
-            value={inputs.press_speed}
-            onChange={(e) => onChange('press_speed', e.target.value)}
-          />
-        </div>
       </div>
 
       <button

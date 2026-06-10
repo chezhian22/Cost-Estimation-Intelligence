@@ -38,7 +38,7 @@ export default function PricingPanel({ result, orderQty }) {
           <span className="meta-value">{fmt(p.labels_sqm)}</span>
         </div>
         <div className="meta-item">
-          <span className="meta-label">Adjusted Labels / m²</span>
+          <span className="meta-label">Labels after wastage / m²</span>
           <span className="meta-value">{fmt(p.adj_labels)}</span>
         </div>
       </div>

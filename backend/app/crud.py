@@ -122,6 +122,28 @@ def set_teeth_availability(
 def save_calculation(
     db: Session, req: schemas.CalculationRequest, result: dict
 ) -> models.Calculation:
+    existing = None
+    if req.order_id:
+        existing = (
+            db.query(models.Calculation)
+            .filter(models.Calculation.order_id == req.order_id)
+            .first()
+        )
+
+    if existing:
+        existing.width = req.width
+        existing.height = req.height
+        existing.yield_pct = req.yield_pct
+        existing.substrate_name = req.substrate_name
+        existing.substrate_price = req.substrate_price
+        existing.foil_cost = req.foil_cost
+        existing.exchange_rate = req.exchange_rate
+        existing.result = result
+        existing.client_id = req.client_id
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     obj = models.Calculation(
         width=req.width,
         height=req.height,
@@ -168,6 +190,12 @@ def update_calculation_status(
     obj = db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
     if not obj:
         return None
+    if status == "confirmed" and obj.order_id:
+        db.query(models.Calculation).filter(
+            models.Calculation.order_id == obj.order_id,
+            models.Calculation.id != calc_id,
+            models.Calculation.status == "confirmed",
+        ).update({"status": "pending"})
     obj.status = status
     db.commit()
     db.refresh(obj)

@@ -2,62 +2,66 @@ import React from 'react'
 
 const fmt  = (v, d = 2) => Number(v).toFixed(d)
 
-function CylinderDotDiagram({ around, across, color, label, teeth }) {
-  const BODY_W = 280
-  const BODY_H = 160
-  const CAP_RY = 14
-  const DOT = 8  // fixed dot size — never changes
+function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference }) {
+  const BODY_W = 420
+  const BODY_H = circumference > 0
+    ? Math.round(Math.min(Math.max(BODY_W * (paperSize / circumference), 80), 500))
+    : 260
+  const CAP_RY = 18
+  const DOT    = 10
 
-  // Spacing is distributed evenly including edges: [gap][dot][gap][dot]...[gap]
-  // N dots → N+1 equal gaps, so gap shrinks as label count grows
   const sx = Math.max(1, (BODY_W - around * DOT) / (around + 1))
   const sy = Math.max(1, (BODY_H - across * DOT) / (across + 1))
+
+  const gox = sx
+  const goy = CAP_RY + sy
 
   const SVG_H = BODY_H + CAP_RY * 2
 
   return (
     <div style={{
       flex: '1 1 0',
-      minWidth: 200,
+      minWidth: 340,
       background: 'var(--bg-raised)',
       border: `1px solid ${color}33`,
       borderRadius: 'var(--radius-sm)',
       padding: '10px 14px',
     }}>
-      <div style={{ fontSize: 11, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, marginBottom: 4 }}>
         <span style={{ color, fontWeight: 600 }}>{label}</span>
         <span style={{ color: 'var(--text-dim)' }}>
           {' '}· {teeth} teeth · {around}×{across} = {around * across} labels
         </span>
       </div>
+      {(labelW != null || labelH != null) && (
+        <div style={{ fontSize: 10.5, marginBottom: 8, color: 'var(--text-dim)' }}>
+          {labelW != null && <span>↔ Width: {fmt(labelW)} mm</span>}
+          {labelW != null && labelH != null && <span style={{ margin: '0 6px', opacity: 0.4 }}>·</span>}
+          {labelH != null && <span>↕ Height: {fmt(labelH)} mm</span>}
+        </div>
+      )}
 
       <svg
         viewBox={`0 0 ${BODY_W} ${SVG_H}`}
         style={{ display: 'block', width: '100%', maxWidth: BODY_W }}
       >
         {/* cylinder body */}
-        <rect
-          x={0} y={CAP_RY}
-          width={BODY_W} height={BODY_H}
-          fill={color + '0d'} stroke={color + '44'} strokeWidth={1}
-        />
+        <rect x={0} y={CAP_RY} width={BODY_W} height={BODY_H}
+          fill={color + '0d'} stroke={color + '44'} strokeWidth={1} />
 
         {/* top cap */}
-        <ellipse
-          cx={BODY_W / 2} cy={CAP_RY}
-          rx={BODY_W / 2} ry={CAP_RY}
-          fill={color + '22'} stroke={color + '66'} strokeWidth={1}
-        />
+        <ellipse cx={BODY_W / 2} cy={CAP_RY} rx={BODY_W / 2} ry={CAP_RY}
+          fill={color + '22'} stroke={color + '66'} strokeWidth={1} />
 
-        {/* dots — fixed DOT size, spacing adjusts with label count */}
+        {/* dots */}
         {Array.from({ length: around * across }, (_, idx) => {
           const col = idx % around
           const row = Math.floor(idx / around)
           return (
             <circle
               key={idx}
-              cx={sx + col * (DOT + sx) + DOT / 2}
-              cy={CAP_RY + sy + row * (DOT + sy) + DOT / 2}
+              cx={gox + col * (DOT + sx) + DOT / 2}
+              cy={goy + row * (DOT + sy) + DOT / 2}
               r={DOT / 2}
               fill={color}
               opacity={0.85}
@@ -66,11 +70,8 @@ function CylinderDotDiagram({ around, across, color, label, teeth }) {
         })}
 
         {/* bottom cap */}
-        <ellipse
-          cx={BODY_W / 2} cy={CAP_RY + BODY_H}
-          rx={BODY_W / 2} ry={CAP_RY}
-          fill={color + '22'} stroke={color + '66'} strokeWidth={1}
-        />
+        <ellipse cx={BODY_W / 2} cy={CAP_RY + BODY_H} rx={BODY_W / 2} ry={CAP_RY}
+          fill={color + '22'} stroke={color + '66'} strokeWidth={1} />
       </svg>
     </div>
   )
@@ -78,15 +79,7 @@ function CylinderDotDiagram({ around, across, color, label, teeth }) {
 const fmtC = (v) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 const fmtN = (v, d = 0) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 
-function fmtTime(minutes) {
-  if (minutes <= 0) return '—'
-  if (minutes < 1) return `${Math.ceil(minutes * 60)} sec`
-  const h = Math.floor(minutes / 60)
-  const m = Math.round(minutes % 60)
-  return h === 0 ? `${m} min` : `${h}h ${m}min`
-}
-
-function buildEfficiency(rows, matched, qty, speed) {
+function buildEfficiency(rows, matched, qty) {
   const mRow    = rows[matched.index]
   const bRow    = rows[matched.best_paper_index]
   const isSame  = matched.index === matched.best_paper_index
@@ -96,28 +89,27 @@ function buildEfficiency(rows, matched, qty, speed) {
   const diffPct = mLabels > 0 ? (diff / mLabels * 100) : 0
 
   let production = null
-  if (qty > 0 && speed > 0) {
+  if (qty > 0) {
     const mRepeats = Math.ceil(qty / mLabels)
     const mMeters  = mRepeats * mRow.circumference / 1000
     const bRepeats = Math.ceil(qty / bLabels)
     const bMeters  = bRepeats * bRow.circumference / 1000
     production = {
-      matched:   { repeats: mRepeats, meters: mMeters, time: mMeters / speed },
-      bestPaper: { repeats: bRepeats, meters: bMeters, time: bMeters / speed },
+      matched:   { repeats: mRepeats, meters: mMeters },
+      bestPaper: { repeats: bRepeats, meters: bMeters },
     }
   }
 
   return { mRow, bRow, isSame, mLabels, bLabels, diff, diffPct, production }
 }
 
-export default function CylinderTable({ result, orderQty, pressSpeed }) {
+export default function CylinderTable({ result, orderQty }) {
   if (!result) return null
   const { rows, matched } = result
   const { index: matchedIdx, best_paper_index: bestPaperIdx } = matched
 
-  const qty   = parseFloat(orderQty)   || 0
-  const speed = parseFloat(pressSpeed) || 50
-  const eff   = buildEfficiency(rows, matched, qty, speed)
+  const qty = parseFloat(orderQty) || 0
+  const eff = buildEfficiency(rows, matched, qty)
 
   return (
     <section className="card table-card">
@@ -226,10 +218,6 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
                   <span className="ceff-label">Web Meters</span>
                   <span className="ceff-val">{fmtN(eff.production.matched.meters, 1)} m</span>
                 </div>
-                <div className="ceff-row ceff-time-row">
-                  <span className="ceff-label">Time @ {speed} m/min</span>
-                  <span className="ceff-val ceff-time">{fmtTime(eff.production.matched.time)}</span>
-                </div>
               </>
             )}
           </div>
@@ -269,10 +257,6 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
                   <span className="ceff-label">Web Meters</span>
                   <span className="ceff-val">{fmtN(eff.production.bestPaper.meters, 1)} m</span>
                 </div>
-                <div className="ceff-row ceff-time-row">
-                  <span className="ceff-label">Time @ {speed} m/min</span>
-                  <span className="ceff-val ceff-time">{fmtTime(eff.production.bestPaper.time)}</span>
-                </div>
               </>
             )}
           </div>
@@ -289,11 +273,6 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
               </strong>
               {' '}({Math.abs(eff.diffPct).toFixed(1)}%{eff.diff > 0 ? ' more efficient' : ' less efficient'})
             </span>
-            {eff.production && Math.abs(eff.production.matched.time - eff.production.bestPaper.time) >= 0.5 && (
-              <span className="ceff-diff-time">
-                · saves {fmtTime(Math.abs(eff.production.matched.time - eff.production.bestPaper.time))} press time
-              </span>
-            )}
           </div>
         )}
       </div>
@@ -311,6 +290,10 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
             color="#f97316"
             label="Best Match"
             teeth={eff.mRow.teeth}
+            labelW={eff.mRow.label_width}
+            labelH={eff.mRow.label_height}
+            paperSize={eff.mRow.paper_size}
+            circumference={eff.mRow.circumference}
           />
           {!eff.isSame && (
             <CylinderDotDiagram
@@ -319,6 +302,10 @@ export default function CylinderTable({ result, orderQty, pressSpeed }) {
               color="#38bdf8"
               label="Best Yield"
               teeth={eff.bRow.teeth}
+              labelW={eff.bRow.label_width}
+              labelH={eff.bRow.label_height}
+              paperSize={eff.bRow.paper_size}
+              circumference={eff.bRow.circumference}
             />
           )}
         </div>

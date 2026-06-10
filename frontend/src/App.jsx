@@ -15,7 +15,6 @@ const DEFAULTS = {
   height: 136,
   yield_pct: 85,
   order_qty: '',
-  press_speed: 50,
   substrateId: 'custom',
   substrate_name: null,
   substrate_price: 45,
@@ -54,7 +53,6 @@ export default function App() {
   const [inputs, setInputs]         = useState(DEFAULTS)
   const [substrates, setSubstrates] = useState([])
   const [result, setResult]         = useState(null)
-  const [resultB, setResultB]       = useState(null)
   const [error, setError]           = useState(null)
   const [loading, setLoading]       = useState(false)
   const [navOpen, setNavOpen]       = useState(true)
@@ -67,9 +65,8 @@ export default function App() {
       .then(setSubstrates)
       .catch(() => {})
 
-    const defB = { ...DEFAULTS, width: DEFAULTS.height, height: DEFAULTS.width }
-    Promise.all([api.calculate(buildPayload(DEFAULTS)), api.calculate(buildPayload(defB))])
-      .then(([a, b]) => { setResult(a); setResultB(b); setError(null) })
+    api.calculate(buildPayload(DEFAULTS))
+      .then((a) => { setResult(a); setError(null) })
       .catch((e) => setError(e.message))
   }, [])
 
@@ -77,12 +74,8 @@ export default function App() {
     setLoading(true)
     const shouldSave = Boolean(orderId)
     const opts = { save: shouldSave, clientId, orderId }
-    const inputsB = { ...inputs, width: inputs.height, height: inputs.width }
-    Promise.all([
-      api.calculate(buildPayload(inputs, opts)),
-      api.calculate(buildPayload(inputsB, opts)),
-    ])
-      .then(([a, b]) => { setResult(a); setResultB(b); setError(null) })
+    api.calculate(buildPayload(inputs, opts))
+      .then((a) => { setResult(a); setError(null) })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }
@@ -188,7 +181,7 @@ export default function App() {
 
           {activeView === 'calculator' && (
             <>
-              <CylinderTable result={result} orderQty={inputs.order_qty} pressSpeed={inputs.press_speed} />
+              <CylinderTable result={result} orderQty={inputs.order_qty} />
               <PricingPanel result={result} orderQty={inputs.order_qty} />
               {/* <ComparisonPanel resultA={result} resultB={resultB} inputs={inputs} orderQty={inputs.order_qty} /> */}
             </>
