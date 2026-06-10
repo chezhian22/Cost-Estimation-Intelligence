@@ -8,7 +8,7 @@ import ComparisonPage from './components/ComparisonPage'
 import QuoteHistory from './components/QuoteHistory'
 import ManageCylinders from './components/ManageCylinders'
 import ManageSubstrates from './components/ManageSubstrates'
-import ClientOrderManagement from './components/ClientOrderManagement'
+import CustomerOrdersPage from './components/CustomerOrdersPage'
 
 const DEFAULTS = {
   width: 64.5,
@@ -39,14 +39,14 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null } 
 }
 
 const NAV_LINKS = [
-  { id: 'calculator',    label: 'Pricing Calculator' },
-  { id: 'comparison',   label: 'Quote Comparison'},
+  { id: 'calculator',   label: 'Pricing Calculator' },
+  { id: 'comparison',   label: 'Quote Comparison' },
   { id: 'history',      label: 'Quote History' },
-  { id: 'client-orders',label: 'Client & Orders'},
+  { id: 'client-orders', label: 'Client & Orders' },
 ]
 
 const ADMIN_LINKS = [
-  { id: 'cylinders',  label: 'Manage Cylinders'},
+  { id: 'cylinders',  label: 'Manage Cylinders' },
   { id: 'substrates', label: 'Manage Substrates' },
 ]
 
@@ -61,6 +61,12 @@ export default function App() {
   const [activeView, setActiveView] = useState('calculator')
   const [clientId, setClientId]     = useState(null)
   const [orderId, setOrderId]       = useState(null)
+  const [theme, setTheme]           = useState(() => localStorage.getItem('cp-theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('cp-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     api.getSubstrates()
@@ -127,9 +133,9 @@ export default function App() {
                 <div className="logo-ring" />
                 <div className="logo-ring-inner" />
                 <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-                  <circle cx="16" cy="16" r="13" stroke="#f97316" strokeWidth="2" strokeOpacity="0.9"/>
-                  <ellipse cx="16" cy="16" rx="5.5" ry="13" stroke="#f97316" strokeWidth="1.5" strokeOpacity="0.7"/>
-                  <line x1="3" y1="16" x2="29" y2="16" stroke="#f97316" strokeWidth="1.2" strokeOpacity="0.6"/>
+                  <circle cx="16" cy="16" r="13" stroke="#1abcab" strokeWidth="2" strokeOpacity="0.9"/>
+                  <ellipse cx="16" cy="16" rx="5.5" ry="13" stroke="#1abcab" strokeWidth="1.5" strokeOpacity="0.7"/>
+                  <line x1="3" y1="16" x2="29" y2="16" stroke="#1abcab" strokeWidth="1.2" strokeOpacity="0.6"/>
                 </svg>
               </div>
               <div className="logo-text">
@@ -137,6 +143,20 @@ export default function App() {
                 <div className="logo-sub">Chroma Print — Label Estimator</div>
               </div>
             </div>
+          </div>
+
+          <div className="header-controls">
+            <div className="header-status">
+              <span className="status-dot" />
+              Chroma Print
+            </div>
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? '☀' : '🌙'}
+            </button>
           </div>
         </div>
       </header>
@@ -194,17 +214,16 @@ export default function App() {
             </>
           )}
 
-          {activeView === 'comparison' && <ComparisonPage />}
-
-          {activeView === 'history'    && <QuoteHistory />}
-          {activeView === 'cylinders'          && <ManageCylinders />}
-          {activeView === 'substrates'         && <ManageSubstrates />}
-          {activeView === 'client-orders' && <ClientOrderManagement />}
+          {activeView === 'comparison'   && <ComparisonPage />}
+          {activeView === 'history'      && <QuoteHistory />}
+          {activeView === 'cylinders'    && <ManageCylinders />}
+          {activeView === 'substrates'   && <ManageSubstrates />}
+          {activeView === 'client-orders' && <CustomerOrdersPage />}
         </div>
       </div>
 
       <footer>
-        <strong>Chroma Print India Pvt Ltd</strong> — Cylinder Cost Estimation System
+        <strong>Chroma Print</strong> · Cost Estimation Intelligence · Label Estimator
       </footer>
     </>
   )

@@ -38,6 +38,8 @@ export const api = {
   getClients: () => request('/api/clients'),
   createClient: (name) =>
     request('/api/clients', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateClient: (id, name) =>
+    request(`/api/clients/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
 
   // Orders
   getOrders: (clientId) => request(`/api/clients/${clientId}/orders`),
