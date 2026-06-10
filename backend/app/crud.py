@@ -20,6 +20,16 @@ def get_client_by_name(db: Session, name: str) -> Optional[models.Client]:
     return db.query(models.Client).filter(models.Client.name == name).first()
 
 
+def update_client(db: Session, client_id: int, name: str) -> Optional[models.Client]:
+    obj = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not obj:
+        return None
+    obj.name = name.strip()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def create_client(db: Session, data: schemas.ClientCreate) -> models.Client:
     obj = models.Client(name=data.name.strip())
     db.add(obj)

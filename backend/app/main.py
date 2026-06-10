@@ -213,6 +213,23 @@ def add_client(data: schemas.ClientCreate, db: Session = Depends(get_db)):
     return crud.create_client(db, data)
 
 
+@app.patch(
+    "/api/clients/{client_id}",
+    tags=["clients"],
+    summary="Update a client",
+    response_model=schemas.ClientOut,
+)
+def update_client(client_id: int, data: schemas.ClientUpdate, db: Session = Depends(get_db)):
+    """Rename a client. Returns 404 if not found, 409 if the new name is already taken."""
+    if not crud.get_client(db, client_id):
+        raise HTTPException(status_code=404, detail="Client not found")
+    existing = crud.get_client_by_name(db, data.name.strip())
+    if existing and existing.id != client_id:
+        raise HTTPException(status_code=409, detail="Client name already exists")
+    obj = crud.update_client(db, client_id, data.name)
+    return obj
+
+
 # ── Orders ────────────────────────────────────────────────────────────────────
 @app.get(
     "/api/clients/{client_id}/orders",

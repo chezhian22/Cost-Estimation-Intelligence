@@ -280,6 +280,12 @@ class CalculationResponse(BaseModel):
     )
 
 
+# ── Client update ────────────────────────────────────────────────────────────
+class ClientUpdate(BaseModel):
+    """Body for PATCH /api/clients/{id}."""
+    name: str = Field(..., min_length=1, max_length=120, description="New unique display name.")
+
+
 # ── Status update ────────────────────────────────────────────────────────────
 class StatusUpdate(BaseModel):
     """Body for PATCH /api/calculations/{id}/status."""
