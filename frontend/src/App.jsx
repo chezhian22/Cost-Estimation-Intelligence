@@ -12,6 +12,7 @@ import ManageSubstrates from './components/ManageSubstrates'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
 import LoginPage from './components/LoginPage'
 import UserManagementPage from './components/UserManagementPage'
+import SettingsPage from './components/SettingsPage'
 import Dashboard from './pages/Dashboard/Dashboard'
 import PDFPreview from './pages/Estimating/PDFPreview/PDFPreview'
 
@@ -110,6 +111,7 @@ const ADMIN_SECTION = {
   ),
   links: [
     { id: 'user-management', label: 'User Management' },
+    { id: 'settings',        label: 'Company Settings' },
   ],
 }
 
@@ -679,6 +681,7 @@ export default function App() {
           {activeView === 'substrates'      && <ManageSubstrates isAdmin={isAdmin} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}
           {activeView === 'user-management' && isAdmin && <UserManagementPage currentUser={currentUser} />}
+          {activeView === 'settings'        && isAdmin && <SettingsPage />}
         </div>
       </div>
 

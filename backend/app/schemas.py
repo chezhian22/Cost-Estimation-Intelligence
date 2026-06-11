@@ -441,4 +441,36 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+# ── Company Settings ──────────────────────────────────────────────────────────
+class CompanySettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    company_name: str              = "Chromaprint India"
+    tagline:      Optional[str]    = None
+    industry:     Optional[str]    = None
+    address:      Optional[str]    = None
+    location:     Optional[str]    = None
+    state:        Optional[str]    = None
+    country:      Optional[str]    = "India"
+    email:        Optional[str]    = None
+    phone:        Optional[str]    = None
+    website:      Optional[str]    = None
+    gst_number:   Optional[str]    = None
+    updated_at:   Optional[datetime] = None
+
+
+class CompanySettingsUpdate(BaseModel):
+    company_name: Optional[str]    = Field(None, max_length=120)
+    tagline:      Optional[str]    = Field(None, max_length=200)
+    industry:     Optional[str]    = Field(None, max_length=120)
+    address:      Optional[str]    = Field(None, max_length=300)
+    location:     Optional[str]    = Field(None, max_length=120)
+    state:        Optional[str]    = Field(None, max_length=100)
+    country:      Optional[str]    = Field(None, max_length=100)
+    email:        Optional[str]    = Field(None, max_length=200)
+    phone:        Optional[str]    = Field(None, max_length=30)
+    website:      Optional[str]    = Field(None, max_length=200)
+    gst_number:   Optional[str]    = Field(None, max_length=50)
+
+
 TokenResponse.model_rebuild()

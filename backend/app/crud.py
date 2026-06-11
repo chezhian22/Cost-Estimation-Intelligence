@@ -395,6 +395,28 @@ def update_version_status(
     return obj
 
 
+def get_company_settings(db: Session) -> models.CompanySettings:
+    obj = db.query(models.CompanySettings).filter(models.CompanySettings.id == 1).first()
+    if not obj:
+        obj = models.CompanySettings(id=1)
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
+    return obj
+
+
+def upsert_company_settings(db: Session, data: schemas.CompanySettingsUpdate) -> models.CompanySettings:
+    from datetime import datetime as _dt
+    obj = get_company_settings(db)
+    fields = data.model_dump(exclude_unset=True)
+    for key, val in fields.items():
+        setattr(obj, key, val)
+    obj.updated_at = _dt.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def update_calculation_status(
     db: Session, calc_id: int, status: str, user_id: int = None
 ) -> Optional[models.Calculation]:

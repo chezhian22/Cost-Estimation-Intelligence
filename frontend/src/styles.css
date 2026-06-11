@@ -2051,3 +2051,228 @@ footer strong { color: var(--text-muted); font-weight: 500 }
   white-space: nowrap;
 }
 .qh-v-view-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.3) }
+
+
+/* ─── Settings Page ────────────────────────────────────────────────────────── */
+.sp-page { display: flex; flex-direction: column; gap: 1.5rem; padding: 0.5rem 0 2.5rem; max-width: 860px }
+
+.sp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.sp-title { font-size: 1.1rem; font-weight: 800; color: var(--text-bright); margin: 0 0 0.2rem }
+.sp-sub   { font-size: 0.78rem; color: var(--text-dim); margin: 0 }
+
+.sp-header-actions { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0 }
+
+.sp-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  background: rgba(16,185,129,0.10);
+  border: 1px solid rgba(16,185,129,0.30);
+  border-radius: 100px;
+  color: #10b981;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.sp-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: var(--teal);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #0a1a17;
+  font-size: 0.81rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sp-save-btn:hover:not(:disabled) { background: #2dd4b0 }
+.sp-save-btn:disabled { opacity: 0.65; cursor: not-allowed }
+
+.sp-form { display: flex; flex-direction: column; gap: 1.25rem }
+
+.sp-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+}
+
+.sp-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+.sp-section-icon { display: flex; align-items: center; opacity: 0.7 }
+
+.sp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem 1.25rem;
+}
+@media (max-width: 640px) { .sp-grid { grid-template-columns: 1fr } }
+
+.sp-field { display: flex; flex-direction: column; gap: 0.35rem }
+.sp-field--wide { grid-column: 1 / -1 }
+
+.sp-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.sp-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.84rem;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sp-input::placeholder { color: var(--text-dim) }
+.sp-input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(54,229,194,0.14);
+}
+
+.sp-last-updated {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding-top: 0.25rem;
+}
+
+/* ─── Settings — Logo section ───────────────────────────────────────────── */
+.sp-logo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.sp-logo-preview {
+  width: 140px;
+  height: 80px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.sp-logo-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.sp-logo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.70rem;
+}
+
+.sp-logo-actions { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; min-width: 220px }
+
+.sp-logo-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.sp-logo-hint strong { color: var(--text) }
+
+.sp-logo-btns { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap }
+
+.sp-logo-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.9rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: not-allowed;
+  opacity: 0.6;
+  user-select: none;
+}
+
+.sp-logo-remove-btn {
+  padding: 0.42rem 0.8rem;
+  background: transparent;
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: var(--radius-sm);
+  color: #f87171;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sp-logo-remove-btn:hover { background: rgba(239,68,68,0.08) }
+
+.sp-logo-coming-soon {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ─── Client & Orders — PDF button ─────────────────────────────────────── */
+.cop-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.38rem 0.8rem;
+  background: rgba(54,229,194,0.10);
+  border: 1px solid rgba(54,229,194,0.35);
+  border-radius: var(--radius-sm);
+  color: var(--teal);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.cop-pdf-btn:hover:not(:disabled) {
+  background: rgba(54,229,194,0.18);
+  border-color: rgba(54,229,194,0.60);
+}
+.cop-pdf-btn:disabled { opacity: 0.6; cursor: not-allowed }
+
+.cop-pdf-btn--sm {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.70rem;
+}

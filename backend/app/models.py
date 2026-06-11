@@ -104,6 +104,26 @@ class Calculation(Base):
                               cascade="all, delete-orphan")
 
 
+class CompanySettings(Base):
+    """Singleton row (id=1) storing the company's own profile details."""
+
+    __tablename__ = "company_settings"
+
+    id             = Column(Integer, primary_key=True, default=1)
+    company_name   = Column(String(120), nullable=False, default="Chromaprint India")
+    tagline        = Column(String(200), nullable=True)
+    industry       = Column(String(120), nullable=True)
+    address        = Column(String(300), nullable=True)
+    location       = Column(String(120), nullable=True)
+    state          = Column(String(100), nullable=True)
+    country        = Column(String(100), nullable=True, default="India")
+    email          = Column(String(200), nullable=True)
+    phone          = Column(String(30),  nullable=True)
+    website        = Column(String(200), nullable=True)
+    gst_number     = Column(String(50),  nullable=True)
+    updated_at     = Column(DateTime,    nullable=True)
+
+
 class CalculationVersion(Base):
     """An edited revision of a saved calculation."""
 

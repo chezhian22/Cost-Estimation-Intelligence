@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+import { generatePDF } from '../utils/generatePDF'
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 
@@ -13,6 +14,53 @@ function fmtDateTime(dt) {
   return new Date(dt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
+
+// ── PDF helper ────────────────────────────────────────────────────────────────
+function buildPDFPayload(calcData, clientName, orderName) {
+  const result   = calcData.result || {}
+  const matched  = result.matched  || {}
+  const rows     = result.rows     || []
+  const pricing  = result.pricing  || {}
+  const row      = rows[matched.index] || {}
+  const year     = new Date().getFullYear()
+  const rand     = String(Math.floor(1000 + Math.random() * 9000))
+  const orderQty = calcData.order_qty || null
+
+  return {
+    client:  clientName || calcData.client_name || 'N/A',
+    order:   orderName  || calcData.order_name  || 'N/A',
+    quoteNo: `QT-${year}-${rand}`,
+    inputs: {
+      width:           calcData.width,
+      height:          calcData.height,
+      yield_pct:       calcData.yield_pct,
+      substrate_price: calcData.substrate_price,
+      foil_cost:       calcData.foil_cost || 0,
+      custom_cost:     pricing.custom_cost || 0,
+      exchange_rate:   calcData.exchange_rate || 85,
+      order_qty:       orderQty || 0,
+      substrate_name:  calcData.substrate_name || 'Custom',
+    },
+    cylinder: {
+      teeth:         row.teeth,
+      circumference: row.circumference,
+      label_width:   row.label_width,
+      label_height:  row.label_height,
+      around:        row.around,
+      across:        row.across,
+      paper_size:    row.paper_size,
+      efficiency:    row.efficiency,
+    },
+    pricing,
+    order_analytics: orderQty > 0 && row.paper_size ? {
+      qty:           orderQty,
+      sqm_needed:    orderQty / (pricing.adj_labels || 1),
+      linear_meters: (orderQty / (pricing.adj_labels || 1)) / ((row.paper_size || 1000) / 1000),
+      total_inr_2:   orderQty * ((pricing.rate_2 || 0) / 1000),
+      total_usd_2:   orderQty * (pricing.price_usd_label || 0),
+    } : null,
+  }
+}
 
 // ── Edit Client Modal ─────────────────────────────────────────────────────────
 function EditClientModal({ client, onUpdated, onClose }) {
@@ -116,9 +164,10 @@ function EditClientModal({ client, onUpdated, onClose }) {
 // ── Calculation Detail Modal ──────────────────────────────────────────────────
 // Shows the full CylinderTable + PricingPanel for a saved calculation,
 // plus Approve / Unapprove buttons.
-function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose }) {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
+function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName }) {
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -198,9 +247,30 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
               {isApproved ? (
                 <>
                   <span className="cop-detail-approved-note">★ This calculation is approved for this order</span>
-                  <button className="cop-detail-unapprove-btn" onClick={() => onUnapprove(calcId)}>
-                    ↩ Unapprove
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <button
+                      className="cop-pdf-btn"
+                      disabled={pdfLoading}
+                      onClick={async () => {
+                        setPdfLoading(true)
+                        try { generatePDF(buildPDFPayload(data, clientName, orderName)) }
+                        finally { setPdfLoading(false) }
+                      }}
+                    >
+                      {pdfLoading ? (
+                        <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                      )}
+                      {pdfLoading ? 'Generating…' : 'Download PDF'}
+                    </button>
+                    <button className="cop-detail-unapprove-btn" onClick={() => onUnapprove(calcId)}>
+                      ↩ Unapprove
+                    </button>
+                  </div>
                 </>
               ) : approvedId != null ? (
                 <>
@@ -297,7 +367,22 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
 }
 
 // ── Version quote detail modal (data already loaded from getVersions) ────────
-function VersionQuoteDetailModal({ version, onClose }) {
+function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  function handlePDF() {
+    setPdfLoading(true)
+    try {
+      generatePDF(buildPDFPayload(
+        { ...version, result: version.result },
+        clientName,
+        orderName,
+      ))
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   return (
     <div className="cop-detail-overlay" onClick={onClose}>
       <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
@@ -344,13 +429,46 @@ function VersionQuoteDetailModal({ version, onClose }) {
             </>
           )}
         </div>
+
+        <div className="cop-detail-footer">
+          <span className="cop-detail-approved-note">★ This version is approved for this order</span>
+          <button className="cop-pdf-btn" onClick={handlePDF} disabled={pdfLoading}>
+            {pdfLoading ? (
+              <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            )}
+            {pdfLoading ? 'Generating…' : 'Download PDF'}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
 // ── Calculation row ───────────────────────────────────────────────────────────
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel }) {
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName }) {
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  async function handlePDF(e) {
+    e.stopPropagation()
+    setPdfLoading(true)
+    try {
+      // version rows already carry result; base calcs need a full fetch
+      const data = calc.result
+        ? calc
+        : await api.getCalculation(calc.id)
+      generatePDF(buildPDFPayload(data, clientName, orderName))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   return (
     <div
       className={`cop-calc-row${isApproved ? ' cop-calc-row--approved' : ''}`}
@@ -393,12 +511,25 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
       {/* approve action */}
       <div className="cop-calc-actions" onClick={(e) => e.stopPropagation()}>
         {isApproved ? (
-          <span className="cop-approved-chip">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-            </svg>
-            Approved
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span className="cop-approved-chip">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              Approved
+            </span>
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handlePDF} disabled={pdfLoading} title="Download PDF quote">
+              {pdfLoading ? (
+                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              )}
+              PDF
+            </button>
+          </div>
         ) : (
           <button
             className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
@@ -414,7 +545,7 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
 }
 
 // ── Order panel ───────────────────────────────────────────────────────────────
-function OrderPanel({ order, hideHeader }) {
+function OrderPanel({ order, hideHeader, clientName }) {
   const [calcs, setCalcs]         = useState(null)
   const [loading, setLoading]     = useState(false)
   const [approvedId, setApprovedId] = useState(null)
@@ -566,6 +697,8 @@ function OrderPanel({ order, hideHeader }) {
                 hasOtherApproved={false}
                 onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
                 onApproveRequest={handleApproveRequest}
+                clientName={clientName}
+                orderName={order.name}
               />
             ))}
             {approvedVersions.map((v) => (
@@ -577,6 +710,8 @@ function OrderPanel({ order, hideHeader }) {
                 versionLabel={`Edit v${v.version_number}`}
                 onViewDetail={() => setVersionDetailModal(v)}
                 onApproveRequest={() => {}}
+                clientName={clientName}
+                orderName={order.name}
               />
             ))}
           </div>
@@ -592,6 +727,8 @@ function OrderPanel({ order, hideHeader }) {
           onApproveRequest={handleApproveRequest}
           onUnapprove={handleUnapprove}
           onClose={() => setDetailModal(null)}
+          clientName={clientName}
+          orderName={order.name}
         />
       )}
 
@@ -599,6 +736,8 @@ function OrderPanel({ order, hideHeader }) {
         <VersionQuoteDetailModal
           version={versionDetailModal}
           onClose={() => setVersionDetailModal(null)}
+          clientName={clientName}
+          orderName={order.name}
         />
       )}
 
@@ -817,7 +956,7 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
                           </button>
                           {isActive && (
                             <div className="cop-order-item-body">
-                              <OrderPanel order={o} hideHeader />
+                              <OrderPanel order={o} hideHeader clientName={client.name} />
                             </div>
                           )}
                         </div>

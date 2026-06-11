@@ -91,4 +91,9 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ selected_teeth: selectedTeeth }),
     }),
+
+  // Company settings (admin only)
+  getCompanySettings: () => request('/api/settings/company'),
+  updateCompanySettings: (data) =>
+    request('/api/settings/company', { method: 'PATCH', body: JSON.stringify(data) }),
 }

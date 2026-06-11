@@ -116,6 +116,20 @@ def _migrate():
                     "ALTER TABLE teeth_data ADD COLUMN available INTEGER NOT NULL DEFAULT 1"
                 ))
 
+        # company_settings — add missing columns if table was created before this migration
+        if "company_settings" in tables:
+            cs_cols = {c["name"] for c in insp.get_columns("company_settings")}
+            for col, ddl in [
+                ("tagline",    "VARCHAR(200) NULL"),
+                ("address",    "VARCHAR(300) NULL"),
+                ("state",      "VARCHAR(100) NULL"),
+                ("website",    "VARCHAR(200) NULL"),
+                ("gst_number", "VARCHAR(50)  NULL"),
+                ("updated_at", "DATETIME NULL"),
+            ]:
+                if col not in cs_cols:
+                    conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
+
 _migrate()
 
 # Seed default admin user (runs only if no users exist)
@@ -938,3 +952,33 @@ def delete_user(
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     if not crud.delete_user(db, user_id):
         raise HTTPException(status_code=404, detail="User not found")
+
+
+# ── Company Settings (admin only) ─────────────────────────────────────────────
+@app.get(
+    "/api/settings/company",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Get company settings",
+)
+def get_company_settings(
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Returns the current company profile. Admin only."""
+    return crud.get_company_settings(db)
+
+
+@app.patch(
+    "/api/settings/company",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Update company settings",
+)
+def update_company_settings(
+    body: schemas.CompanySettingsUpdate,
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update company profile fields. Admin only. Partial updates supported."""
+    return crud.upsert_company_settings(db, body)
