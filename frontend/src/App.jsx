@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, setToken } from './api'
-import { generateQuotePDF } from './utils/generatePDF'
+import { generatePDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'
@@ -12,7 +12,8 @@ import ManageSubstrates from './components/ManageSubstrates'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
 import LoginPage from './components/LoginPage'
 import UserManagementPage from './components/UserManagementPage'
-import Dashboard from './components/Dashboard'
+import Dashboard from './pages/Dashboard/Dashboard'
+import PDFPreview from './pages/Estimating/PDFPreview/PDFPreview'
 
 const DEFAULTS = {
   width: 64.5,
@@ -69,9 +70,10 @@ const NAV_SECTIONS = [
       </svg>
     ),
     links: [
-      { id: 'calculator',  label: 'Pricing Calculator' },
-      { id: 'comparison',  label: 'Quote Comparison'   },
-      { id: 'history',     label: 'Quote History'      },
+      { id: 'calculator',   label: 'Pricing Calculator' },
+      { id: 'comparison',   label: 'Quote Comparison'   },
+      { id: 'history',      label: 'Quote History'      },
+      { id: 'pdf-preview',  label: 'PDF Quote Preview'  },
     ],
   },
   {
@@ -265,7 +267,75 @@ export default function App() {
   }
 
   const handleDownloadPDF = () => {
-    generateQuotePDF({ result, inputs, selectedIdx: selectedCylIdx, clientName, orderName })
+    if (!result) return
+    const selIdx = selectedCylIdx ?? result.matched.index
+    const selRow = result.rows[selIdx]
+    const p      = result.pricing
+    const qty    = parseFloat(inputs.order_qty) || 0
+    const year   = new Date().getFullYear()
+    const rand   = String(Math.floor(1000 + Math.random() * 9000))
+
+    // Recompute pricing for custom-selected cylinder (mirrors PricingPanel logic)
+    const isCustomSel = selIdx !== result.matched.index
+    const effectiveP  = (isCustomSel && selRow) ? (() => {
+      const label_w_cm = selRow.label_width  / 10
+      const label_h_cm = selRow.label_height / 10
+      const labels_sqm = (10000 / label_w_cm) / label_h_cm
+      const yld        = parseFloat(inputs.yield_pct) || 85
+      const adj_labels = labels_sqm * yld / 100
+      const substrate_price = parseFloat(inputs.substrate_price) || 0
+      const foil_cost       = parseFloat(inputs.foil_cost)       || 0
+      const custom_cost     = parseFloat(inputs.custom_cost)     || 0
+      const exchange_rate   = parseFloat(inputs.exchange_rate)   || 85
+      const cost_per_label  = (adj_labels > 0 ? (substrate_price + foil_cost) / adj_labels : 0) + custom_cost
+      const rate_2 = cost_per_label * 2000
+      return {
+        label_w_cm, label_h_cm, labels_sqm, adj_labels,
+        substrate_price, foil_cost, custom_cost,
+        rate_15:  cost_per_label * 1500,
+        rate_175: cost_per_label * 1750,
+        rate_2,
+        price_inr_label: rate_2 / 1000,
+        price_inr_1000:  rate_2,
+        price_usd_label: exchange_rate > 0 ? rate_2 / exchange_rate / 1000 : 0,
+        price_usd_1000:  exchange_rate > 0 ? rate_2 / exchange_rate : 0,
+      }
+    })() : p
+
+    generatePDF({
+      client:  clientName || 'N/A',
+      order:   orderName  || 'N/A',
+      quoteNo: `QT-${year}-${rand}`,
+      inputs: {
+        width:           parseFloat(inputs.width),
+        height:          parseFloat(inputs.height),
+        yield_pct:       parseFloat(inputs.yield_pct) || 85,
+        substrate_price: parseFloat(inputs.substrate_price) || 0,
+        foil_cost:       parseFloat(inputs.foil_cost)       || 0,
+        custom_cost:     parseFloat(inputs.custom_cost)     || 0,
+        exchange_rate:   parseFloat(inputs.exchange_rate)   || 85,
+        order_qty:       qty,
+        substrate_name:  inputs.substrate_name || 'Custom',
+      },
+      cylinder: {
+        teeth:        selRow?.teeth,
+        circumference: selRow?.circumference,
+        label_width:  selRow?.label_width,
+        label_height: selRow?.label_height,
+        around:       selRow?.around,
+        across:       selRow?.across,
+        paper_size:   selRow?.paper_size,
+        efficiency:   selRow?.efficiency,
+      },
+      pricing: effectiveP,
+      order_analytics: qty > 0 && selRow ? {
+        qty,
+        sqm_needed:    qty / (effectiveP.adj_labels || 1),
+        linear_meters: (qty / (effectiveP.adj_labels || 1)) / ((selRow.paper_size || 1000) / 1000),
+        total_inr_2:   qty * (effectiveP.rate_2 / 1000),
+        total_usd_2:   qty * (effectiveP.price_usd_label || 0),
+      } : null,
+    })
   }
 
   const handleChange = (field, value) => {
@@ -602,6 +672,7 @@ export default function App() {
           )}
 
           {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
+          {activeView === 'pdf-preview'     && <PDFPreview />}
           {activeView === 'comparison'      && <ComparisonPage />}
           {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} />}
           {activeView === 'cylinders'       && <ManageCylinders isAdmin={isAdmin} />}
