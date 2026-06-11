@@ -94,14 +94,17 @@ def calculate(
     matched_idx = label_widths.index(matched_width)
     matched_height = rows[matched_idx]["label_height"]  # use actual height from the matched cylinder
 
-    # Row that accommodates the most labels (Around x Across)
-    best_paper_idx = 0
-    max_labels = 0
-    for i, r in enumerate(rows):
-        total = r["around"] * r["across"]
-        if total > max_labels:
-            max_labels = total
-            best_paper_idx = i
+    # Rows sorted by labels-per-repeat descending; pick best that differs from matched_idx
+    sorted_by_labels = sorted(
+        range(len(rows)),
+        key=lambda i: rows[i]["around"] * rows[i]["across"],
+        reverse=True,
+    )
+    # Primary best yield
+    best_paper_idx = sorted_by_labels[0]
+    # If it coincides with best match, use the next candidate so the two always differ
+    if best_paper_idx == matched_idx and len(sorted_by_labels) > 1:
+        best_paper_idx = sorted_by_labels[1]
 
     label_w_cm = matched_width / 10
     label_h_cm = matched_height / 10

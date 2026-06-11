@@ -159,6 +159,17 @@ def create_substrate(db: Session, data: schemas.SubstrateCreate) -> models.Subst
     return obj
 
 
+def update_substrate(db: Session, substrate_id: int, data: schemas.SubstrateUpdate) -> Optional[models.Substrate]:
+    obj = db.query(models.Substrate).filter(models.Substrate.id == substrate_id).first()
+    if not obj:
+        return None
+    if data.name  is not None: obj.name  = data.name.strip()
+    if data.price is not None: obj.price = data.price
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def delete_substrate(db: Session, substrate_id: int) -> bool:
     obj = db.query(models.Substrate).filter(models.Substrate.id == substrate_id).first()
     if not obj:
@@ -181,13 +192,27 @@ def set_substrate_availability(
 
 
 # ── Teeth ────────────────────────────────────────────────────────────────────
-def list_teeth(db: Session) -> List[models.TeethData]:
-    return db.query(models.TeethData).order_by(models.TeethData.teeth).all()
+def list_teeth(db: Session, available_only: bool = False) -> List[models.TeethData]:
+    q = db.query(models.TeethData).order_by(models.TeethData.teeth)
+    if available_only:
+        q = q.filter(models.TeethData.available == True)
+    return q.all()
 
 
 def create_teeth(db: Session, data: schemas.TeethCreate) -> models.TeethData:
     obj = models.TeethData(teeth=data.teeth, paper_size=data.paper_size)
     db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def update_teeth(db: Session, teeth_id: int, data: schemas.TeethUpdate) -> Optional[models.TeethData]:
+    obj = db.query(models.TeethData).filter(models.TeethData.id == teeth_id).first()
+    if not obj:
+        return None
+    if data.teeth      is not None: obj.teeth      = data.teeth
+    if data.paper_size is not None: obj.paper_size = data.paper_size
     db.commit()
     db.refresh(obj)
     return obj

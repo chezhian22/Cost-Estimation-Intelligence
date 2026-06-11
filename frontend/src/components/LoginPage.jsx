@@ -80,7 +80,7 @@ export default function LoginPage({ onLogin }) {
         </div>
 
         <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-          Chroma Print
+          ChromaPrint
         </div>
         <div style={{ fontSize: '1rem', fontWeight: 500, color: '#36E5C2', marginTop: '0.4rem', letterSpacing: '0.01em' }}>
           Cost Estimation Intelligence

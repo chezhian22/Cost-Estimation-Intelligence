@@ -91,6 +91,12 @@ class SubstrateCreate(SubstrateBase):
     }
 
 
+class SubstrateUpdate(BaseModel):
+    """Body for updating a substrate (all fields optional)."""
+    name:  Optional[str]   = None
+    price: Optional[float] = None
+
+
 class SubstrateOut(SubstrateBase):
     """Substrate record returned by the API."""
 
@@ -113,6 +119,12 @@ class TeethCreate(TeethBase):
             "example": {"teeth": 64, "paper_size": 520}
         }
     }
+
+
+class TeethUpdate(BaseModel):
+    """Body for updating a cylinder row (all fields optional)."""
+    teeth:      Optional[int] = None
+    paper_size: Optional[int] = None
 
 
 class TeethOut(TeethBase):

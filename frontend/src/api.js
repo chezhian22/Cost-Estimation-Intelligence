@@ -33,6 +33,8 @@ export const api = {
   getSubstrates: () => request('/api/substrates'),
   createSubstrate: (name, price) =>
     request('/api/substrates', { method: 'POST', body: JSON.stringify({ name, price }) }),
+  updateSubstrate: (id, name, price) =>
+    request(`/api/substrates/${id}`, { method: 'PATCH', body: JSON.stringify({ name, price }) }),
   deleteSubstrate: (id) => request(`/api/substrates/${id}`, { method: 'DELETE' }),
   setSubstrateAvailability: (id, available) =>
     request(`/api/substrates/${id}/availability`, {
@@ -43,6 +45,8 @@ export const api = {
   getTeeth: () => request('/api/teeth'),
   createTooth: (teeth, paper_size) =>
     request('/api/teeth', { method: 'POST', body: JSON.stringify({ teeth, paper_size }) }),
+  updateTooth: (id, teeth, paper_size) =>
+    request(`/api/teeth/${id}`, { method: 'PATCH', body: JSON.stringify({ teeth, paper_size }) }),
   deleteTooth: (id) => request(`/api/teeth/${id}`, { method: 'DELETE' }),
   setCylinderAvailability: (id, available) =>
     request(`/api/teeth/${id}/availability`, {

@@ -133,6 +133,8 @@ export default function App() {
   const [editingCalc, setEditingCalc]     = useState(null) // { id, client_name, order_name }
   const [pendingConfirm, setPendingConfirm] = useState(null) // { type: 'calc'|'version', id }
   const [confirmingQuote, setConfirmingQuote] = useState(false)
+  const [quoteConfirmed, setQuoteConfirmed] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -195,9 +197,21 @@ export default function App() {
     setFormOpen(true)
   }
 
+  function validateInputs(inp) {
+    const errs = {}
+    if (!inp.width  || parseFloat(inp.width)  <= 0) errs.width  = 'Required'
+    if (!inp.height || parseFloat(inp.height) <= 0) errs.height = 'Required'
+    if (!inp.yield_pct  || parseFloat(inp.yield_pct)  <= 0) errs.yield_pct  = 'Required'
+    if (!inp.substrate_price && inp.substrate_price !== 0 || parseFloat(inp.substrate_price) <= 0) errs.substrate_price = 'Required'
+    if (!inp.exchange_rate || parseFloat(inp.exchange_rate) < 1) errs.exchange_rate = 'Required'
+    if (!inp.order_qty || parseInt(inp.order_qty, 10) <= 0) errs.order_qty = 'Required'
+    return errs
+  }
+
   const handleCalculate = () => {
     setLoading(true)
     setPendingConfirm(null)
+    setQuoteConfirmed(false)
     const prevTeeth = result?.rows[selectedCylIdx]?.teeth ?? null
     if (editingCalc) {
       const payload = buildPayload(inputs, { selectedTeeth: prevTeeth })
@@ -231,6 +245,7 @@ export default function App() {
         await api.updateVersionStatus(pendingConfirm.id, 'confirmed')
       }
       setPendingConfirm(null)
+      setQuoteConfirmed(true)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -255,6 +270,7 @@ export default function App() {
 
   const handleChange = (field, value) => {
     setInputs((prev) => ({ ...prev, [field]: value }))
+    setFieldErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
   }
 
   const handleSubstrateSelect = (id) => {
@@ -269,6 +285,7 @@ export default function App() {
       substrate_name: sub ? sub.name : null,
       substrate_price: sub ? sub.price : prev.substrate_price,
     }))
+    setFieldErrors((prev) => { const next = { ...prev }; delete next.substrate_price; return next })
   }
 
   if (authLoading) return (
@@ -433,7 +450,14 @@ export default function App() {
               substrates={substrates}
               onChange={handleChange}
               onSubstrateSelect={handleSubstrateSelect}
-              onCalculate={() => { handleCalculate(); setFormOpen(false) }}
+              fieldErrors={fieldErrors}
+              onCalculate={() => {
+                const errs = validateInputs(inputs)
+                if (Object.keys(errs).length) { setFieldErrors(errs); return }
+                setFieldErrors({})
+                handleCalculate()
+                setFormOpen(false)
+              }}
               loading={loading}
               onClientChange={(id, name) => { setClientId(id); setClientName(name) }}
               onOrderChange={(id, name) => { setOrderId(id); setOrderName(name) }}
@@ -476,7 +500,7 @@ export default function App() {
                   </svg>
                 </button>
 
-                {result && (
+                {result && quoteConfirmed && (
                   <button className="btn-download-pdf" onClick={handleDownloadPDF} title="Download PDF quote for client">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -494,6 +518,8 @@ export default function App() {
                 onApproveCylinder={handleApproveCylinder}
                 approvingCyl={approvingCyl}
                 hasSavedCalc={Boolean(result?.calculation_id)}
+                inputWidth={parseFloat(inputs.width) || 0}
+                inputHeight={parseFloat(inputs.height) || 0}
               />
               <PricingPanel
                 result={result}
@@ -501,6 +527,31 @@ export default function App() {
                 selectedIdx={selectedCylIdx}
                 inputs={inputs}
               />
+
+              {quoteConfirmed && (
+                <div className="confirm-quote-banner confirm-quote-banner--success">
+                  <div className="confirm-quote-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </div>
+                  <div className="confirm-quote-text">
+                    <div className="confirm-quote-title">Quotation confirmed</div>
+                    <div className="confirm-quote-sub">You can now download the PDF quote for the client.</div>
+                  </div>
+                  <div className="confirm-quote-actions">
+                    <button className="btn-download-pdf" onClick={handleDownloadPDF}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      Download PDF
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {pendingConfirm && (
                 <div className="confirm-quote-banner">
@@ -553,8 +604,8 @@ export default function App() {
           {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
           {activeView === 'comparison'      && <ComparisonPage />}
           {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} />}
-          {activeView === 'cylinders'       && <ManageCylinders />}
-          {activeView === 'substrates'      && <ManageSubstrates />}
+          {activeView === 'cylinders'       && <ManageCylinders isAdmin={isAdmin} />}
+          {activeView === 'substrates'      && <ManageSubstrates isAdmin={isAdmin} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}
           {activeView === 'user-management' && isAdmin && <UserManagementPage currentUser={currentUser} />}
         </div>

@@ -435,6 +435,23 @@ def remove_substrate(substrate_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch(
+    "/api/substrates/{substrate_id}",
+    tags=["substrates"],
+    summary="Update substrate name / price",
+    response_model=schemas.SubstrateOut,
+)
+def update_substrate(
+    substrate_id: int,
+    body: schemas.SubstrateUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = crud.update_substrate(db, substrate_id, body)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Substrate not found")
+    return obj
+
+
+@app.patch(
     "/api/substrates/{substrate_id}/availability",
     tags=["substrates"],
     summary="Update substrate availability",
@@ -509,6 +526,23 @@ def remove_teeth(teeth_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch(
+    "/api/teeth/{teeth_id}",
+    tags=["cylinders"],
+    summary="Update cylinder teeth / paper size",
+    response_model=schemas.TeethOut,
+)
+def update_teeth(
+    teeth_id: int,
+    body: schemas.TeethUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = crud.update_teeth(db, teeth_id, body)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Cylinder not found")
+    return obj
+
+
+@app.patch(
     "/api/teeth/{teeth_id}/availability",
     tags=["cylinders"],
     summary="Update cylinder availability",
@@ -568,11 +602,11 @@ def run_calculation(
 
     Returns `400` if the cylinder reference table is empty (run the seed script).
     """
-    teeth_rows = crud.list_teeth(db)
+    teeth_rows = crud.list_teeth(db, available_only=True)
     if not teeth_rows:
         raise HTTPException(
             status_code=400,
-            detail="No teeth/paper reference data found. Run the seed script first.",
+            detail="No available cylinders found. Check Cylinder Management.",
         )
 
     teeth_data = [{"teeth": t.teeth, "paper_size": t.paper_size} for t in teeth_rows]
@@ -793,9 +827,9 @@ def create_version(
     obj = crud.get_calculation(db, calc_id)
     if obj is None:
         raise HTTPException(status_code=404, detail="Calculation not found")
-    teeth_rows = crud.list_teeth(db)
+    teeth_rows = crud.list_teeth(db, available_only=True)
     if not teeth_rows:
-        raise HTTPException(status_code=400, detail="No teeth/paper reference data found.")
+        raise HTTPException(status_code=400, detail="No available cylinders found.")
     teeth_data = [{"teeth": t.teeth, "paper_size": t.paper_size} for t in teeth_rows]
     result = calculator.calculate(
         width=req.width,

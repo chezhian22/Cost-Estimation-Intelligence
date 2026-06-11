@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 
 const fmt  = (v, d = 2) => Number(v).toFixed(d)
 
-function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference }) {
+function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference, isApproved, onApprove, approvingCyl, hasSavedCalc }) {
   // Scale proportionally: bigger circumference = wider, bigger paperSize = taller
   const REF_CIRC = 400
   const BODY_W   = Math.round(Math.min(240, Math.max(120, (240 * circumference) / REF_CIRC)))
@@ -30,6 +30,8 @@ function CylinderDotDiagram({ around, across, color, label, teeth, labelW, label
       border: `1px solid ${color}33`,
       borderRadius: 'var(--radius-sm)',
       padding: '10px 14px',
+      display: 'flex',
+      flexDirection: 'column',
     }}>
       <div style={{ fontSize: 11, marginBottom: 4 }}>
         <span style={{ color, fontWeight: 600 }}>{label}</span>
@@ -47,7 +49,7 @@ function CylinderDotDiagram({ around, across, color, label, teeth, labelW, label
 
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        style={{ display: 'block', width: '100%', maxWidth: SVG_W, margin: '0 auto' }}
+        style={{ display: 'block', width: '100%', maxWidth: SVG_W, margin: '0 auto', flex: 1 }}
         aria-label={`Cylinder layout: ${around} labels around, ${across} across`}
       >
         {/* Cylinder body */}
@@ -118,6 +120,41 @@ function CylinderDotDiagram({ around, across, color, label, teeth, labelW, label
           {across} across · {fmt(paperSize, 0)} mm
         </text>
       </svg>
+
+      <div style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+        {isApproved ? (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px',
+            borderRadius: 100,
+            background: 'rgba(54,229,194,0.15)', border: '1px solid var(--teal)',
+            color: 'var(--teal)',
+          }}>
+            ✓ Approved
+          </span>
+        ) : (
+          <button
+            onClick={onApprove}
+            disabled={approvingCyl}
+            title={hasSavedCalc ? 'Approve this cylinder' : 'Run calculation with a client & order first to save'}
+            style={{
+              padding: '4px 14px', fontSize: '0.74rem', fontWeight: 600,
+              borderRadius: 100,
+              border: `1px solid ${color}66`,
+              background: color + '14',
+              color: color,
+              cursor: approvingCyl ? 'wait' : 'pointer',
+              fontFamily: 'Inter, sans-serif',
+              opacity: approvingCyl ? 0.5 : 1,
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = color + '28'; e.currentTarget.style.borderColor = color }}
+            onMouseLeave={e => { e.currentTarget.style.background = color + '14'; e.currentTarget.style.borderColor = color + '66' }}
+          >
+            Approve
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -148,7 +185,7 @@ function buildEfficiency(rows, matched, qty) {
   return { mRow, bRow, isSame, mLabels, bLabels, diff, diffPct, production }
 }
 
-export default function CylinderTable({ result, orderQty, selectedIdx, onApproveCylinder, approvingCyl, hasSavedCalc }) {
+export default function CylinderTable({ result, orderQty, selectedIdx, onApproveCylinder, approvingCyl, hasSavedCalc, inputWidth, inputHeight }) {
   const [pendingIdx, setPendingIdx] = useState(null)
 
   if (!result) return null
@@ -208,12 +245,6 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
           Cylinder Efficiency
         </div>
 
-        {eff.isSame && (
-          <div className="ceff-same-note">
-            Best Match and Best Yield are the same cylinder ({eff.mRow.teeth} teeth).
-          </div>
-        )}
-
         <div className="ceff-grid">
           {/* Best Match */}
           <div className="ceff-block ceff-match">
@@ -223,7 +254,7 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
             </div>
             <div className="ceff-row">
               <span className="ceff-label">Input Size</span>
-              <span className="ceff-val">{fmt(eff.mRow.input_width)} × {fmt(eff.mRow.input_height)} mm</span>
+              <span className="ceff-val">{fmt(inputWidth)} × {fmt(inputHeight)} mm</span>
             </div>
             <div className="ceff-row">
               <span className="ceff-label">Label Size</span>
@@ -266,7 +297,7 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
             </div>
             <div className="ceff-row">
               <span className="ceff-label">Input Size</span>
-              <span className="ceff-val">{fmt(eff.bRow.input_width)} × {fmt(eff.bRow.input_height)} mm</span>
+              <span className="ceff-val">{fmt(inputWidth)} × {fmt(inputHeight)} mm</span>
             </div>
             <div className="ceff-row">
               <span className="ceff-label">Label Size</span>
@@ -329,20 +360,26 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
             labelH={eff.mRow.label_height}
             paperSize={eff.mRow.paper_size}
             circumference={eff.mRow.circumference}
+            isApproved={selIdx === matchedIdx}
+            onApprove={() => setPendingIdx(matchedIdx)}
+            approvingCyl={approvingCyl}
+            hasSavedCalc={hasSavedCalc}
           />
-          {!eff.isSame && (
-            <CylinderDotDiagram
-              around={eff.bRow.around}
-              across={eff.bRow.across}
-              color="#38bdf8"
-              label="Best Yield"
-              teeth={eff.bRow.teeth}
-              labelW={eff.bRow.label_width}
-              labelH={eff.bRow.label_height}
-              paperSize={eff.bRow.paper_size}
-              circumference={eff.bRow.circumference}
-            />
-          )}
+          <CylinderDotDiagram
+            around={eff.bRow.around}
+            across={eff.bRow.across}
+            color="#38bdf8"
+            label={eff.isSame ? 'Best Yield (same as Best Match)' : 'Best Yield'}
+            teeth={eff.bRow.teeth}
+            labelW={eff.bRow.label_width}
+            labelH={eff.bRow.label_height}
+            paperSize={eff.bRow.paper_size}
+            circumference={eff.bRow.circumference}
+            isApproved={selIdx === bestPaperIdx}
+            onApprove={() => setPendingIdx(bestPaperIdx)}
+            approvingCyl={approvingCyl}
+            hasSavedCalc={hasSavedCalc}
+          />
         </div>
       </div>
 
@@ -395,7 +432,7 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
                       }}>
                         ✓ Approved
                       </span>
-                    ) : (
+                    ) : (i === matchedIdx || i === bestPaperIdx) ? (
                       <button
                         onClick={() => setPendingIdx(i)}
                         disabled={approvingCyl}
@@ -417,6 +454,8 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
                       >
                         Approve
                       </button>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>—</span>
                     )}
                   </td>
                 </tr>
