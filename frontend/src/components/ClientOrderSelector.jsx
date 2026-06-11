@@ -10,7 +10,7 @@ function nextOrderNumber(orders) {
   return `ORDER-${String(Math.max(...nums, 0) + 1).padStart(3, '0')}`
 }
 
-export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
+export default function ClientOrderSelector({ onClientChange, onOrderChange, fieldErrors = {} }) {
   const [clients, setClients]               = useState([])
   const [query, setQuery]                   = useState('')
   const [dropdownOpen, setDropdownOpen]     = useState(false)
@@ -142,10 +142,10 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
 
       {/* ── Client combobox ── */}
       <div className="field" ref={wrapRef} style={{ position: 'relative' }}>
-        <label className="field-label">◉ Client</label>
+        <label className="field-label">◉ Client <span className="field-required">*</span></label>
         <div className="combobox-row">
           <input
-            className="combobox-input"
+            className={`combobox-input${fieldErrors.client ? ' input-error' : ''}`}
             type="text"
             placeholder="Search clients…"
             value={query}
@@ -185,6 +185,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
             </div>
           </div>
         )}
+        {fieldErrors.client && <span className="field-error">{fieldErrors.client}</span>}
       </div>
 
       {/* ── New Client inline form ── */}
@@ -235,11 +236,12 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
       {/* ── Order selector ── */}
       {selectedClient && (
         <div className="field order-section">
-          <label className="field-label">◈ Order</label>
+          <label className="field-label">◈ Order <span className="field-required">*</span></label>
           {orders.length === 0 ? (
-            <div className="no-order-note">No orders for this client yet.</div>
+            <div className="no-order-note">No orders yet — create one below.</div>
           ) : (
             <select
+              className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
               value={selectedOrder?.id ?? ''}
               onChange={(e) => {
                 const id = parseInt(e.target.value, 10)
@@ -252,6 +254,9 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
             </select>
+          )}
+          {fieldErrors.order && !selectedOrder && (
+            <span className="field-error">{fieldErrors.order}</span>
           )}
         </div>
       )}

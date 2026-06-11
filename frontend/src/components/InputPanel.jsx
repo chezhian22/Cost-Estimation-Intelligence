@@ -10,6 +10,7 @@ export default function InputPanel({
       <ClientOrderSelector
         onClientChange={onClientChange}
         onOrderChange={onOrderChange}
+        fieldErrors={fieldErrors}
       />
 
       <div className="sidebar-title">

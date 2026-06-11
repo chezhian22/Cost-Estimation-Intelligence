@@ -139,6 +139,7 @@ export default function App() {
   const [confirmingQuote, setConfirmingQuote] = useState(false)
   const [quoteConfirmed, setQuoteConfirmed] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [hasCalculated, setHasCalculated] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -162,10 +163,6 @@ export default function App() {
     api.getSubstrates()
       .then(setSubstrates)
       .catch(() => {})
-
-    api.calculate(buildPayload(DEFAULTS))
-      .then((a) => { setResult(a); setSelectedCylIdx(a.matched.index); setError(null) })
-      .catch((e) => setError(e.message))
   }, [])
 
   // After recalculation, preserve the previously selected cylinder by teeth count
@@ -203,6 +200,10 @@ export default function App() {
 
   function validateInputs(inp) {
     const errs = {}
+    if (!editingCalc) {
+      if (!clientId) errs.client = 'Required — select a client before calculating'
+      if (!orderId)  errs.order  = 'Required — select an order before calculating'
+    }
     if (!inp.width  || parseFloat(inp.width)  <= 0) errs.width  = 'Required'
     if (!inp.height || parseFloat(inp.height) <= 0) errs.height = 'Required'
     if (!inp.yield_pct  || parseFloat(inp.yield_pct)  <= 0) errs.yield_pct  = 'Required'
@@ -216,12 +217,14 @@ export default function App() {
     setLoading(true)
     setPendingConfirm(null)
     setQuoteConfirmed(false)
+    setHasCalculated(false)
     const prevTeeth = result?.rows[selectedCylIdx]?.teeth ?? null
     if (editingCalc) {
       const payload = buildPayload(inputs, { selectedTeeth: prevTeeth })
       api.createVersion(editingCalc.id, payload)
         .then((a) => {
           applyResult(a, prevTeeth)
+          setHasCalculated(true)
           if (a.version_id) setPendingConfirm({ type: 'version', id: a.version_id })
         })
         .catch((e) => setError(e.message))
@@ -232,6 +235,7 @@ export default function App() {
       api.calculate(buildPayload(inputs, opts))
         .then((a) => {
           applyResult(a, prevTeeth)
+          setHasCalculated(true)
           if (a.calculation_id) setPendingConfirm({ type: 'calc', id: a.calculation_id })
         })
         .catch((e) => setError(e.message))
@@ -513,6 +517,7 @@ export default function App() {
               </div>
             </div>
           )}
+
         </nav>
 
         {activeView === 'calculator' && formOpen && (
@@ -531,14 +536,40 @@ export default function App() {
                 setFormOpen(false)
               }}
               loading={loading}
-              onClientChange={(id, name) => { setClientId(id); setClientName(name) }}
-              onOrderChange={(id, name) => { setOrderId(id); setOrderName(name) }}
+              onClientChange={(id, name) => {
+                setClientId(id); setClientName(name)
+                setFieldErrors((prev) => { const n = { ...prev }; delete n.client; delete n.order; return n })
+              }}
+              onOrderChange={(id, name) => {
+                setOrderId(id); setOrderName(name)
+                setFieldErrors((prev) => { const n = { ...prev }; delete n.order; return n })
+              }}
             />
           </aside>
         )}
 
         <div className="content-area">
           {error && <div className="error-banner">⚠ {error}</div>}
+
+          {activeView === 'calculator' && !hasCalculated && !loading && (
+            <div className="calc-empty-state">
+              <div className="calc-empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                  <line x1="7" y1="8" x2="7" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="12"/>
+                  <line x1="17" y1="10" x2="17" y2="12"/>
+                </svg>
+              </div>
+              <div className="calc-empty-title">No results yet</div>
+              <div className="calc-empty-sub">
+                Select a client &amp; order, fill in the label dimensions and costs,<br />
+                then click <strong>Run Calculation</strong> to see the cylinder match and pricing.
+              </div>
+            </div>
+          )}
 
           {activeView === 'calculator' && (
             <>
@@ -583,6 +614,8 @@ export default function App() {
                   </button>
                 )}
               </div>
+              {hasCalculated && (
+              <>
               <CylinderTable
                 result={result}
                 orderQty={inputs.order_qty}
@@ -599,6 +632,8 @@ export default function App() {
                 selectedIdx={selectedCylIdx}
                 inputs={inputs}
               />
+              </>
+              )}
 
               {quoteConfirmed && (
                 <div className="confirm-quote-banner confirm-quote-banner--success">
@@ -672,6 +707,7 @@ export default function App() {
               )}
             </>
           )}
+
 
           {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
           {activeView === 'pdf-preview'     && <PDFPreview />}
