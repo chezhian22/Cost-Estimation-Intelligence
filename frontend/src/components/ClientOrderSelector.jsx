@@ -61,8 +61,8 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
     setSelectedOrder(null)
     setShowNewClient(false)
     setClientErr(null)
-    onClientChange(client.id)
-    onOrderChange(null)
+    onClientChange(client.id, client.name)
+    onOrderChange(null, null)
   }
 
   function clearClient() {
@@ -72,13 +72,13 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
     setSelectedOrder(null)
     setShowNewClient(false)
     setClientErr(null)
-    onClientChange(null)
-    onOrderChange(null)
+    onClientChange(null, null)
+    onOrderChange(null, null)
   }
 
   function pickOrder(order) {
     setSelectedOrder(order)
-    onOrderChange(order.id)
+    onOrderChange(order.id, order.name)
   }
 
   async function handleCreateClient(e) {
@@ -88,7 +88,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
     setClientBusy(true)
     setClientErr(null)
     try {
-      const created = await api.createClient(name)
+      const created = await api.createClient({ name })
       const updated = await api.getClients()
       setClients(updated)
       setNewClientName('')
@@ -102,7 +102,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
 
   function openNewOrder() {
     setNewOrderName(nextOrderNumber(orders))
-    setNewOrderDate('')
+    setNewOrderDate(new Date().toISOString().split('T')[0])
     setOrderErr(null)
     setShowNewOrder(true)
   }
@@ -189,10 +189,10 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
 
       {/* ── New Client inline form ── */}
       {!selectedClient && (
-        <div style={{ marginTop: 4 }}>
+        <div style={{ marginTop: 8 }}>
           {!showNewClient ? (
             <button
-              className="cos-link-btn"
+              className="cos-action-btn"
               onClick={() => { setShowNewClient(true); setClientErr(null) }}
             >
               + New Client
@@ -258,9 +258,9 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange }) {
 
       {/* ── New Order inline form ── */}
       {selectedClient && (
-        <div style={{ marginTop: 6 }}>
+        <div style={{ marginTop: 8 }}>
           {!showNewOrder ? (
-            <button className="cos-link-btn" onClick={openNewOrder}>
+            <button className="cos-action-btn" onClick={openNewOrder}>
               + New Order
             </button>
           ) : (

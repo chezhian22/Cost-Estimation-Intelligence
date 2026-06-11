@@ -296,16 +296,82 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
   )
 }
 
+// ── Version quote detail modal (data already loaded from getVersions) ────────
+function VersionQuoteDetailModal({ version, onClose }) {
+  return (
+    <div className="cop-detail-overlay" onClick={onClose}>
+      <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onClose}>← Close</button>
+          <span className="cop-detail-title">Edit v{version.version_number}</span>
+          <span className="cop-status-badge cop-status-confirmed">
+            <span className="cop-status-dot" /> Approved
+          </span>
+        </div>
+        <div className="cop-detail-meta-strip">
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Size:</span>
+            <span className="cop-detail-meta-val">{fmt(version.width,1)} × {fmt(version.height,1)} mm</span>
+          </span>
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Substrate:</span>
+            <span className="cop-detail-meta-val">{version.substrate_name || 'Custom'} · ₹{fmt(version.substrate_price)}/m²</span>
+          </span>
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Yield:</span>
+            <span className="cop-detail-meta-val">{version.yield_pct}%</span>
+          </span>
+          {version.foil_cost > 0 && (
+            <span className="cop-detail-meta-item">
+              <span className="cop-detail-meta-label">Foil:</span>
+              <span className="cop-detail-meta-val">₹{fmt(version.foil_cost)}/m²</span>
+            </span>
+          )}
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Rate:</span>
+            <span className="cop-detail-meta-val">₹{fmt(version.exchange_rate,0)} / $</span>
+          </span>
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Saved:</span>
+            <span className="cop-detail-meta-val">{fmtDateTime(version.created_at)}</span>
+          </span>
+        </div>
+        <div className="cop-detail-body">
+          {version.result && (
+            <>
+              <CylinderTable result={version.result} orderQty="" pressSpeed={0} />
+              <PricingPanel result={version.result} orderQty="" />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Calculation row ───────────────────────────────────────────────────────────
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest }) {
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel }) {
   return (
     <div
       className={`cop-calc-row${isApproved ? ' cop-calc-row--approved' : ''}`}
-      style={{ cursor: 'pointer' }}
       onClick={onViewDetail}
     >
-      <div className="cop-calc-left">
+      {/* left accent bar */}
+      <div className="cop-calc-accent" />
+
+      {/* main info */}
+      <div className="cop-calc-main">
         <div className="cop-calc-size">
+          {versionLabel && (
+            <span style={{
+              fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase',
+              color: 'var(--teal-light)', background: 'var(--teal-dim)',
+              border: '1px solid var(--teal-mid)', borderRadius: 4,
+              padding: '0.1rem 0.4rem', marginRight: '0.45rem', letterSpacing: '0.04em',
+            }}>
+              {versionLabel}
+            </span>
+          )}
           {fmt(calc.width, 1)} × {fmt(calc.height, 1)} mm
         </div>
         <div className="cop-calc-meta">
@@ -313,45 +379,51 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
           {calc.yield_pct ? ` · ${calc.yield_pct}% yield` : ''}
           {' · '}{fmtDateTime(calc.created_at)}
         </div>
-        {calc.pricing && (
-          <div className="cop-calc-pricing">
-            <span className="cop-calc-price-inr">₹ {fmt(calc.pricing.price_inr_1000)} / 1000</span>
-            <span className="cop-calc-price-usd">$ {fmt(calc.pricing.price_usd_1000, 3)} / 1000</span>
-          </div>
-        )}
       </div>
-      <div className="cop-calc-right" onClick={(e) => e.stopPropagation()}>
+
+      {/* pricing block */}
+      {calc.pricing && (
+        <div className="cop-calc-prices">
+          <div className="cop-calc-price-inr">₹ {fmt(calc.pricing.price_inr_1000)}</div>
+          <div className="cop-calc-price-usd">$ {fmt(calc.pricing.price_usd_1000, 3)}</div>
+          <div className="cop-calc-price-unit">/ 1000 labels</div>
+        </div>
+      )}
+
+      {/* approve action */}
+      <div className="cop-calc-actions" onClick={(e) => e.stopPropagation()}>
         {isApproved ? (
-          <span className="cop-status-badge cop-status-confirmed">
-            <span className="cop-status-dot" /> Approved
+          <span className="cop-approved-chip">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            Approved
           </span>
         ) : (
-          <span className="cop-status-badge cop-status-pending">
-            <span className="cop-status-dot" /> Draft
-          </span>
+          <button
+            className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
+            onClick={() => onApproveRequest(calc)}
+            title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
+          >
+            Approve
+          </button>
         )}
-        <button
-          className={`cop-approve-btn${isApproved ? ' cop-approve-btn--active' : ''}${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
-          onClick={() => onApproveRequest(calc)}
-          disabled={isApproved}
-          title={isApproved ? 'Currently approved' : hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
-        >
-          {isApproved ? '★ Approved' : '☆ Approve'}
-        </button>
       </div>
     </div>
   )
 }
 
 // ── Order panel ───────────────────────────────────────────────────────────────
-function OrderPanel({ order }) {
+function OrderPanel({ order, hideHeader }) {
   const [calcs, setCalcs]         = useState(null)
   const [loading, setLoading]     = useState(false)
   const [approvedId, setApprovedId] = useState(null)
+  const [approvedVersions, setApprovedVersions] = useState([])
   const [busy, setBusy]           = useState(false)
 
   // Modal states — only one shows at a time, except detailModal can layer over conflict
   const [detailModal, setDetailModal]         = useState(null) // { calcId, pendingCalcForConflict }
+  const [versionDetailModal, setVersionDetailModal] = useState(null) // version object
   const [approveConfirm, setApproveConfirm]   = useState(null) // calc object
   const [conflict, setConflict]               = useState(null) // { pendingCalc, approvedCalc }
   const [swapConfirm, setSwapConfirm]         = useState(null) // { pendingCalc, approvedCalc }
@@ -359,10 +431,16 @@ function OrderPanel({ order }) {
   useEffect(() => {
     setLoading(true)
     api.getOrderCalculations(order.id)
-      .then((cs) => {
+      .then(async (cs) => {
         setCalcs(cs)
         const approved = cs.find((c) => c.status === 'confirmed')
         if (approved) setApprovedId(approved.id)
+
+        // Also find any approved edited versions across all calcs in this order
+        if (cs.length > 0) {
+          const arrays = await Promise.all(cs.map((c) => api.getVersions(c.id).catch(() => [])))
+          setApprovedVersions(arrays.flat().filter((v) => v.status === 'confirmed'))
+        }
       })
       .catch(() => setCalcs([]))
       .finally(() => setLoading(false))
@@ -447,13 +525,15 @@ function OrderPanel({ order }) {
 
   return (
     <div className="cop-order-panel">
-      <div className="cop-order-panel-header">
-        <span className="cop-order-panel-name">{order.name}</span>
-        <span className="cop-order-panel-date">{fmtDate(order.created_at)}</span>
-        {approvedId && (
-          <span className="cop-order-approved-badge">★ Has approved quote</span>
-        )}
-      </div>
+      {!hideHeader && (
+        <div className="cop-order-panel-header">
+          <span className="cop-order-panel-name">{order.name}</span>
+          <span className="cop-order-panel-date">{fmtDate(order.created_at)}</span>
+          {(approvedId || approvedVersions.length > 0) && (
+            <span className="cop-order-approved-badge">★ Has approved quote</span>
+          )}
+        </div>
+      )}
 
       <div className="cop-calcs-area">
         {loading && (
@@ -466,16 +546,37 @@ function OrderPanel({ order }) {
             No calculations saved for this order yet. Run the Pricing Calculator and save a result.
           </div>
         )}
-        {!loading && calcs && calcs.length > 0 && (
+        {!loading && calcs && calcs.length > 0 &&
+          calcs.filter((c) => c.status === 'confirmed').length === 0 &&
+          approvedVersions.length === 0 && (
+          <div className="cop-calcs-empty">
+            No approved quotes for this order yet. Go to Pricing Calculator, save a result and approve it.
+          </div>
+        )}
+        {!loading && calcs && (
+          calcs.filter((c) => c.status === 'confirmed').length > 0 ||
+          approvedVersions.length > 0
+        ) && (
           <div className="cop-calcs-list">
-            {calcs.map((c) => (
+            {calcs.filter((c) => c.status === 'confirmed').map((c) => (
               <CalcRow
                 key={c.id}
                 calc={c}
-                isApproved={c.id === approvedId}
-                hasOtherApproved={approvedId != null && c.id !== approvedId}
+                isApproved={true}
+                hasOtherApproved={false}
                 onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
                 onApproveRequest={handleApproveRequest}
+              />
+            ))}
+            {approvedVersions.map((v) => (
+              <CalcRow
+                key={`v-${v.id}`}
+                calc={{ ...v, pricing: v.result?.pricing }}
+                isApproved={true}
+                hasOtherApproved={false}
+                versionLabel={`Edit v${v.version_number}`}
+                onViewDetail={() => setVersionDetailModal(v)}
+                onApproveRequest={() => {}}
               />
             ))}
           </div>
@@ -491,6 +592,13 @@ function OrderPanel({ order }) {
           onApproveRequest={handleApproveRequest}
           onUnapprove={handleUnapprove}
           onClose={() => setDetailModal(null)}
+        />
+      )}
+
+      {versionDetailModal && (
+        <VersionQuoteDetailModal
+          version={versionDetailModal}
+          onClose={() => setVersionDetailModal(null)}
         />
       )}
 
@@ -679,21 +787,43 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
                 )}
 
                 {orders.length > 0 && (
-                  <div className="cop-orders-tabs">
-                    {orders.map((o) => (
-                      <button
-                        key={o.id}
-                        className={`cop-order-tab${activeOrderId === o.id ? ' cop-order-tab--active' : ''}`}
-                        onClick={() => setActiveOrderId(activeOrderId === o.id ? null : o.id)}
-                      >
-                        {o.name}
-                      </button>
-                    ))}
+                  <div className="cop-orders-list">
+                    {orders.map((o) => {
+                      const isActive = activeOrderId === o.id
+                      return (
+                        <div key={o.id} className={`cop-order-item${isActive ? ' cop-order-item--open' : ''}`}>
+                          <button
+                            className="cop-order-item-row"
+                            onClick={() => setActiveOrderId(isActive ? null : o.id)}
+                          >
+                            <div className="cop-order-item-icon">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                              </svg>
+                            </div>
+                            <div className="cop-order-item-info">
+                              <span className="cop-order-item-name">{o.name}</span>
+                              <span className="cop-order-item-date">{fmtDate(o.created_at)}</span>
+                            </div>
+                            <svg
+                              className={`cop-order-item-chevron${isActive ? ' cop-order-item-chevron--open' : ''}`}
+                              width="14" height="14" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" strokeWidth="2.5"
+                              strokeLinecap="round" strokeLinejoin="round"
+                            >
+                              <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                          </button>
+                          {isActive && (
+                            <div className="cop-order-item-body">
+                              <OrderPanel order={o} hideHeader />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                )}
-
-                {activeOrderId && orders.find((o) => o.id === activeOrderId) && (
-                  <OrderPanel order={orders.find((o) => o.id === activeOrderId)} clientId={client.id} />
                 )}
 
                 {showNewOrder ? (

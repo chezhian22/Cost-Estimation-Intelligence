@@ -175,10 +175,25 @@ class CalculationRequest(BaseModel):
         description="Additional hot-foil or lamination cost in ₹ per m². Use 0 if not applicable.",
         examples=[0],
     )
+    custom_cost: float = Field(
+        0, ge=0,
+        description="Extra per-label cost in ₹ (e.g. finishing, handling). Applied per single label.",
+        examples=[0],
+    )
+    selected_teeth: Optional[int] = Field(
+        None,
+        description="Teeth count of the cylinder the user chose to use. Stored for reference.",
+        examples=[64],
+    )
     exchange_rate: float = Field(
         85, gt=0,
         description="INR/USD exchange rate used to compute the USD price column.",
         examples=[85],
+    )
+    order_qty: Optional[int] = Field(
+        None, ge=0,
+        description="Label quantity for this order. Stored for reference and pre-fills the calculator on edit.",
+        examples=[10000],
     )
     save: bool = Field(
         False,
@@ -253,10 +268,13 @@ class PricingInfo(BaseModel):
     """
     Pricing summary computed from the matched cylinder.
 
-    All INR amounts use the `substrate_price` and `foil_cost` supplied in the request.
+    All INR amounts include both `substrate_price` and `foil_cost`.
     USD amounts are derived by dividing INR by `exchange_rate`.
     """
 
+    substrate_price: Optional[float] = Field(None, description="Substrate cost used in the calculation (₹/m²).")
+    foil_cost: Optional[float]       = Field(None, description="Foil/lamination cost used in the calculation (₹/m²). 0 if not applicable.")
+    custom_cost: Optional[float]     = Field(None, description="Extra per-label cost in ₹. Applied directly per single label.")
     label_w_cm: float        = Field(..., description="Matched label width in cm.")
     label_h_cm: float        = Field(..., description="Matched label height in cm.")
     labels_sqm: float        = Field(..., description="Raw labels per m² (before waste adjustment).")
@@ -298,6 +316,12 @@ class ClientUpdate(BaseModel):
     phone:    Optional[str] = Field(None, max_length=30,  description="Primary contact phone.")
 
 
+# ── Cylinder selection update ────────────────────────────────────────────────
+class CylinderUpdate(BaseModel):
+    """Body for PATCH /api/calculations/{id}/cylinder."""
+    selected_teeth: int = Field(..., description="Teeth count of the approved cylinder.")
+
+
 # ── Status update ────────────────────────────────────────────────────────────
 class StatusUpdate(BaseModel):
     """Body for PATCH /api/calculations/{id}/status."""
@@ -326,7 +350,10 @@ class CalculationHistoryOut(BaseModel):
     substrate_name: Optional[str] = Field(None, description="Substrate name at time of calculation.")
     substrate_price: float     = Field(..., description="Substrate price used (₹/m²).")
     foil_cost: float           = Field(..., description="Foil cost used (₹/m²).")
+    custom_cost: float         = Field(0,   description="Extra per-label cost used (₹/label).")
+    selected_teeth: Optional[int] = Field(None, description="Teeth count of the user-selected cylinder.")
     exchange_rate: float       = Field(..., description="Exchange rate used (₹ per $).")
+    order_qty: Optional[int]   = Field(None, description="Label quantity for this order.")
     created_at: datetime       = Field(..., description="UTC timestamp when this was saved.")
     client_id: Optional[int]   = Field(None, description="Linked client ID, if any.")
     order_id: Optional[int]    = Field(None, description="Linked order ID, if any.")
@@ -334,3 +361,72 @@ class CalculationHistoryOut(BaseModel):
     order_name: Optional[str]  = Field(None, description="Order name (denormalised for display).")
     status: str                = Field("pending", description="Quote status: `pending`, `confirmed`, or `rejected`.")
     pricing: Optional[dict]    = Field(None, description="Pricing summary from the saved result JSON.")
+    created_by_name: Optional[str] = Field(None, description="Username of who created this calculation.")
+    updated_by_name: Optional[str] = Field(None, description="Username of who last updated this calculation.")
+    updated_at: Optional[datetime]  = Field(None, description="When this calculation was last updated.")
+
+
+# ── Calculation version ──────────────────────────────────────────────────────
+class CalculationVersionOut(BaseModel):
+    """One edited revision of a saved calculation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id:             int
+    calculation_id: int
+    version_number: int
+    width:          float
+    height:         float
+    yield_pct:      float
+    substrate_name: Optional[str]  = None
+    substrate_price: float
+    foil_cost:      float
+    custom_cost:    float
+    selected_teeth: Optional[int]  = None
+    exchange_rate:  float
+    status:         str
+    created_by_name: Optional[str] = None
+    created_at:     datetime
+    result:         Optional[dict] = None
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    email: str    = Field(..., description="User email address.")
+    password: str = Field(..., description="Plain-text password.")
+
+
+class TokenResponse(BaseModel):
+    access_token: str = Field(..., description="JWT bearer token.")
+    token_type: str   = Field("bearer")
+    user: "UserOut"
+
+
+# ── User management ───────────────────────────────────────────────────────────
+class UserCreate(BaseModel):
+    username: str          = Field(..., min_length=2, max_length=80)
+    email:    str          = Field(..., max_length=200)
+    password: str          = Field(..., min_length=4)
+    role:     str          = Field("user", pattern="^(admin|user)$")
+
+
+class UserUpdate(BaseModel):
+    username:  Optional[str]  = Field(None, min_length=2, max_length=80)
+    email:     Optional[str]  = Field(None, max_length=200)
+    password:  Optional[str]  = Field(None, min_length=4)
+    role:      Optional[str]  = Field(None, pattern="^(admin|user)$")
+    is_active: Optional[bool] = None
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:         int      = Field(..., description="User ID.")
+    username:   str
+    email:      str
+    role:       str
+    is_active:  bool
+    created_at: datetime
+
+
+TokenResponse.model_rebuild()

@@ -1,8 +1,282 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
+import CylinderTable from './CylinderTable'
+import PricingPanel from './PricingPanel'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
+
+function fmtDateTime(dt) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// ── Calculation Detail Modal ──────────────────────────────────────────────────
+function CalcDetailModal({ calcId, onClose }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    api.getCalculation(calcId)
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [calcId])
+
+  const statusCfg = {
+    confirmed: { label: 'Approved',  cls: 'cop-status-confirmed' },
+    pending:   { label: 'Draft',     cls: 'cop-status-pending'   },
+    rejected:  { label: 'Rejected',  cls: 'cop-status-rejected'  },
+  }
+  const cfg = statusCfg[data?.status] ?? statusCfg.pending
+
+  return createPortal(
+    <div className="cop-detail-overlay" onClick={onClose}>
+      <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
+
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onClose}>← Close</button>
+          <span className="cop-detail-title">Calculation Detail</span>
+          {data && (
+            <span className={`cop-status-badge ${cfg.cls}`}>
+              <span className="cop-status-dot" /> {cfg.label}
+            </span>
+          )}
+        </div>
+
+        {loading && (
+          <div className="history-state" style={{ padding: '3rem' }}>
+            <div className="history-spinner" />
+            <span>Loading calculation…</span>
+          </div>
+        )}
+
+        {!loading && data && (
+          <>
+            <div className="cop-detail-meta-strip">
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Client:</span>
+                <span className="cop-detail-meta-val">{data.client_name || '—'}</span>
+              </span>
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Order:</span>
+                <span className="cop-detail-meta-val">{data.order_name || '—'}</span>
+              </span>
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Size:</span>
+                <span className="cop-detail-meta-val">{fmt(data.width,1)} × {fmt(data.height,1)} mm</span>
+              </span>
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Substrate:</span>
+                <span className="cop-detail-meta-val">{data.substrate_name || 'Custom'} · ₹{fmt(data.substrate_price)}/m²</span>
+              </span>
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Yield:</span>
+                <span className="cop-detail-meta-val">{data.yield_pct}%</span>
+              </span>
+              {data.foil_cost > 0 && (
+                <span className="cop-detail-meta-item">
+                  <span className="cop-detail-meta-label">Foil:</span>
+                  <span className="cop-detail-meta-val">₹{fmt(data.foil_cost)}/m²</span>
+                </span>
+              )}
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Rate:</span>
+                <span className="cop-detail-meta-val">₹{fmt(data.exchange_rate,0)} / $</span>
+              </span>
+              <span className="cop-detail-meta-item">
+                <span className="cop-detail-meta-label">Saved:</span>
+                <span className="cop-detail-meta-val">{fmtDateTime(data.created_at)}</span>
+              </span>
+            </div>
+
+            <div className="cop-detail-body">
+              {data.result && (
+                <>
+                  <CylinderTable result={data.result} orderQty="" pressSpeed={0} />
+                  <PricingPanel result={data.result} orderQty="" />
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function UserChip({ name }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+      fontSize: '0.75rem', fontWeight: 600,
+      color: 'var(--teal)', whiteSpace: 'nowrap',
+    }}>
+      <span style={{
+        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+        background: 'rgba(54,229,194,0.15)', border: '1px solid rgba(54,229,194,0.35)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '0.6rem', fontWeight: 800, color: 'var(--teal)',
+      }}>
+        {name[0].toUpperCase()}
+      </span>
+      {name}
+    </span>
+  )
+}
+
+// ── Version Detail Modal ──────────────────────────────────────────────────────
+function VersionDetailModal({ version, onClose }) {
+  const statusCfg = {
+    confirmed: { label: 'Confirmed', cls: 'cop-status-confirmed' },
+    pending:   { label: 'Draft',     cls: 'cop-status-pending'   },
+    rejected:  { label: 'Rejected',  cls: 'cop-status-rejected'  },
+  }
+  const cfg = statusCfg[version.status] ?? statusCfg.pending
+
+  return createPortal(
+    <div className="cop-detail-overlay" onClick={onClose}>
+      <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onClose}>← Close</button>
+          <span className="cop-detail-title">Edit v{version.version_number}</span>
+          <span className={`cop-status-badge ${cfg.cls}`}>
+            <span className="cop-status-dot" /> {cfg.label}
+          </span>
+        </div>
+        <div className="cop-detail-meta-strip">
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Size:</span>
+            <span className="cop-detail-meta-val">{fmt(version.width,1)} × {fmt(version.height,1)} mm</span>
+          </span>
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Substrate:</span>
+            <span className="cop-detail-meta-val">{version.substrate_name || 'Custom'} · ₹{fmt(version.substrate_price)}/m²</span>
+          </span>
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Yield:</span>
+            <span className="cop-detail-meta-val">{version.yield_pct}%</span>
+          </span>
+          {version.foil_cost > 0 && (
+            <span className="cop-detail-meta-item">
+              <span className="cop-detail-meta-label">Foil:</span>
+              <span className="cop-detail-meta-val">₹{fmt(version.foil_cost)}/m²</span>
+            </span>
+          )}
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Rate:</span>
+            <span className="cop-detail-meta-val">₹{fmt(version.exchange_rate,0)} / $</span>
+          </span>
+          {version.created_by_name && (
+            <span className="cop-detail-meta-item">
+              <span className="cop-detail-meta-label">By:</span>
+              <span className="cop-detail-meta-val"><UserChip name={version.created_by_name} /></span>
+            </span>
+          )}
+          <span className="cop-detail-meta-item">
+            <span className="cop-detail-meta-label">Saved:</span>
+            <span className="cop-detail-meta-val">{fmtDateTime(version.created_at)}</span>
+          </span>
+        </div>
+        <div className="cop-detail-body">
+          {version.result && (
+            <>
+              <CylinderTable result={version.result} orderQty="" pressSpeed={0} />
+              <PricingPanel result={version.result} orderQty="" />
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Versions section — tree layout ───────────────────────────────────────────
+function VersionsSection({ calcId, onStatusChange, refreshAt }) {
+  const [versions, setVersions] = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [detailVersion, setDetailVersion] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    api.getVersions(calcId)
+      .then(setVersions)
+      .catch(() => setVersions([]))
+      .finally(() => setLoading(false))
+  }, [calcId])
+
+  useEffect(() => {
+    if (refreshAt === null || refreshAt === undefined) return
+    api.getVersions(calcId).then(setVersions).catch(() => {})
+  }, [refreshAt])
+
+  function handleStatusChange(versionId, next) {
+    setVersions((prev) => prev.map((v) =>
+      v.id === versionId ? { ...v, status: next }
+      : next === 'confirmed' && v.status === 'confirmed' ? { ...v, status: 'pending' }
+      : v
+    ))
+    onStatusChange?.(next)
+  }
+
+  if (loading) return (
+    <div className="qh-tree-loading">
+      <span className="cop-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+      Loading versions…
+    </div>
+  )
+
+  // Descending order: newest version first
+  const sorted = versions ? [...versions].sort((a, b) => b.version_number - a.version_number) : []
+
+  if (!sorted.length) return (
+    <div className="qh-tree-empty">
+      No edited versions yet. Click <strong>Edit</strong> to revise this quote.
+    </div>
+  )
+
+  return (
+    <>
+      <div className="qh-tree-list">
+        {sorted.map((v) => (
+          <div key={v.id} className="qh-tree-node">
+            {/* Horizontal arm + arrowhead connecting from trunk to card */}
+            <div className="qh-tree-arm" />
+            <div className={`qh-v-card${v.status === 'confirmed' ? ' qh-v-card--confirmed' : v.status === 'rejected' ? ' qh-v-card--rejected' : ''}`}>
+              <span className="qh-v-badge">Edit v{v.version_number}</span>
+              <span className="qh-v-size">{fmt(v.width,1)} × {fmt(v.height,1)} mm</span>
+              <span className="qh-v-sub">{v.substrate_name || 'Custom'}</span>
+              {v.created_by_name
+                ? <UserChip name={v.created_by_name} />
+                : <span style={{ color: 'var(--text-dim)', fontSize: '0.77rem' }}>—</span>
+              }
+              <span className="qh-v-date">
+                {v.created_at ? new Date(v.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+              </span>
+              <div className="qh-v-status" onClick={(e) => e.stopPropagation()}>
+                <StatusBadge
+                  calcId={v.id}
+                  status={v.status}
+                  onSave={(next) => api.updateVersionStatus(v.id, next)}
+                  onChoose={(id, next) => handleStatusChange(id, next)}
+                />
+              </div>
+              <button className="qh-v-view-btn" onClick={() => setDetailVersion(v)}>
+                View
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {detailVersion && (
+        <VersionDetailModal version={detailVersion} onClose={() => setDetailVersion(null)} />
+      )}
+    </>
+  )
+}
 
 const STATUS_CONFIG = {
   pending:   { label: 'Pending',   cls: 'status-pending'   },
@@ -10,7 +284,7 @@ const STATUS_CONFIG = {
   rejected:  { label: 'Rejected',  cls: 'status-rejected'  },
 }
 
-function StatusBadge({ calcId, status, onChoose }) {
+function StatusBadge({ calcId, status, onChoose, onSave }) {
   const [saving, setSaving]       = useState(false)
   const [dropdownPos, setDropdownPos] = useState(null)
   const btnRef = useRef(null)
@@ -35,7 +309,11 @@ function StatusBadge({ calcId, status, onChoose }) {
     if (next === status) return
     setSaving(true)
     try {
-      await api.updateQuoteStatus(calcId, next)
+      if (onSave) {
+        await onSave(next)
+      } else {
+        await api.updateQuoteStatus(calcId, next)
+      }
       onChoose(calcId, next)
     } catch { /* keep current on error */ }
     finally { setSaving(false) }
@@ -80,7 +358,7 @@ function StatusBadge({ calcId, status, onChoose }) {
   )
 }
 
-export default function QuoteHistory() {
+export default function QuoteHistory({ onEditCalc }) {
   const [quotes, setQuotes]               = useState(null)
   const [clients, setClients]             = useState([])
   const [orders, setOrders]               = useState([])
@@ -89,6 +367,17 @@ export default function QuoteHistory() {
   const [error, setError]                 = useState(null)
   const [selectedClient, setSelectedClient] = useState('')
   const [selectedOrder, setSelectedOrder]   = useState('')
+  const [detailCalcId, setDetailCalcId]     = useState(null)
+  const [expandedRows, setExpandedRows]     = useState(new Set())
+  const [versionsRefreshAt, setVersionsRefreshAt] = useState(null)
+
+  function toggleExpand(id) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     Promise.all([api.getHistory(), api.getClients()])
@@ -119,12 +408,28 @@ export default function QuoteHistory() {
   }, [quotes, selectedClient, selectedOrder])
 
   function handleStatusChange(calcId, next) {
-    setQuotes((prev) => prev.map((q) => {
-      if (q.id === calcId) return { ...q, status: next }
-      if (next === 'confirmed' && q.order_id === prev.find((x) => x.id === calcId)?.order_id)
-        return { ...q, status: 'pending' }
-      return q
-    }))
+    setQuotes((prev) => {
+      const orderId = prev.find((x) => x.id === calcId)?.order_id
+      return prev.map((q) => {
+        if (q.id === calcId) return { ...q, status: next }
+        if (next === 'confirmed' && orderId && q.order_id === orderId)
+          return { ...q, status: 'pending' }
+        return q
+      })
+    })
+    if (next === 'confirmed') setVersionsRefreshAt(Date.now())
+  }
+
+  function handleVersionStatusChange(parentCalcId, next) {
+    if (next !== 'confirmed') return
+    setQuotes((prev) => {
+      const orderId = prev.find((x) => x.id === parentCalcId)?.order_id
+      return prev.map((q) => {
+        if (orderId && q.order_id === orderId) return { ...q, status: 'pending' }
+        if (q.id === parentCalcId) return { ...q, status: 'pending' }
+        return q
+      })
+    })
   }
 
   function clearFilters() {
@@ -231,14 +536,17 @@ export default function QuoteHistory() {
                   <th>₹ / 1000</th>
                   <th>$ / 1000</th>
                   <th>Date</th>
+                  <th style={{ textAlign: 'left' }}>Created by</th>
+                  <th style={{ textAlign: 'left' }}>Updated by</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={12}
                       style={{
                         textAlign: 'center',
                         padding: '2.5rem',
@@ -251,38 +559,130 @@ export default function QuoteHistory() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((q, i) => (
-                    <tr key={q.id ?? i}>
-                      <td style={{ textAlign: 'left' }}>
-                        {q.client_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
-                      </td>
-                      <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 500 }}>
-                        {q.order_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
-                      </td>
-                      <td>{fmt(q.width, 1)} × {fmt(q.height, 1)}</td>
-                      <td>{q.yield_pct != null ? `${q.yield_pct}%` : '—'}</td>
-                      <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 400 }}>
-                        {q.substrate_name ?? 'Custom'}
-                      </td>
-                      <td>{fmt(q.pricing?.price_inr_1000)}</td>
-                      <td>{fmt(q.pricing?.price_usd_1000, 3)}</td>
-                      <td>
-                        {q.created_at
-                          ? new Date(q.created_at).toLocaleDateString('en-IN', {
-                              day: '2-digit', month: 'short', year: 'numeric',
-                            })
-                          : '—'}
-                      </td>
-                      <td>
-                        <StatusBadge calcId={q.id} status={q.status} onChoose={handleStatusChange} />
-                      </td>
-                    </tr>
-                  ))
+                  filtered.flatMap((q, i) => {
+                    const isExpanded = expandedRows.has(q.id)
+                    return [
+                      <tr
+                        key={q.id ?? i}
+                        className={`qh-quote-row${isExpanded ? ' qh-quote-row--expanded' : ''}`}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggleExpand(q.id)}
+                      >
+                        <td style={{ textAlign: 'left' }}>
+                          <div className="qh-row-client-cell">
+                            <svg
+                              className={`qh-row-chevron${isExpanded ? ' qh-row-chevron--open' : ''}`}
+                              width="11" height="11" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" strokeWidth="2.5"
+                              strokeLinecap="round" strokeLinejoin="round"
+                            >
+                              <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                            {q.client_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 500 }}>
+                          {q.order_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                        </td>
+                        <td>{fmt(q.width, 1)} × {fmt(q.height, 1)}</td>
+                        <td>{q.yield_pct != null ? `${q.yield_pct}%` : '—'}</td>
+                        <td style={{ textAlign: 'left', color: 'var(--text)', fontWeight: 400 }}>
+                          {q.substrate_name ?? 'Custom'}
+                        </td>
+                        <td>{fmt(q.pricing?.price_inr_1000)}</td>
+                        <td>{fmt(q.pricing?.price_usd_1000, 3)}</td>
+                        <td>
+                          {q.created_at
+                            ? new Date(q.created_at).toLocaleDateString('en-IN', {
+                                day: '2-digit', month: 'short', year: 'numeric',
+                              })
+                            : '—'}
+                        </td>
+                        <td style={{ textAlign: 'left' }}>
+                          {q.created_by_name
+                            ? <UserChip name={q.created_by_name} />
+                            : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                        </td>
+                        <td style={{ textAlign: 'left' }}>
+                          {q.updated_by_name ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                              <UserChip name={q.updated_by_name} />
+                              {q.updated_at && (
+                                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                  {new Date(q.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
+                          ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <StatusBadge calcId={q.id} status={q.status} onChoose={handleStatusChange} />
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center' }}>
+                            {onEditCalc && (
+                              <button
+                                className="qh-action-btn qh-action-btn--edit"
+                                onClick={() => onEditCalc(q)}
+                                title="Edit this calculation"
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              className="qh-action-btn qh-action-btn--view"
+                              onClick={() => setDetailCalcId(q.id)}
+                              title="View full details"
+                            >
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                              </svg>
+                              View
+                            </button>
+                          </div>
+                        </td>
+                      </tr>,
+                      isExpanded && (
+                        <tr key={`versions-${q.id}`} className="qh-versions-expand-row">
+                          <td colSpan={12} style={{ padding: 0 }}>
+                            <div className="qh-versions-container">
+                              <div className="qh-versions-header">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="6" y1="3" x2="6" y2="15"/>
+                                  <circle cx="18" cy="6" r="3"/>
+                                  <circle cx="6" cy="18" r="3"/>
+                                  <path d="M18 9a9 9 0 0 1-9 9"/>
+                                </svg>
+                                Edit History
+                              </div>
+                              <VersionsSection
+                                calcId={q.id}
+                                onStatusChange={(next) => handleVersionStatusChange(q.id, next)}
+                                refreshAt={versionsRefreshAt}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                    ].filter(Boolean)
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {detailCalcId && (
+        <CalcDetailModal
+          calcId={detailCalcId}
+          onClose={() => setDetailCalcId(null)}
+        />
       )}
     </section>
   )

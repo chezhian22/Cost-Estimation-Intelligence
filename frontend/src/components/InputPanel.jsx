@@ -21,18 +21,30 @@ export default function InputPanel({
         <div className="field">
           <label className="field-label" htmlFor="input-width">↔ Width <span className="unit">(mm)</span></label>
           <input
-            type="number" id="input-width" step="0.1" min="1"
+            type="number" id="input-width" step="0.1" min="1" max="99999"
             value={inputs.width}
-            onChange={(e) => onChange('width', e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (raw === '') { onChange('width', ''); return }
+              const num = parseFloat(raw)
+              if (isNaN(num)) return
+              onChange('width', num < 0 ? Math.abs(num) : num > 99999 ? 99999 : num)
+            }}
           />
         </div>
 
         <div className="field">
           <label className="field-label" htmlFor="input-height">↕ Height <span className="unit">(mm)</span></label>
           <input
-            type="number" id="input-height" step="0.1" min="1"
+            type="number" id="input-height" step="0.1" min="1" max="99999"
             value={inputs.height}
-            onChange={(e) => onChange('height', e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (raw === '') { onChange('height', ''); return }
+              const num = parseFloat(raw)
+              if (isNaN(num)) return
+              onChange('height', num < 0 ? Math.abs(num) : num > 99999 ? 99999 : num)
+            }}
           />
         </div>
 
@@ -41,7 +53,13 @@ export default function InputPanel({
           <input
             type="number" id="input-waste" step="1" min="1" max="100"
             value={inputs.yield_pct}
-            onChange={(e) => onChange('yield_pct', e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (raw === '') { onChange('yield_pct', ''); return }
+              const num = parseFloat(raw)
+              if (isNaN(num)) return
+              onChange('yield_pct', num < 0 ? Math.abs(num) : num > 100 ? 100 : num)
+            }}
           />
         </div>
 
@@ -62,7 +80,7 @@ export default function InputPanel({
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="input-substrate-price">₹ Substrate Price <span className="unit">(/ m²)</span></label>
+          <label className="field-label" htmlFor="input-substrate-price">₹ Substrate Price <span className="unit">(per sq. meter)</span></label>
           <input
             type="number" id="input-substrate-price" step="0.5" min="0"
             value={inputs.substrate_price}
@@ -71,11 +89,27 @@ export default function InputPanel({
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="input-foil">✦ Foil Cost</label>
+          <label className="field-label" htmlFor="input-foil">✦ Foil Cost <span className="unit">(per sq. meter)</span></label>
           <input
             type="number" id="input-foil" step="0.5" min="0"
             value={inputs.foil_cost}
             onChange={(e) => onChange('foil_cost', e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label className="field-label" htmlFor="input-custom-cost">⊕ Custom Cost <span className="unit">(per label)</span></label>
+          <input
+            type="number" id="input-custom-cost" step="0.01" min="0"
+            placeholder="e.g. 0.05"
+            value={inputs.custom_cost}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (raw === '') { onChange('custom_cost', ''); return }
+              const num = parseFloat(raw)
+              if (isNaN(num)) return
+              onChange('custom_cost', num < 0 ? Math.abs(num) : num)
+            }}
           />
         </div>
 

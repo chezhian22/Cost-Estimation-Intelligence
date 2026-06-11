@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { api } from './api'
+import { api, setToken } from './api'
+import { generateQuotePDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'
@@ -9,6 +10,9 @@ import QuoteHistory from './components/QuoteHistory'
 import ManageCylinders from './components/ManageCylinders'
 import ManageSubstrates from './components/ManageSubstrates'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
+import LoginPage from './components/LoginPage'
+import UserManagementPage from './components/UserManagementPage'
+import Dashboard from './components/Dashboard'
 
 const DEFAULTS = {
   width: 64.5,
@@ -19,10 +23,11 @@ const DEFAULTS = {
   substrate_name: null,
   substrate_price: 45,
   foil_cost: 0,
+  custom_cost: 0,
   exchange_rate: 85,
 }
 
-function buildPayload(inputs, { save = false, clientId = null, orderId = null } = {}) {
+function buildPayload(inputs, { save = false, clientId = null, orderId = null, selectedTeeth = null } = {}) {
   return {
     width: parseFloat(inputs.width) || 1,
     height: parseFloat(inputs.height) || 1,
@@ -30,42 +35,122 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null } 
     substrate_name: inputs.substrate_name,
     substrate_price: parseFloat(inputs.substrate_price) || 0,
     foil_cost: parseFloat(inputs.foil_cost) || 0,
+    custom_cost: parseFloat(inputs.custom_cost) || 0,
     exchange_rate: parseFloat(inputs.exchange_rate) || 85,
+    order_qty: inputs.order_qty ? parseInt(inputs.order_qty, 10) : null,
     save,
     client_id: clientId,
     order_id: orderId,
+    selected_teeth: selectedTeeth,
   }
 }
 
-const NAV_LINKS = [
-  { id: 'calculator',   label: 'Pricing Calculator' },
-  { id: 'comparison',   label: 'Quote Comparison' },
-  { id: 'history',      label: 'Quote History' },
-  { id: 'client-orders', label: 'Client & Orders' },
+const NAV_SECTIONS = [
+  {
+    section: null,
+    icon: null,
+    links: [
+      {
+        id: 'dashboard', label: 'Dashboard',
+        icon: (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    section: 'Calculation',
+    icon: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+    ),
+    links: [
+      { id: 'calculator',  label: 'Pricing Calculator' },
+      { id: 'comparison',  label: 'Quote Comparison'   },
+      { id: 'history',     label: 'Quote History'      },
+    ],
+  },
+  {
+    section: 'Customers',
+    icon: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+    links: [
+      { id: 'client-orders', label: 'Client & Orders' },
+    ],
+  },
+  {
+    section: 'Product Master',
+    icon: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+    ),
+    links: [
+      { id: 'cylinders',  label: 'Cylinder Management'  },
+      { id: 'substrates', label: 'Substrate Management' },
+    ],
+  },
 ]
 
-const ADMIN_LINKS = [
-  { id: 'cylinders',  label: 'Manage Cylinders' },
-  { id: 'substrates', label: 'Manage Substrates' },
-]
+const ADMIN_SECTION = {
+  section: 'Admin',
+  icon: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  ),
+  links: [
+    { id: 'user-management', label: 'User Management' },
+  ],
+}
 
 export default function App() {
-  const [inputs, setInputs]         = useState(DEFAULTS)
-  const [substrates, setSubstrates] = useState([])
-  const [result, setResult]         = useState(null)
-  const [error, setError]           = useState(null)
-  const [loading, setLoading]       = useState(false)
-  const [navOpen, setNavOpen]       = useState(true)
-  const [formOpen, setFormOpen]     = useState(true)
-  const [activeView, setActiveView] = useState('calculator')
-  const [clientId, setClientId]     = useState(null)
-  const [orderId, setOrderId]       = useState(null)
-  const [theme, setTheme]           = useState(() => localStorage.getItem('cp-theme') || 'dark')
+  const [currentUser, setCurrentUser]     = useState(null)
+  const [authLoading, setAuthLoading]     = useState(true)
+
+  const [inputs, setInputs]               = useState(DEFAULTS)
+  const [substrates, setSubstrates]       = useState([])
+  const [result, setResult]               = useState(null)
+  const [selectedCylIdx, setSelectedCylIdx] = useState(null)
+  const [approvingCyl, setApprovingCyl] = useState(false)
+  const [error, setError]                 = useState(null)
+  const [loading, setLoading]             = useState(false)
+  const [navOpen, setNavOpen]             = useState(true)
+  const [formOpen, setFormOpen]           = useState(true)
+  const [activeView, setActiveView]       = useState('dashboard')
+  const [clientId, setClientId]           = useState(null)
+  const [clientName, setClientName]       = useState(null)
+  const [orderId, setOrderId]             = useState(null)
+  const [orderName, setOrderName]         = useState(null)
+  const [theme, setTheme]                 = useState(() => localStorage.getItem('cp-theme') || 'dark')
+  const [editingCalc, setEditingCalc]     = useState(null) // { id, client_name, order_name }
+  const [pendingConfirm, setPendingConfirm] = useState(null) // { type: 'calc'|'version', id }
+  const [confirmingQuote, setConfirmingQuote] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('cp-theme', theme)
   }, [theme])
+
+  // Restore session from stored token
+  useEffect(() => {
+    api.getMe()
+      .then(user => setCurrentUser(user))
+      .catch(() => { setToken(null) })
+      .finally(() => setAuthLoading(false))
+  }, [])
+
+  function handleLogout() {
+    setToken(null)
+    setCurrentUser(null)
+  }
 
   useEffect(() => {
     api.getSubstrates()
@@ -73,18 +158,99 @@ export default function App() {
       .catch(() => {})
 
     api.calculate(buildPayload(DEFAULTS))
-      .then((a) => { setResult(a); setError(null) })
+      .then((a) => { setResult(a); setSelectedCylIdx(a.matched.index); setError(null) })
       .catch((e) => setError(e.message))
   }, [])
 
+  // After recalculation, preserve the previously selected cylinder by teeth count
+  function applyResult(a, prevTeeth) {
+    setResult(a)
+    setError(null)
+    if (prevTeeth != null) {
+      const idx = a.rows.findIndex(r => r.teeth === prevTeeth)
+      setSelectedCylIdx(idx >= 0 ? idx : a.matched.index)
+    } else {
+      setSelectedCylIdx(a.matched.index)
+    }
+  }
+
+  const handleEditCalc = (calc) => {
+    const matchingSub = calc.substrate_name
+      ? substrates.find((s) => s.name === calc.substrate_name)
+      : null
+    setInputs({
+      width:           calc.width           ?? DEFAULTS.width,
+      height:          calc.height          ?? DEFAULTS.height,
+      yield_pct:       calc.yield_pct       ?? DEFAULTS.yield_pct,
+      order_qty:       calc.order_qty ? String(calc.order_qty) : '',
+      substrateId:     matchingSub ? String(matchingSub.id) : 'custom',
+      substrate_name:  calc.substrate_name  ?? null,
+      substrate_price: calc.substrate_price ?? DEFAULTS.substrate_price,
+      foil_cost:       calc.foil_cost       ?? 0,
+      custom_cost:     calc.custom_cost     ?? 0,
+      exchange_rate:   calc.exchange_rate   ?? DEFAULTS.exchange_rate,
+    })
+    setEditingCalc({ id: calc.id, client_name: calc.client_name, order_name: calc.order_name })
+    setActiveView('calculator')
+    setFormOpen(true)
+  }
+
   const handleCalculate = () => {
     setLoading(true)
-    const shouldSave = Boolean(orderId)
-    const opts = { save: shouldSave, clientId, orderId }
-    api.calculate(buildPayload(inputs, opts))
-      .then((a) => { setResult(a); setError(null) })
+    setPendingConfirm(null)
+    const prevTeeth = result?.rows[selectedCylIdx]?.teeth ?? null
+    if (editingCalc) {
+      const payload = buildPayload(inputs, { selectedTeeth: prevTeeth })
+      api.createVersion(editingCalc.id, payload)
+        .then((a) => {
+          applyResult(a, prevTeeth)
+          if (a.version_id) setPendingConfirm({ type: 'version', id: a.version_id })
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false))
+    } else {
+      const shouldSave = Boolean(orderId)
+      const opts = { save: shouldSave, clientId, orderId, selectedTeeth: prevTeeth }
+      api.calculate(buildPayload(inputs, opts))
+        .then((a) => {
+          applyResult(a, prevTeeth)
+          if (a.calculation_id) setPendingConfirm({ type: 'calc', id: a.calculation_id })
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false))
+    }
+  }
+
+  const handleConfirmQuote = async () => {
+    if (!pendingConfirm) return
+    setConfirmingQuote(true)
+    try {
+      if (pendingConfirm.type === 'calc') {
+        await api.updateQuoteStatus(pendingConfirm.id, 'confirmed')
+      } else {
+        await api.updateVersionStatus(pendingConfirm.id, 'confirmed')
+      }
+      setPendingConfirm(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setConfirmingQuote(false)
+    }
+  }
+
+  const handleApproveCylinder = (rowIdx) => {
+    const teeth = result?.rows[rowIdx]?.teeth
+    if (!teeth) return
+    setSelectedCylIdx(rowIdx)
+    if (!result?.calculation_id) return   // not yet saved, selection is local only
+    setApprovingCyl(true)
+    api.updateSelectedCylinder(result.calculation_id, teeth)
       .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .finally(() => setApprovingCyl(false))
+  }
+
+  const handleDownloadPDF = () => {
+    generateQuotePDF({ result, inputs, selectedIdx: selectedCylIdx, clientName, orderName })
   }
 
   const handleChange = (field, value) => {
@@ -104,6 +270,16 @@ export default function App() {
       substrate_price: sub ? sub.price : prev.substrate_price,
     }))
   }
+
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-page)' }}>
+      <div style={{ color: 'var(--teal)', fontSize: '0.9rem' }}>Loading…</div>
+    </div>
+  )
+
+  if (!currentUser) return <LoginPage onLogin={setCurrentUser} />
+
+  const isAdmin = currentUser.role === 'admin'
 
   return (
     <>
@@ -142,7 +318,10 @@ export default function App() {
           <div className="header-controls">
             <div className="header-status">
               <span className="status-dot" />
-              Chroma Print
+              {currentUser.username}
+              {isAdmin && (
+                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.04em' }}>ADMIN</span>
+              )}
             </div>
             <button
               className="theme-toggle"
@@ -167,35 +346,84 @@ export default function App() {
                 </svg>
               )}
             </button>
+
+            <button
+              className="theme-toggle"
+              onClick={handleLogout}
+              title="Sign out"
+              style={{ marginLeft: '0.3rem' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         </div>
       </header>
 
       <div className="app-shell">
         <nav className={`nav-sidebar${navOpen ? '' : ' nav-sidebar-closed'}`}>
-          <div className="nav-section-label">Navigation</div>
-          {NAV_LINKS.map((link) => (
-            <button
-              key={link.id}
-              className={`nav-link${activeView === link.id ? ' active' : ''}`}
-              onClick={() => setActiveView(link.id)}
-            >
-              <span className="nav-link-icon">{link.icon}</span>
-              <span className="nav-link-text">{link.label}</span>
-            </button>
+          {NAV_SECTIONS.map(({ section, icon, links }) => (
+            <div key={section || '__top'}>
+              {section && (
+                <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+                  {icon && <span className="nav-section-icon">{icon}</span>}
+                  {section}
+                </div>
+              )}
+              {section ? (
+                <div className="nav-link-group">
+                  {links.map(link => (
+                    <button
+                      key={link.id}
+                      className={`nav-link nav-link--sub${activeView === link.id ? ' active' : ''}`}
+                      onClick={() => setActiveView(link.id)}
+                    >
+                      <span className="nav-link-dot" />
+                      <span className="nav-link-text">{link.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                links.map(link => (
+                  <button
+                    key={link.id}
+                    className={`nav-link${activeView === link.id ? ' active' : ''}`}
+                    onClick={() => setActiveView(link.id)}
+                  >
+                    {link.icon
+                      ? <span className="nav-section-icon" style={{ opacity: 1 }}>{link.icon}</span>
+                      : <span className="nav-link-dot" />
+                    }
+                    <span className="nav-link-text">{link.label}</span>
+                  </button>
+                ))
+              )}
+            </div>
           ))}
 
-          <div className="nav-section-label" style={{ marginTop: '1.2rem' }}>Admin</div>
-          {ADMIN_LINKS.map((link) => (
-            <button
-              key={link.id}
-              className={`nav-link${activeView === link.id ? ' active' : ''}`}
-              onClick={() => setActiveView(link.id)}
-            >
-              <span className="nav-link-icon">{link.icon}</span>
-              <span className="nav-link-text">{link.label}</span>
-            </button>
-          ))}
+          {isAdmin && (
+            <div>
+              <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+                <span className="nav-section-icon">{ADMIN_SECTION.icon}</span>
+                {ADMIN_SECTION.section}
+              </div>
+              <div className="nav-link-group">
+                {ADMIN_SECTION.links.map(link => (
+                  <button
+                    key={link.id}
+                    className={`nav-link nav-link--sub${activeView === link.id ? ' active' : ''}`}
+                    onClick={() => setActiveView(link.id)}
+                  >
+                    <span className="nav-link-dot" />
+                    <span className="nav-link-text">{link.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </nav>
 
         {activeView === 'calculator' && formOpen && (
@@ -207,8 +435,8 @@ export default function App() {
               onSubstrateSelect={handleSubstrateSelect}
               onCalculate={() => { handleCalculate(); setFormOpen(false) }}
               loading={loading}
-              onClientChange={setClientId}
-              onOrderChange={setOrderId}
+              onClientChange={(id, name) => { setClientId(id); setClientName(name) }}
+              onOrderChange={(id, name) => { setOrderId(id); setOrderName(name) }}
             />
           </aside>
         )}
@@ -218,6 +446,25 @@ export default function App() {
 
           {activeView === 'calculator' && (
             <>
+              {editingCalc && (
+                <div className="edit-mode-banner">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>
+                    Editing: <strong>{editingCalc.client_name || 'Unknown client'}</strong>
+                    {editingCalc.order_name && <> / {editingCalc.order_name}</>}
+                    {' '}— running calculation will save as a new version
+                  </span>
+                  <button
+                    className="edit-mode-exit"
+                    onClick={() => setEditingCalc(null)}
+                  >
+                    Exit Edit Mode
+                  </button>
+                </div>
+              )}
               <div className="calc-toolbar">
                 <button
                   className={`calc-toggle-btn${formOpen ? ' calc-toggle-btn--active' : ''}`}
@@ -228,17 +475,88 @@ export default function App() {
                     <polyline points="15 18 9 12 15 6"/>
                   </svg>
                 </button>
+
+                {result && (
+                  <button className="btn-download-pdf" onClick={handleDownloadPDF} title="Download PDF quote for client">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Download PDF
+                  </button>
+                )}
               </div>
-              <CylinderTable result={result} orderQty={inputs.order_qty} />
-              <PricingPanel result={result} orderQty={inputs.order_qty} />
+              <CylinderTable
+                result={result}
+                orderQty={inputs.order_qty}
+                selectedIdx={selectedCylIdx}
+                onApproveCylinder={handleApproveCylinder}
+                approvingCyl={approvingCyl}
+                hasSavedCalc={Boolean(result?.calculation_id)}
+              />
+              <PricingPanel
+                result={result}
+                orderQty={inputs.order_qty}
+                selectedIdx={selectedCylIdx}
+                inputs={inputs}
+              />
+
+              {pendingConfirm && (
+                <div className="confirm-quote-banner">
+                  <div className="confirm-quote-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                  </div>
+                  <div className="confirm-quote-text">
+                    <div className="confirm-quote-title">Quotation saved successfully</div>
+                    <div className="confirm-quote-sub">
+                      {pendingConfirm.type === 'version' ? 'New version created. ' : ''}
+                      Do you want to confirm this quotation for the client?
+                    </div>
+                  </div>
+                  <div className="confirm-quote-actions">
+                    <button
+                      className="confirm-quote-btn confirm-quote-btn--primary"
+                      onClick={handleConfirmQuote}
+                      disabled={confirmingQuote}
+                    >
+                      {confirmingQuote ? (
+                        <><span className="cop-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Confirming…</>
+                      ) : (
+                        <>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                          </svg>
+                          Confirm Quotation
+                        </>
+                      )}
+                    </button>
+                    <button
+                      className="confirm-quote-btn"
+                      onClick={() => setPendingConfirm(null)}
+                      disabled={confirmingQuote}
+                    >
+                      Not Now
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
-          {activeView === 'comparison'   && <ComparisonPage />}
-          {activeView === 'history'      && <QuoteHistory />}
-          {activeView === 'cylinders'    && <ManageCylinders />}
-          {activeView === 'substrates'   && <ManageSubstrates />}
-          {activeView === 'client-orders' && <CustomerOrdersPage />}
+          {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
+          {activeView === 'comparison'      && <ComparisonPage />}
+          {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} />}
+          {activeView === 'cylinders'       && <ManageCylinders />}
+          {activeView === 'substrates'      && <ManageSubstrates />}
+          {activeView === 'client-orders'   && <CustomerOrdersPage />}
+          {activeView === 'user-management' && isAdmin && <UserManagementPage currentUser={currentUser} />}
         </div>
       </div>
 

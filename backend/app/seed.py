@@ -1,8 +1,24 @@
 """
-Seed the database with the reference data that was hard-coded in the
-original front-end (TEETH_DATA and SUBSTRATES).
+Seed the database with reference data: cylinder teeth rows and substrates.
 
-Run with:  python -m app.seed
+Prerequisites:
+  1. MySQL is running and DATABASE_URL is set (or uses the docker-compose default).
+  2. Virtual environment is activated and dependencies are installed.
+
+Run from the `backend/` directory:
+
+    # Windows
+    venv\\Scripts\\activate
+    python -m app.seed
+
+    # macOS / Linux
+    source venv/bin/activate
+    python -m app.seed
+
+This script is safe to run multiple times — it skips data that already exists.
+After this, optionally seed sample clients and orders:
+
+    python -m app.seed_customers
 """
 
 from .database import Base, SessionLocal, engine

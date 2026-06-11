@@ -2,13 +2,48 @@
 
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
+from .auth import create_access_token, decode_token
 from .database import Base, engine, get_db
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.User:
+    token = credentials.credentials if credentials else None
+    payload = decode_token(token) if token else None
+    if not payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = crud.get_user(db, int(payload["sub"]))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User inactive or not found")
+    return user
+
+
+def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.User | None:
+    token = credentials.credentials if credentials else None
+    payload = decode_token(token) if token else None
+    if not payload:
+        return None
+    return crud.get_user(db, int(payload["sub"]))
 
 # ── DB bootstrap ──────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -42,6 +77,22 @@ def _migrate():
                 conn.execute(text(
                     "ALTER TABLE calculations ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'"
                 ))
+            if "custom_cost" not in existing:
+                conn.execute(text(
+                    "ALTER TABLE calculations ADD COLUMN custom_cost FLOAT NOT NULL DEFAULT 0"
+                ))
+            if "selected_teeth" not in existing:
+                conn.execute(text(
+                    "ALTER TABLE calculations ADD COLUMN selected_teeth INTEGER NULL"
+                ))
+            if "created_by_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN created_by_id INTEGER NULL"))
+            if "updated_by_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN updated_by_id INTEGER NULL"))
+            if "updated_at" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN updated_at DATETIME NULL"))
+            if "order_qty" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN order_qty INTEGER NULL"))
 
         # orders table — order_date
         if "orders" in tables:
@@ -66,6 +117,14 @@ def _migrate():
                 ))
 
 _migrate()
+
+# Seed default admin user (runs only if no users exist)
+from .database import SessionLocal as _SL  # noqa: E402
+_db = _SL()
+try:
+    crud.seed_admin(_db)
+finally:
+    _db.close()
 
 # ── Tag metadata (shown as section headers in Swagger) ────────────────────────
 TAGS = [
@@ -477,7 +536,11 @@ def set_teeth_availability(
         "and the pricing summary for the recommended cylinder."
     ),
 )
-def run_calculation(req: schemas.CalculationRequest, db: Session = Depends(get_db)):
+def run_calculation(
+    req: schemas.CalculationRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
     """
     **Main estimation endpoint.**
 
@@ -522,11 +585,13 @@ def run_calculation(req: schemas.CalculationRequest, db: Session = Depends(get_d
         foil_cost=req.foil_cost,
         exchange_rate=req.exchange_rate,
         teeth_data=teeth_data,
+        custom_cost=req.custom_cost,
     )
 
     calculation_id = None
     if req.save:
-        saved = crud.save_calculation(db, req, result)
+        uid = current_user.id if current_user else None
+        saved = crud.save_calculation(db, req, result, user_id=uid)
         calculation_id = saved.id
 
     return {**result, "calculation_id": calculation_id}
@@ -560,6 +625,8 @@ def get_calculations(db: Session = Depends(get_db)):
         if c.order_id:
             order = crud.get_order(db, c.order_id)
             order_name = order.name if order else None
+        created_by_name = c.created_by.username if c.created_by else None
+        updated_by_name = c.updated_by.username if c.updated_by else None
         out.append(schemas.CalculationHistoryOut(
             id=c.id,
             width=c.width,
@@ -568,7 +635,10 @@ def get_calculations(db: Session = Depends(get_db)):
             substrate_name=c.substrate_name,
             substrate_price=c.substrate_price,
             foil_cost=c.foil_cost,
+            custom_cost=c.custom_cost if c.custom_cost is not None else 0,
+            selected_teeth=c.selected_teeth,
             exchange_rate=c.exchange_rate,
+            order_qty=c.order_qty,
             created_at=c.created_at,
             client_id=c.client_id,
             order_id=c.order_id,
@@ -576,8 +646,29 @@ def get_calculations(db: Session = Depends(get_db)):
             order_name=order_name,
             status=c.status or "pending",
             pricing=c.result.get("pricing") if c.result else None,
+            created_by_name=created_by_name,
+            updated_by_name=updated_by_name,
+            updated_at=c.updated_at,
         ))
     return out
+
+
+@app.patch(
+    "/api/calculations/{calc_id}/cylinder",
+    tags=["history"],
+    summary="Update selected cylinder",
+)
+def update_cylinder(
+    calc_id: int,
+    body: schemas.CylinderUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
+    uid = current_user.id if current_user else None
+    obj = crud.update_selected_cylinder(db, calc_id, body.selected_teeth, user_id=uid)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    return {"id": obj.id, "selected_teeth": obj.selected_teeth}
 
 
 @app.patch(
@@ -586,7 +677,12 @@ def get_calculations(db: Session = Depends(get_db)):
     summary="Update quote status",
     response_description="The updated calculation record with the new status.",
 )
-def update_status(calc_id: int, body: schemas.StatusUpdate, db: Session = Depends(get_db)):
+def update_status(
+    calc_id: int,
+    body: schemas.StatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
     """
     Changes the status of a saved quote.
 
@@ -604,7 +700,8 @@ def update_status(calc_id: int, body: schemas.StatusUpdate, db: Session = Depend
             status_code=400,
             detail=f"Invalid status '{body.status}'. Must be one of: {', '.join(sorted(valid))}",
         )
-    obj = crud.update_calculation_status(db, calc_id, body.status)
+    uid = current_user.id if current_user else None
+    obj = crud.update_calculation_status(db, calc_id, body.status, user_id=uid)
     if obj is None:
         raise HTTPException(status_code=404, detail="Calculation not found")
     return {"id": obj.id, "status": obj.status}
@@ -627,6 +724,8 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
     obj = crud.get_calculation(db, calc_id)
     if obj is None:
         raise HTTPException(status_code=404, detail="Calculation not found")
+    client = crud.get_client(db, obj.client_id) if obj.client_id else None
+    order  = crud.get_order(db, obj.order_id)   if obj.order_id  else None
     return {
         "id": obj.id,
         "width": obj.width,
@@ -639,6 +738,169 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "created_at": obj.created_at,
         "client_id": obj.client_id,
         "order_id": obj.order_id,
+        "client_name": client.name if client else None,
+        "order_name":  order.name  if order  else None,
         "status": obj.status or "pending",
         "result": obj.result,
     }
+
+
+# ── Calculation versions ──────────────────────────────────────────────────────
+@app.get(
+    "/api/calculations/{calc_id}/versions",
+    tags=["history"],
+    summary="List edit versions for a calculation",
+)
+def list_versions(calc_id: int, db: Session = Depends(get_db)):
+    obj = crud.get_calculation(db, calc_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    versions = crud.list_versions(db, calc_id)
+    return [
+        {
+            "id": v.id,
+            "calculation_id": v.calculation_id,
+            "version_number": v.version_number,
+            "width": v.width,
+            "height": v.height,
+            "yield_pct": v.yield_pct,
+            "substrate_name": v.substrate_name,
+            "substrate_price": v.substrate_price,
+            "foil_cost": v.foil_cost,
+            "custom_cost": v.custom_cost,
+            "selected_teeth": v.selected_teeth,
+            "exchange_rate": v.exchange_rate,
+            "status": v.status,
+            "created_by_name": v.created_by.username if v.created_by else None,
+            "created_at": v.created_at,
+            "result": v.result,
+        }
+        for v in versions
+    ]
+
+
+@app.post(
+    "/api/calculations/{calc_id}/versions",
+    tags=["history"],
+    summary="Save an edited version of a calculation",
+)
+def create_version(
+    calc_id: int,
+    req: schemas.CalculationRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
+    obj = crud.get_calculation(db, calc_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    teeth_rows = crud.list_teeth(db)
+    if not teeth_rows:
+        raise HTTPException(status_code=400, detail="No teeth/paper reference data found.")
+    teeth_data = [{"teeth": t.teeth, "paper_size": t.paper_size} for t in teeth_rows]
+    result = calculator.calculate(
+        width=req.width,
+        height=req.height,
+        yield_pct=req.yield_pct,
+        substrate_price=req.substrate_price,
+        foil_cost=req.foil_cost,
+        exchange_rate=req.exchange_rate,
+        teeth_data=teeth_data,
+        custom_cost=req.custom_cost,
+    )
+    uid = current_user.id if current_user else None
+    version = crud.create_version(db, calc_id, req, result, uid)
+    return {**result, "version_id": version.id, "version_number": version.version_number, "calculation_id": calc_id}
+
+
+@app.patch(
+    "/api/calculations/versions/{version_id}/status",
+    tags=["history"],
+    summary="Update the status of a calculation version",
+)
+def update_version_status(
+    version_id: int,
+    body: schemas.StatusUpdate,
+    db: Session = Depends(get_db),
+):
+    version = crud.update_version_status(db, version_id, body.status)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return {
+        "id": version.id,
+        "calculation_id": version.calculation_id,
+        "version_number": version.version_number,
+        "status": version.status,
+    }
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+@app.post("/api/auth/login", response_model=schemas.TokenResponse, tags=["auth"])
+def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate with email + password. Returns a JWT bearer token."""
+    user = crud.authenticate_user(db, body.email, body.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_access_token(user.id, user.username, user.role)
+    return schemas.TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=schemas.UserOut.model_validate(user),
+    )
+
+
+@app.get("/api/auth/me", response_model=schemas.UserOut, tags=["auth"])
+def get_me(current_user: models.User = Depends(get_current_user)):
+    """Returns the currently authenticated user's profile."""
+    return current_user
+
+
+# ── User Management (admin only) ──────────────────────────────────────────────
+@app.get("/api/users", response_model=List[schemas.UserOut], tags=["users"])
+def list_users(_: models.User = Depends(require_admin), db: Session = Depends(get_db)):
+    """List all users. Admin only."""
+    return crud.list_users(db)
+
+
+@app.post("/api/users", response_model=schemas.UserOut, status_code=201, tags=["users"])
+def create_user(
+    data: schemas.UserCreate,
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create a new user. Admin only."""
+    if crud.get_user_by_email(db, data.email.strip().lower()):
+        raise HTTPException(status_code=409, detail="Email already in use")
+    if crud.get_user_by_username(db, data.username.strip()):
+        raise HTTPException(status_code=409, detail="Username already in use")
+    return crud.create_user(db, data)
+
+
+@app.patch("/api/users/{user_id}", response_model=schemas.UserOut, tags=["users"])
+def update_user(
+    user_id: int,
+    data: schemas.UserUpdate,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update a user's details. Admin only."""
+    if data.email:
+        existing = crud.get_user_by_email(db, data.email.strip().lower())
+        if existing and existing.id != user_id:
+            raise HTTPException(status_code=409, detail="Email already in use")
+    obj = crud.update_user(db, user_id, data)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return obj
+
+
+@app.delete("/api/users/{user_id}", status_code=204, tags=["users"])
+def delete_user(
+    user_id: int,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a user. Admin only. Cannot delete yourself."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    if not crud.delete_user(db, user_id):
+        raise HTTPException(status_code=404, detail="User not found")

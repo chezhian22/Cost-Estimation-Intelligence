@@ -35,6 +35,7 @@ def calculate(
     foil_cost: float,
     exchange_rate: float,
     teeth_data: List[dict],
+    custom_cost: float = 0,
 ) -> dict:
     """
     Run the full cylinder calculation.
@@ -88,11 +89,10 @@ def calculate(
         })
 
     label_widths = [r["label_width"] for r in rows]
-    label_heights = [r["label_height"] for r in rows]
 
     matched_width = xlookup_closest(width, label_widths, label_widths)
-    matched_height = xlookup_closest(height, label_heights, label_heights)
     matched_idx = label_widths.index(matched_width)
+    matched_height = rows[matched_idx]["label_height"]  # use actual height from the matched cylinder
 
     # Row that accommodates the most labels (Around x Across)
     best_paper_idx = 0
@@ -108,7 +108,8 @@ def calculate(
     labels_sqm = (10000 / label_w_cm) / label_h_cm
     adj_labels = labels_sqm * yield_pct / 100
 
-    cost_per_label = substrate_price / adj_labels if adj_labels > 0 else 0
+    total_material = substrate_price + foil_cost
+    cost_per_label = (total_material / adj_labels if adj_labels > 0 else 0) + custom_cost
     rate_15 = cost_per_label * 1500
     rate_175 = cost_per_label * 1750
     rate_2 = cost_per_label * 2000
@@ -128,6 +129,9 @@ def calculate(
             "matched_teeth": rows[matched_idx]["teeth"],
         },
         "pricing": {
+            "substrate_price": substrate_price,
+            "foil_cost": foil_cost,
+            "custom_cost": custom_cost,
             "label_w_cm": label_w_cm,
             "label_h_cm": label_h_cm,
             "labels_sqm": labels_sqm,
