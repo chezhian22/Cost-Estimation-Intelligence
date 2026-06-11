@@ -1,6 +1,20 @@
 import React from 'react'
 import ClientOrderSelector from './ClientOrderSelector'
 
+function blockNonNumeric(e) {
+  const allowed = ['Backspace','Delete','Tab','Enter','Escape',
+                   'ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End']
+  if (allowed.includes(e.key) || e.ctrlKey || e.metaKey) return
+  if (e.key >= '0' && e.key <= '9') return
+  if (e.key === '.') return
+  e.preventDefault()
+}
+
+function pasteNumbersOnly(e) {
+  const text = e.clipboardData.getData('text')
+  if (!/^\d*\.?\d*$/.test(text)) e.preventDefault()
+}
+
 export default function InputPanel({
   inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading,
   onClientChange, onOrderChange, fieldErrors = {},
@@ -25,6 +39,7 @@ export default function InputPanel({
             type="number" id="input-width" step="0.1" min="1" max="99999"
             className={fieldErrors.width ? 'input-error' : ''}
             value={inputs.width}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '') { onChange('width', ''); return }
@@ -42,6 +57,7 @@ export default function InputPanel({
             type="number" id="input-height" step="0.1" min="1" max="99999"
             className={fieldErrors.height ? 'input-error' : ''}
             value={inputs.height}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '') { onChange('height', ''); return }
@@ -59,6 +75,7 @@ export default function InputPanel({
             type="number" id="input-waste" step="1" min="1" max="100"
             className={fieldErrors.yield_pct ? 'input-error' : ''}
             value={inputs.yield_pct}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '') { onChange('yield_pct', ''); return }
@@ -92,6 +109,7 @@ export default function InputPanel({
             type="number" id="input-substrate-price" step="0.5" min="0"
             className={fieldErrors.substrate_price ? 'input-error' : ''}
             value={inputs.substrate_price}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => onChange('substrate_price', e.target.value)}
           />
           {fieldErrors.substrate_price && <span className="field-error">{fieldErrors.substrate_price}</span>}
@@ -102,6 +120,7 @@ export default function InputPanel({
           <input
             type="number" id="input-foil" step="0.5" min="0" max="99999"
             value={inputs.foil_cost}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '' || raw === '.') { onChange('foil_cost', raw); return }
@@ -119,6 +138,7 @@ export default function InputPanel({
             type="number" id="input-custom-cost" step="0.01" min="0" max="99999"
             placeholder="e.g. 0.05"
             value={inputs.custom_cost}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '' || raw === '.') { onChange('custom_cost', raw); return }
@@ -136,6 +156,7 @@ export default function InputPanel({
             type="number" id="input-exchange" step="0.5" min="1" max="99999"
             className={fieldErrors.exchange_rate ? 'input-error' : ''}
             value={inputs.exchange_rate}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => {
               const raw = e.target.value
               if (raw === '' || raw === '.') { onChange('exchange_rate', raw); return }
@@ -157,6 +178,7 @@ export default function InputPanel({
             placeholder="e.g. 10000"
             className={fieldErrors.order_qty ? 'input-error' : ''}
             value={inputs.order_qty}
+            onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
             onChange={(e) => onChange('order_qty', e.target.value)}
           />
           {fieldErrors.order_qty && <span className="field-error">{fieldErrors.order_qty}</span>}
