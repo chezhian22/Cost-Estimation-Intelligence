@@ -12,7 +12,7 @@ import ManageSubstrates from './components/ManageSubstrates'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
 import LoginPage from './components/LoginPage'
 import UserManagementPage from './components/UserManagementPage'
-import Dashboard from './components/Dashboard'
+import Dashboard from './pages/Dashboard/Dashboard'
 
 const DEFAULTS = {
   width: 64.5,
