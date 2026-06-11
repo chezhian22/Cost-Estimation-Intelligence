@@ -1,561 +1,375 @@
-const ind  = (n, d = 2) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
-const inr  = (n, d = 2) => `&#8377;&nbsp;${ind(n, d)}`
-const usd  = (n, d = 4) => `$&nbsp;${Number(n || 0).toFixed(d)}`
-const usd2 = (n)        => `$&nbsp;${Number(n || 0).toFixed(2)}`
-const f2   = (n)        => Number(n || 0).toFixed(2)
-const f3   = (n)        => Number(n || 0).toFixed(3)
+// Client-facing quotation PDF — Elverve invoice style.
+// NEVER include internal data: substrate cost, yield, waste, markup tiers, cost breakdown.
 
-export function generatePDF({
-  client = 'N/A',
-  order  = 'N/A',
-  quoteNo,
-  inputs = {},
-  cylinder = {},
-  pricing = {},
-  order_analytics = null,
-}) {
+const ind = (n, d = 2) =>
+  Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
+
+export function generatePDF(
+  { client = {}, order = {}, inputs = {}, approved_cylinder = {}, pricing = {} },
+  companySettings = {}
+) {
   const today   = new Date()
+  const year    = today.getFullYear()
+  const quoteNo = `QT-${year}-${Math.floor(1000 + Math.random() * 9000)}`
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  const valid   = new Date(today); valid.setDate(valid.getDate() + 30)
-  const validStr = valid.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
-  const p   = pricing
-  const cyl = cylinder
-  const inp = inputs
+  const cyl = approved_cylinder
+  const qty = Number(inputs.total_qty) || 0
+  const ratePerLabel = Number(pricing.selling_price_per_label || 0)
+  const subtotal     = Number(pricing.total_cost_inr || (qty * ratePerLabel) || 0)
+  const totalUsd     = Number(pricing.total_cost_usd || 0)
 
-  const usdRatio = (p.rate_2 && p.price_usd_1000) ? p.price_usd_1000 / p.rate_2 : 0
+  // ── Tax calculation ──
+  const cgstPct = (companySettings.cgst_pct != null && companySettings.cgst_pct !== '')
+    ? Number(companySettings.cgst_pct) : null
+  const sgstPct = (companySettings.sgst_pct != null && companySettings.sgst_pct !== '')
+    ? Number(companySettings.sgst_pct) : null
+  const hasTax = cgstPct !== null && sgstPct !== null && !isNaN(cgstPct) && !isNaN(sgstPct)
 
-  // Cost breakdown per label
-  const adjLabels   = p.adj_labels  || 1
-  const subCostLbl  = (p.substrate_price + (p.foil_cost || 0)) / adjLabels
-  const customLbl   = p.custom_cost || inp.custom_cost || 0
-  const baseCostLbl = subCostLbl + customLbl
+  const cgstAmt  = hasTax ? subtotal * cgstPct / 100 : 0
+  const sgstAmt  = hasTax ? subtotal * sgstPct / 100 : 0
+  const totalInr = hasTax ? subtotal + cgstAmt + sgstAmt : subtotal
 
-  // Tier rows
-  const tiers = [
-    { label: '1 : 1.5',  inr1000: p.rate_15,  usd1000: p.rate_15  * usdRatio, inrLbl: p.rate_15  / 1000, usdLbl: p.rate_15  * usdRatio / 1000 },
-    { label: '1 : 1.75', inr1000: p.rate_175, usd1000: p.rate_175 * usdRatio, inrLbl: p.rate_175 / 1000, usdLbl: p.rate_175 * usdRatio / 1000 },
-    { label: '1 : 2',    inr1000: p.rate_2,   usd1000: p.price_usd_1000,      inrLbl: p.rate_2   / 1000, usdLbl: p.price_usd_label,             highlight: true },
-  ]
-
-  const specRows = [
-    ['Label Width',    `${f2(inp.width)} mm`],
-    ['Label Height',   `${f2(inp.height)} mm`],
-    ['Yield',          `${inp.yield_pct}%`],
-    ['Substrate',      inp.substrate_name || 'Custom'],
-    ['Substrate Cost', `&#8377; ${f2(inp.substrate_price)} / m²`],
-    ['Foil Cost',      `&#8377; ${f2(inp.foil_cost)} / m²`],
-    ['Custom Cost',    `&#8377; ${f3(inp.custom_cost)} / label`],
-    ['Exchange Rate',  `&#8377; ${inp.exchange_rate} per $1`],
-  ]
-
-  const cylRows = [
-    ['Cylinder Teeth', cyl.teeth],
-    ['Circumference',  `${f2(cyl.circumference)} mm`],
-    ['Label Width (Cyl)', `${f2(cyl.label_width)} mm`],
-    ['Label Height (Cyl)', `${f2(cyl.label_height)} mm`],
-    ['Around × Across', `${cyl.around} × ${cyl.across}`],
-    ['Labels / Repeat', (cyl.around || 0) * (cyl.across || 0)],
-    ['Paper Size',     `${cyl.paper_size} mm`],
-    ['Efficiency',     `${f2(cyl.efficiency)}%`],
-  ]
-
-  const pricingRows = [
-    ['Label Size (cm)',   `${f2(p.label_w_cm)} × ${f2(p.label_h_cm)} cm`],
-    ['Labels / m²',       f2(p.labels_sqm)],
-    ['Adj. Labels / m²',  f2(p.adj_labels)],
-    ['Substrate Cost / label', `&#8377; ${f3(subCostLbl)}`],
-    ['Foil + Custom / label',  `&#8377; ${f3(customLbl)}`],
-    ['Base Cost / label (Total)', `&#8377; ${f3(baseCostLbl)}`, true],
-  ]
+  const subLine = [
+    inputs.substrate,
+    inputs.label_width_mm && inputs.label_height_mm
+      ? `${Number(inputs.label_width_mm).toFixed(1)} × ${Number(inputs.label_height_mm).toFixed(1)} mm`
+      : null,
+    cyl.teeth   ? `Cyl. ${cyl.teeth}T`                              : null,
+    cyl.across && cyl.around ? `Layout ${cyl.across}×${cyl.around}` : null,
+  ].filter(Boolean).join(' · ')
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Quote ${quoteNo} — ${client}</title>
+<title>${quoteNo}</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:12px;
+  color:#1a1a2e;
+  background:#f0f2f5;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
 
-  body {
-    font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 11px;
-    color: #1a1a2e;
-    background: #f0f2f5;
-  }
+/* ─── Print bar ─── */
+.print-bar{
+  position:fixed;top:14px;right:18px;
+  display:flex;gap:8px;z-index:99;
+}
+.btn-print{
+  background:#1abcab;color:#fff;border:none;
+  border-radius:6px;padding:9px 22px;
+  font-size:13px;font-weight:700;cursor:pointer;
+  font-family:Arial,sans-serif;
+}
+.btn-print:hover{background:#14a093}
+.btn-close{
+  background:#e2e8f0;color:#475569;border:none;
+  border-radius:6px;padding:9px 16px;
+  font-size:13px;font-weight:700;cursor:pointer;
+  font-family:Arial,sans-serif;
+}
+.btn-close:hover{background:#cbd5e1}
 
-  .page {
-    width: 794px;
-    min-height: 1123px;
-    margin: 24px auto;
-    background: #fff;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.14);
-    border-radius: 4px;
-    overflow: hidden;
-  }
+/* ─── Invoice card ─── */
+.invoice{
+  width:760px;
+  margin:28px auto;
+  background:#fff;
+  border-radius:6px;
+  box-shadow:0 4px 30px rgba(0,0,0,0.14);
+  overflow:hidden;
+}
 
-  /* ── Header ── */
-  .hdr {
-    background: linear-gradient(135deg, #0d7377 0%, #14a085 60%, #1abcab 100%);
-    padding: 22px 28px 18px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    position: relative;
-  }
-  .hdr::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 4px;
-    background: repeating-linear-gradient(90deg, rgba(255,255,255,0.25) 0, rgba(255,255,255,0.25) 8px, transparent 8px, transparent 16px);
-  }
-  .hdr-left h1 {
-    font-size: 20px;
-    font-weight: 800;
-    color: #fff;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
-  }
-  .hdr-left h1 span { color: #b3f5ef; font-weight: 400; }
-  .hdr-left p {
-    font-size: 9.5px;
-    color: rgba(255,255,255,0.82);
-    margin-top: 4px;
-    line-height: 1.5;
-  }
-  .hdr-right {
-    text-align: right;
-  }
-  .hdr-right .badge {
-    display: inline-block;
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.30);
-    border-radius: 4px;
-    padding: 5px 12px;
-    color: #fff;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-  .hdr-right .qno {
-    font-size: 13px;
-    font-weight: 800;
-    color: #fff;
-    letter-spacing: -0.01em;
-  }
-  .hdr-right .qdate {
-    font-size: 9px;
-    color: rgba(255,255,255,0.75);
-    margin-top: 3px;
-  }
+/* ─── Header ─── */
+.inv-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  padding:32px 36px 26px;
+  gap:20px;
+}
+.co-name{
+  font-size:24px;font-weight:900;
+  color:#1abcab;letter-spacing:-0.02em;line-height:1;
+}
+.co-sub{
+  font-size:9px;font-weight:700;
+  letter-spacing:0.12em;text-transform:uppercase;
+  color:#94a3b8;margin-top:3px;
+}
+.co-meta{
+  font-size:10px;color:#64748b;
+  margin-top:10px;line-height:1.8;
+}
 
-  /* ── Body ── */
-  .body { padding: 20px 28px 24px; }
+/* Right block — all right-aligned */
+.hdr-right{
+  text-align:right;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:0;
+}
+.doc-type{
+  font-size:30px;font-weight:900;
+  color:#1e293b;letter-spacing:-0.03em;
+  line-height:1;
+}
+.quote-num{
+  font-size:13px;font-weight:700;
+  color:#1abcab;
+  margin-top:6px;
+}
+.quote-date{
+  font-size:10px;color:#64748b;
+  margin-top:3px;
+}
+.quote-valid{
+  font-size:10px;color:#64748b;
+  margin-top:2px;
+}
 
-  /* ── 2-col bill row ── */
-  .bill-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-bottom: 18px;
-  }
-  .bill-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 12px 14px;
-    background: #f8fafc;
-  }
-  .bill-card h3 {
-    font-size: 8px;
-    font-weight: 700;
-    color: #64748b;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .bill-card .bill-name {
-    font-size: 13px;
-    font-weight: 700;
-    color: #0d7377;
-    line-height: 1.3;
-  }
-  .bill-card .bill-sub {
-    font-size: 9.5px;
-    color: #64748b;
-    margin-top: 2px;
-  }
-  .bill-card .qmeta-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9.5px;
-    margin-top: 4px;
-    color: #475569;
-  }
-  .bill-card .qmeta-row span:last-child { font-weight: 600; color: #1e293b; }
+/* ─── Teal divider ─── */
+.divider{border:none;height:3px;background:#1abcab;margin:0 36px}
 
-  /* ── Section heading ── */
-  .sec-head {
-    background: #0d7377;
-    color: #fff;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 5px 12px;
-    border-radius: 3px;
-    margin: 16px 0 8px;
-  }
+/* ─── Bill to ─── */
+.bill-section{
+  padding:24px 36px 20px;
+  border-bottom:1px solid #f1f5f9;
+}
+.bill-label{
+  font-size:8px;font-weight:800;
+  letter-spacing:0.14em;text-transform:uppercase;
+  color:#94a3b8;margin-bottom:8px;
+}
+.bill-name{
+  font-size:16px;font-weight:800;
+  color:#1e293b;line-height:1.2;margin-bottom:4px;
+}
+.bill-detail{font-size:10.5px;color:#64748b;line-height:1.8}
+.order-ref{
+  margin-top:10px;padding-top:10px;
+  border-top:1px dashed #e2e8f0;
+  font-size:10px;color:#64748b;line-height:1.8;
+}
 
-  /* ── 2-col spec grid ── */
-  .spec-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .spec-cell {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 12px;
-    border-bottom: 1px solid #f1f5f9;
-    gap: 8px;
-  }
-  .spec-cell:nth-child(odd)  { background: #fff; }
-  .spec-cell:nth-child(even) { background: #f8fafc; }
-  .spec-cell:last-child, .spec-cell:nth-last-child(2):nth-child(odd) { border-bottom: none; }
-  .spec-lbl { color: #64748b; font-size: 9.5px; }
-  .spec-val { font-weight: 600; color: #1e293b; font-size: 9.5px; text-align: right; }
-  .spec-val.hl { color: #0d7377; font-weight: 700; }
+/* ─── Items table ─── */
+.items-wrap{padding:0 36px}
+table.items{
+  width:100%;border-collapse:collapse;
+  margin:20px 0 0;
+}
+table.items thead tr{background:#1e293b}
+table.items thead th{
+  padding:11px 14px;
+  font-size:10px;font-weight:700;
+  letter-spacing:0.08em;text-transform:uppercase;
+  color:#fff;text-align:left;
+}
+table.items thead th:not(:first-child){text-align:right}
+table.items tbody tr:nth-child(even){background:#f8fafc}
+table.items tbody td{
+  padding:14px 14px;
+  font-size:11px;
+  vertical-align:top;
+  border-bottom:1px solid #f1f5f9;
+}
+table.items tbody td:not(:first-child){text-align:right;font-weight:600}
+.item-main{font-weight:700;color:#1e293b;font-size:12px;margin-bottom:4px}
+.item-sub{font-size:10px;color:#94a3b8;line-height:1.5}
 
-  /* ── Pricing table ── */
-  .price-table {
-    width: 100%;
-    border-collapse: collapse;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-  }
-  .price-table thead tr {
-    background: #1e293b;
-    color: #fff;
-  }
-  .price-table thead th {
-    padding: 7px 10px;
-    font-size: 8.5px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-align: center;
-  }
-  .price-table thead th:first-child { text-align: left; }
-  .price-table tbody tr td {
-    padding: 7px 10px;
-    font-size: 9.5px;
-    text-align: center;
-    border-bottom: 1px solid #f1f5f9;
-  }
-  .price-table tbody tr td:first-child { text-align: left; font-weight: 700; color: #0d7377; }
-  .price-table tbody tr:nth-child(odd)  { background: #fff; }
-  .price-table tbody tr:nth-child(even) { background: #f0fffe; }
-  .price-table tbody tr.hl-row {
-    background: #e6faf8 !important;
-    border-left: 3px solid #0d7377;
-  }
-  .price-table tbody tr.hl-row td { font-weight: 700; color: #0d7377; }
+/* ─── Totals ─── */
+.totals-wrap{
+  display:flex;justify-content:flex-end;
+  padding:16px 36px 0;
+}
+.totals-table{width:300px}
+.tot-row{
+  display:flex;justify-content:space-between;
+  align-items:center;padding:7px 0;
+  border-bottom:1px solid #f1f5f9;
+  font-size:11.5px;
+}
+.tot-row:last-child{border-bottom:none}
+.tot-lbl{color:#64748b}
+.tot-val{font-weight:700;color:#1e293b}
+.tot-final{
+  background:#1e293b;
+  border-radius:8px;
+  padding:14px 16px !important;
+  margin-top:10px;
+  border:none !important;
+}
+.tot-final .tot-lbl{color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:0.04em}
+.tot-final .tot-val{color:#fff;font-size:16px;font-weight:900;font-family:Arial,sans-serif}
+.tot-usd{
+  background:#eff6ff;border:1px solid #bfdbfe;
+  border-radius:6px;padding:10px 16px !important;
+  margin-top:8px;border-bottom:1px solid #bfdbfe !important;
+}
+.tot-usd .tot-lbl{color:#2563eb;font-weight:700}
+.tot-usd .tot-val{color:#1d4ed8;font-size:14px;font-weight:900}
+.gst-note{
+  font-size:9px;color:#94a3b8;
+  margin-top:6px;text-align:right;
+}
 
-  /* ── Tier boxes ── */
-  .tier-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-top: 8px;
-  }
-  .tier-box {
-    border: 1.5px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 12px 14px;
-    text-align: center;
-    background: #f8fafc;
-  }
-  .tier-box.hl {
-    border-color: #0d7377;
-    background: #e6faf8;
-    box-shadow: 0 2px 12px rgba(13,115,119,0.15);
-  }
-  .tier-box .t-label {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #94a3b8;
-    margin-bottom: 6px;
-  }
-  .tier-box.hl .t-label { color: #0d7377; }
-  .tier-box .t-ratio {
-    font-size: 15px;
-    font-weight: 800;
-    color: #1e293b;
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-  .tier-box.hl .t-ratio { color: #0d7377; }
-  .tier-box .t-inr {
-    font-size: 13px;
-    font-weight: 800;
-    color: #1e293b;
-  }
-  .tier-box.hl .t-inr { color: #0d7377; }
-  .tier-box .t-sub { font-size: 8.5px; color: #64748b; margin-top: 4px; }
-  .tier-box .t-usd { font-size: 10px; font-weight: 600; color: #475569; margin-top: 3px; }
-  .tier-box.hl .t-usd { color: #0d7377; }
-  .tier-box .rec-badge {
-    display: inline-block;
-    background: #0d7377;
-    color: #fff;
-    font-size: 7px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 2px 7px;
-    border-radius: 100px;
-    margin-bottom: 6px;
-  }
+/* ─── Footer ─── */
+.inv-footer{
+  display:flex;justify-content:space-between;
+  align-items:flex-start;gap:20px;
+  padding:18px 36px 22px;
+  margin-top:24px;
+  background:#f8fafc;
+  border-top:1px solid #e2e8f0;
+}
+.footer-terms{font-size:9.5px;color:#64748b;line-height:1.8}
+.footer-terms strong{color:#475569}
+.footer-contact{text-align:right;font-size:9.5px;color:#64748b;line-height:1.8}
+.footer-contact strong{color:#1abcab;display:block;font-size:10px;margin-bottom:2px}
 
-  /* ── Order Analytics ── */
-  .analytics-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin-top: 8px;
-  }
-  .an-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 12px;
-    background: #f8fafc;
-    text-align: center;
-  }
-  .an-card.inr { border-color: #86efac; background: #f0fdf4; }
-  .an-card.usd { border-color: #93c5fd; background: #eff6ff; }
-  .an-lbl { font-size: 8px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-  .an-val { font-size: 12px; font-weight: 800; color: #1e293b; line-height: 1.1; }
-  .an-card.inr .an-val { color: #16a34a; }
-  .an-card.usd .an-val { color: #2563eb; }
-
-  /* ── Footer ── */
-  .footer {
-    margin-top: 24px;
-    padding-top: 12px;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .footer-left { font-size: 8.5px; color: #64748b; line-height: 1.6; }
-  .footer-right { text-align: right; font-size: 8px; color: #94a3b8; }
-  .footer-right .sig { font-size: 9px; font-weight: 700; color: #0d7377; margin-bottom: 2px; }
-
-  /* ── Print button ── */
-  .print-wrap {
-    position: fixed;
-    top: 16px; right: 20px;
-    display: flex;
-    gap: 8px;
-    z-index: 99;
-  }
-  .btn-print {
-    background: #0d7377;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 9px 20px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 2px 10px rgba(13,115,119,0.35);
-    font-family: 'Segoe UI', Arial, sans-serif;
-  }
-  .btn-print:hover { background: #0a5c60; }
-  .btn-close {
-    background: #e2e8f0;
-    color: #475569;
-    border: none;
-    border-radius: 6px;
-    padding: 9px 16px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: 'Segoe UI', Arial, sans-serif;
-  }
-  .btn-close:hover { background: #cbd5e1; }
-
-  @media print {
-    body { background: #fff; }
-    .page { margin: 0; box-shadow: none; border-radius: 0; }
-    .print-wrap { display: none; }
-  }
+@media print{
+  body{background:#fff}
+  .invoice{margin:0;box-shadow:none;border-radius:0}
+  .print-bar{display:none}
+}
 </style>
 </head>
 <body>
 
-<div class="print-wrap">
-  <button class="btn-print" onclick="window.print()">&#128424; Print / Save PDF</button>
-  <button class="btn-close" onclick="window.close()">Close</button>
+<div class="print-bar">
+  <button class="btn-print" onclick="window.print()">&#128424;&nbsp; Print / Save PDF</button>
+  <button class="btn-close" onclick="window.close()">&#10005; Close</button>
 </div>
 
-<div class="page">
+<div class="invoice">
 
   <!-- Header -->
-  <div class="hdr">
-    <div class="hdr-left">
-      <h1>CHROMAPRINT <span>INDIA</span></h1>
-      <p>
-        SF No. 215/2, Mettupalayam Road, Coimbatore &ndash; 641 022<br>
-        +91-422-2642738 &nbsp;&middot;&nbsp; sales@chromaprintindia.com
-      </p>
+  <div class="inv-header">
+    <div>
+      <div class="co-name">CHROMAPRINT</div>
+      <div class="co-sub">India Private Limited</div>
+      <div class="co-meta">
+        Coimbatore &ndash; 641 022, India<br>
+        +91-422-2642738 &nbsp;|&nbsp; sales@chromaprintindia.com
+      </div>
     </div>
     <div class="hdr-right">
-      <div class="badge">Price Quotation</div>
-      <div class="qno">${quoteNo}</div>
-      <div class="qdate">Date: ${dateStr}</div>
+      <div class="doc-type">QUOTATION</div>
+      <div class="quote-num"># ${quoteNo}</div>
+      <div class="quote-date">Date: ${dateStr}</div>
+      <div class="quote-valid">Valid: 30 days from issue</div>
     </div>
   </div>
 
-  <!-- Body -->
-  <div class="body">
+  <hr class="divider">
 
-    <!-- Bill To + Quote Details -->
-    <div class="bill-row">
-      <div class="bill-card">
-        <h3>Bill To</h3>
-        <div class="bill-name">${client}</div>
-        <div class="bill-sub">Order: ${order}</div>
-      </div>
-      <div class="bill-card">
-        <h3>Quote Details</h3>
-        <div class="qmeta-row"><span>Quote Number</span><span>${quoteNo}</span></div>
-        <div class="qmeta-row"><span>Date Issued</span><span>${dateStr}</span></div>
-        <div class="qmeta-row"><span>Valid Until</span><span>${validStr}</span></div>
-        <div class="qmeta-row"><span>Prepared By</span><span>Chromaprint India Pvt. Ltd.</span></div>
-      </div>
+  <!-- Bill To -->
+  <div class="bill-section">
+    <div class="bill-label">Bill To</div>
+    <div class="bill-name">${client.name || '—'}</div>
+    <div class="bill-detail">
+      ${[client.location, client.email, client.phone].filter(Boolean).join('<br>')}
     </div>
+    ${order.label || order.order_id ? `
+    <div class="order-ref">
+      ${order.label    ? `<strong>Order:</strong> ${order.label}<br>` : ''}
+      ${order.order_id ? `<strong>Ref:</strong>&nbsp; ${order.order_id}` : ''}
+    </div>` : ''}
+  </div>
 
-    <!-- Label + Cylinder Specification -->
-    <div class="sec-head">Label &amp; Cylinder Specification</div>
-    <div class="spec-grid">
-      ${specRows.map(([l, v]) => `
-      <div class="spec-cell">
-        <span class="spec-lbl">${l}</span>
-        <span class="spec-val">${v}</span>
-      </div>`).join('')}
-      ${cylRows.map(([l, v]) => `
-      <div class="spec-cell">
-        <span class="spec-lbl">${l}</span>
-        <span class="spec-val">${v}</span>
-      </div>`).join('')}
-    </div>
-
-    <!-- Cost Analysis -->
-    <div class="sec-head">Cost Analysis per Label</div>
-    <div class="spec-grid">
-      ${pricingRows.map(([l, v, hl]) => `
-      <div class="spec-cell">
-        <span class="spec-lbl">${l}</span>
-        <span class="spec-val${hl ? ' hl' : ''}">${v}</span>
-      </div>`).join('')}
-    </div>
-
-    <!-- Pricing Table -->
-    <div class="sec-head">Rate Tier Pricing</div>
-    <table class="price-table">
+  <!-- Items -->
+  <div class="items-wrap">
+    <table class="items">
       <thead>
         <tr>
-          <th>Tier</th>
-          <th>&#8377; / 1000 Labels</th>
-          <th>$ / 1000 Labels</th>
-          <th>&#8377; / Label</th>
-          <th>$ / Label</th>
+          <th style="width:50%">Item</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Amount</th>
         </tr>
       </thead>
       <tbody>
-        ${tiers.map(t => `
-        <tr${t.highlight ? ' class="hl-row"' : ''}>
-          <td>${t.label}</td>
-          <td>${ind(t.inr1000)}</td>
-          <td>${usd2(t.usd1000)}</td>
-          <td>${ind(t.inrLbl, 3)}</td>
-          <td>${usd(t.usdLbl)}</td>
-        </tr>`).join('')}
+        <tr>
+          <td>
+            <div class="item-main">Pressure Sensitive Labels</div>
+            ${subLine ? `<div class="item-sub">${subLine}</div>` : ''}
+          </td>
+          <td>${qty > 0 ? qty.toLocaleString('en-IN') + ' labels' : '—'}</td>
+          <td>&#8377;&nbsp;${ratePerLabel.toFixed(4)}&nbsp;/ label</td>
+          <td>&#8377;&nbsp;${ind(subtotal)}</td>
+        </tr>
       </tbody>
     </table>
+  </div>
 
-    <!-- Tier Visual Boxes -->
-    <div class="tier-row">
-      ${tiers.map(t => `
-      <div class="tier-box${t.highlight ? ' hl' : ''}">
-        ${t.highlight ? '<div class="rec-badge">Recommended</div>' : ''}
-        <div class="t-label">Ratio</div>
-        <div class="t-ratio">${t.label}</div>
-        <div class="t-inr">&#8377;&nbsp;${ind(t.inr1000)}</div>
-        <div class="t-sub">per 1000 labels</div>
-        <div class="t-usd">$&nbsp;${Number(t.usd1000 || 0).toFixed(2)} / 1000 labels</div>
-      </div>`).join('')}
+  <!-- Totals -->
+  <div class="totals-wrap">
+    <div class="totals-table">
+
+      <div class="tot-row">
+        <span class="tot-lbl">Subtotal</span>
+        <span class="tot-val">&#8377;&nbsp;${ind(subtotal)}</span>
+      </div>
+
+      ${hasTax ? `
+      <div class="tot-row">
+        <span class="tot-lbl">CGST @ ${cgstPct}%</span>
+        <span class="tot-val">&#8377;&nbsp;${ind(cgstAmt)}</span>
+      </div>
+      <div class="tot-row">
+        <span class="tot-lbl">SGST @ ${sgstPct}%</span>
+        <span class="tot-val">&#8377;&nbsp;${ind(sgstAmt)}</span>
+      </div>
+      ` : `
+      <div class="tot-row">
+        <span class="tot-lbl">GST</span>
+        <span class="tot-val" style="color:#94a3b8;font-weight:500">As applicable</span>
+      </div>
+      `}
+
+      <div class="tot-row tot-final">
+        <span class="tot-lbl">TOTAL (INR)</span>
+        <span class="tot-val">&#8377;&nbsp;${ind(totalInr)}</span>
+      </div>
+
+      ${totalUsd > 0 ? `
+      <div class="tot-row tot-usd">
+        <span class="tot-lbl">Total (USD)</span>
+        <span class="tot-val">$&nbsp;${Number(totalUsd).toFixed(2)}</span>
+      </div>` : ''}
+
+      ${!hasTax ? `<p class="gst-note">* GST will be charged as applicable</p>` : ''}
+
     </div>
+  </div>
 
-    ${order_analytics ? `
-    <!-- Order Analytics -->
-    <div class="sec-head">Order Analytics &mdash; ${Number(order_analytics.qty).toLocaleString('en-IN')} Labels</div>
-    <div class="analytics-grid">
-      <div class="an-card">
-        <div class="an-lbl">Substrate Area</div>
-        <div class="an-val">${ind(order_analytics.sqm_needed)} m&sup2;</div>
-      </div>
-      <div class="an-card">
-        <div class="an-lbl">Linear Meters</div>
-        <div class="an-val">${ind(order_analytics.linear_meters)} m</div>
-      </div>
-      <div class="an-card inr">
-        <div class="an-lbl">Total Cost (INR)</div>
-        <div class="an-val">&#8377;&nbsp;${ind(order_analytics.total_inr_2, 0)}</div>
-      </div>
-      <div class="an-card usd">
-        <div class="an-lbl">Total Cost (USD)</div>
-        <div class="an-val">$&nbsp;${Number(order_analytics.total_usd_2 || 0).toFixed(2)}</div>
-      </div>
-    </div>` : ''}
-
-    <!-- Footer -->
-    <div class="footer">
-      <div class="footer-left">
-        <strong>Chromaprint India Private Limited</strong><br>
-        SF No. 215/2, Mettupalayam Road, Coimbatore &ndash; 641 022, Tamil Nadu<br>
-        Tel: +91-422-2642738 &nbsp;&middot;&nbsp; Email: sales@chromaprintindia.com
-      </div>
-      <div class="footer-right">
-        <div class="sig">Authorised Signatory</div>
-        <div>Chromaprint India Pvt. Ltd.</div>
-        <div style="margin-top:6px;color:#cbd5e1">Generated: ${dateStr}</div>
-      </div>
+  <!-- Footer -->
+  <div class="inv-footer">
+    <div class="footer-terms">
+      <strong>Terms &amp; Conditions</strong><br>
+      Valid 30 days &nbsp;&middot;&nbsp; GST applicable as per government norms &nbsp;&middot;&nbsp;
+      50% advance required before production<br>
+      Subject to substrate availability &nbsp;&middot;&nbsp; Prices subject to change without notice
     </div>
+    <div class="footer-contact">
+      <strong>Chromaprint India Pvt. Ltd.</strong>
+      sales@chromaprintindia.com<br>
+      +91-422-2642739
+    </div>
+  </div>
 
-  </div><!-- /body -->
-</div><!-- /page -->
+</div>
 </body>
 </html>`
 
   const win = window.open('', '_blank')
-  if (!win) {
-    alert('Please allow pop-ups for this site to generate the PDF quote.')
-    return
-  }
+  if (!win) { alert('Please allow pop-ups to generate the PDF quote.'); return }
   win.document.write(html)
   win.document.close()
   win.focus()

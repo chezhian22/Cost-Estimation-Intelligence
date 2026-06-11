@@ -126,6 +126,8 @@ def _migrate():
                 ("website",    "VARCHAR(200) NULL"),
                 ("gst_number", "VARCHAR(50)  NULL"),
                 ("updated_at", "DATETIME NULL"),
+                ("cgst_pct",   "FLOAT NULL"),
+                ("sgst_pct",   "FLOAT NULL"),
             ]:
                 if col not in cs_cols:
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))

@@ -50,8 +50,11 @@ const FIELDS = [
       </svg>
     ),
     rows: [
-      { key: 'gst_number', label: 'GST Number', placeholder: '33AAACB0000A1Z5' },
+      { key: 'gst_number', label: 'GST Number',  placeholder: '33AAACB0000A1Z5' },
+      { key: 'cgst_pct',   label: 'CGST %',       placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any' },
+      { key: 'sgst_pct',   label: 'SGST %',       placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any' },
     ],
+    hint: 'CGST + SGST = Total GST. Set by admin as per applicable tax rate.',
   },
 ]
 
@@ -197,14 +200,14 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {FIELDS.map(({ section, icon, rows }) => (
+        {FIELDS.map(({ section, icon, rows, hint }) => (
           <div key={section} className="sp-section">
             <div className="sp-section-head">
               <span className="sp-section-icon">{icon}</span>
               {section}
             </div>
             <div className="sp-grid">
-              {rows.map(({ key, label, placeholder, required, type, wide }) => (
+              {rows.map(({ key, label, placeholder, required, type, wide, min, max, step }) => (
                 <div key={key} className={`sp-field${wide ? ' sp-field--wide' : ''}`}>
                   <label className="sp-label">
                     {label}
@@ -213,13 +216,21 @@ export default function SettingsPage() {
                   <input
                     className="sp-input"
                     type={type || 'text'}
-                    value={form[key] || ''}
+                    value={form[key] ?? ''}
                     placeholder={placeholder}
-                    onChange={e => handleChange(key, e.target.value)}
+                    min={min}
+                    max={max}
+                    step={step}
+                    onChange={e => handleChange(key, e.target.value === '' ? null : (type === 'number' ? parseFloat(e.target.value) : e.target.value))}
                   />
                 </div>
               ))}
             </div>
+            {hint && (
+              <p style={{ marginTop: '0.55rem', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {hint}
+              </p>
+            )}
           </div>
         ))}
       </form>

@@ -121,6 +121,8 @@ class CompanySettings(Base):
     phone          = Column(String(30),  nullable=True)
     website        = Column(String(200), nullable=True)
     gst_number     = Column(String(50),  nullable=True)
+    cgst_pct       = Column(Float,       nullable=True, default=None)
+    sgst_pct       = Column(Float,       nullable=True, default=None)
     updated_at     = Column(DateTime,    nullable=True)
 
 

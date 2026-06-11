@@ -272,76 +272,67 @@ export default function App() {
       .finally(() => setApprovingCyl(false))
   }
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!result) return
     const selIdx = selectedCylIdx ?? result.matched.index
     const selRow = result.rows[selIdx]
     const p      = result.pricing
     const qty    = parseFloat(inputs.order_qty) || 0
-    const year   = new Date().getFullYear()
-    const rand   = String(Math.floor(1000 + Math.random() * 9000))
 
-    // Recompute pricing for custom-selected cylinder (mirrors PricingPanel logic)
+    // Recompute pricing when a non-matched cylinder is selected (mirrors PricingPanel)
     const isCustomSel = selIdx !== result.matched.index
     const effectiveP  = (isCustomSel && selRow) ? (() => {
       const label_w_cm = selRow.label_width  / 10
       const label_h_cm = selRow.label_height / 10
       const labels_sqm = (10000 / label_w_cm) / label_h_cm
-      const yld        = parseFloat(inputs.yield_pct) || 85
-      const adj_labels = labels_sqm * yld / 100
-      const substrate_price = parseFloat(inputs.substrate_price) || 0
-      const foil_cost       = parseFloat(inputs.foil_cost)       || 0
-      const custom_cost     = parseFloat(inputs.custom_cost)     || 0
-      const exchange_rate   = parseFloat(inputs.exchange_rate)   || 85
-      const cost_per_label  = (adj_labels > 0 ? (substrate_price + foil_cost) / adj_labels : 0) + custom_cost
-      const rate_2 = cost_per_label * 2000
+      const adj_labels = labels_sqm * (parseFloat(inputs.yield_pct) || 85) / 100
+      const sub        = parseFloat(inputs.substrate_price) || 0
+      const foil       = parseFloat(inputs.foil_cost)       || 0
+      const custom     = parseFloat(inputs.custom_cost)     || 0
+      const exch       = parseFloat(inputs.exchange_rate)   || 85
+      const cpp        = (adj_labels > 0 ? (sub + foil) / adj_labels : 0) + custom
+      const r2         = cpp * 2000
       return {
-        label_w_cm, label_h_cm, labels_sqm, adj_labels,
-        substrate_price, foil_cost, custom_cost,
-        rate_15:  cost_per_label * 1500,
-        rate_175: cost_per_label * 1750,
-        rate_2,
-        price_inr_label: rate_2 / 1000,
-        price_inr_1000:  rate_2,
-        price_usd_label: exchange_rate > 0 ? rate_2 / exchange_rate / 1000 : 0,
-        price_usd_1000:  exchange_rate > 0 ? rate_2 / exchange_rate : 0,
+        price_inr_label: r2 / 1000,
+        price_usd_label: exch > 0 ? r2 / exch / 1000 : 0,
       }
-    })() : p
+    })() : { price_inr_label: p.price_inr_label, price_usd_label: p.price_usd_label }
+
+    const pricePerLabel = effectiveP.price_inr_label || 0
+    const subtotal      = qty > 0 ? qty * pricePerLabel : 0
+    const totalUsd      = qty > 0 ? qty * (effectiveP.price_usd_label || 0) : 0
+
+    // Fetch company settings for CGST/SGST — admin only endpoint, non-admins fall back gracefully
+    let companySettings = {}
+    try {
+      companySettings = await api.getCompanySettings()
+    } catch (_) {
+      // non-admin or network error — PDF will show "GST: As applicable"
+    }
 
     generatePDF({
-      client:  clientName || 'N/A',
-      order:   orderName  || 'N/A',
-      quoteNo: `QT-${year}-${rand}`,
+      client: { name: clientName || '', location: '', email: '', phone: '' },
+      order:  {
+        order_id: result.calculation_id ? `CALC-${result.calculation_id}` : '',
+        label:    orderName || '',
+      },
       inputs: {
-        width:           parseFloat(inputs.width),
-        height:          parseFloat(inputs.height),
-        yield_pct:       parseFloat(inputs.yield_pct) || 85,
-        substrate_price: parseFloat(inputs.substrate_price) || 0,
-        foil_cost:       parseFloat(inputs.foil_cost)       || 0,
-        custom_cost:     parseFloat(inputs.custom_cost)     || 0,
-        exchange_rate:   parseFloat(inputs.exchange_rate)   || 85,
-        order_qty:       qty,
-        substrate_name:  inputs.substrate_name || 'Custom',
+        label_width_mm:  parseFloat(inputs.width),
+        label_height_mm: parseFloat(inputs.height),
+        substrate:       inputs.substrate_name || 'Custom',
+        total_qty:       qty,
       },
-      cylinder: {
-        teeth:        selRow?.teeth,
-        circumference: selRow?.circumference,
-        label_width:  selRow?.label_width,
-        label_height: selRow?.label_height,
-        around:       selRow?.around,
-        across:       selRow?.across,
-        paper_size:   selRow?.paper_size,
-        efficiency:   selRow?.efficiency,
+      approved_cylinder: {
+        teeth:  selRow?.teeth,
+        around: selRow?.around,
+        across: selRow?.across,
       },
-      pricing: effectiveP,
-      order_analytics: qty > 0 && selRow ? {
-        qty,
-        sqm_needed:    qty / (effectiveP.adj_labels || 1),
-        linear_meters: (qty / (effectiveP.adj_labels || 1)) / ((selRow.paper_size || 1000) / 1000),
-        total_inr_2:   qty * (effectiveP.rate_2 / 1000),
-        total_usd_2:   qty * (effectiveP.price_usd_label || 0),
-      } : null,
-    })
+      pricing: {
+        selling_price_per_label: pricePerLabel,
+        total_cost_inr:          subtotal,
+        total_cost_usd:          totalUsd,
+      },
+    }, companySettings)
   }
 
   const handleChange = (field, value) => {

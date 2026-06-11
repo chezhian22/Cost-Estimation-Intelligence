@@ -456,6 +456,8 @@ class CompanySettingsOut(BaseModel):
     phone:        Optional[str]    = None
     website:      Optional[str]    = None
     gst_number:   Optional[str]    = None
+    cgst_pct:     Optional[float]  = None
+    sgst_pct:     Optional[float]  = None
     updated_at:   Optional[datetime] = None
 
 
@@ -471,6 +473,8 @@ class CompanySettingsUpdate(BaseModel):
     phone:        Optional[str]    = Field(None, max_length=30)
     website:      Optional[str]    = Field(None, max_length=200)
     gst_number:   Optional[str]    = Field(None, max_length=50)
+    cgst_pct:     Optional[float]  = Field(None, ge=0, le=100)
+    sgst_pct:     Optional[float]  = Field(None, ge=0, le=100)
 
 
 TokenResponse.model_rebuild()
