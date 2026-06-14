@@ -4,7 +4,7 @@
 const ind = (n, d = 2) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 
-export function generatePDF(
+export function buildPDFHtml(
   { client = {}, order = {}, inputs = {}, approved_cylinder = {}, pricing = {} },
   companySettings = {}
 ) {
@@ -38,6 +38,24 @@ export function generatePDF(
     cyl.teeth   ? `Cyl. ${cyl.teeth}T`                              : null,
     cyl.across && cyl.around ? `Layout ${cyl.across}×${cyl.around}` : null,
   ].filter(Boolean).join(' · ')
+
+  // ── Company info from settings ──
+  const coName    = companySettings.company_name || 'CHROMAPRINT'
+  const coTagline = companySettings.tagline      || 'India Private Limited'
+  const coPhone   = companySettings.phone        || '+91-422-2642738'
+  const coEmail   = companySettings.email        || 'sales@chromaprintindia.com'
+  const coWebsite = companySettings.website      || ''
+  const coGst     = companySettings.gst_number   || ''
+  const coAddrParts = [
+    companySettings.address,
+    companySettings.location,
+    companySettings.state,
+    companySettings.country,
+  ].filter(Boolean)
+  const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
+
+  const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
+  if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -148,8 +166,8 @@ body{
   color:#94a3b8;margin-bottom:8px;
 }
 .bill-name{
-  font-size:16px;font-weight:800;
-  color:#1e293b;line-height:1.2;margin-bottom:4px;
+  font-size:24px;font-weight:900;
+  color:#1e293b;line-height:1;margin-bottom:4px;
 }
 .bill-detail{font-size:10.5px;color:#64748b;line-height:1.8}
 .order-ref{
@@ -252,11 +270,10 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
   <!-- Header -->
   <div class="inv-header">
     <div>
-      <div class="co-name">CHROMAPRINT</div>
-      <div class="co-sub">India Private Limited</div>
+      <div class="co-name">${coName}</div>
+      ${coTagline ? `<div class="co-sub">${coTagline}</div>` : ''}
       <div class="co-meta">
-        Coimbatore &ndash; 641 022, India<br>
-        +91-422-2642738 &nbsp;|&nbsp; sales@chromaprintindia.com
+        ${coMetaLines.join('<br>')}
       </div>
     </div>
     <div class="hdr-right">
@@ -358,9 +375,8 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
       Subject to substrate availability &nbsp;&middot;&nbsp; Prices subject to change without notice
     </div>
     <div class="footer-contact">
-      <strong>Chromaprint India Pvt. Ltd.</strong>
-      sales@chromaprintindia.com<br>
-      +91-422-2642739
+      <strong>${coName}</strong>
+      ${[coEmail, coPhone, coWebsite].filter(Boolean).join('<br>')}
     </div>
   </div>
 
@@ -368,6 +384,11 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
 </body>
 </html>`
 
+  return html
+}
+
+export function generatePDF(payload, companySettings = {}) {
+  const html = buildPDFHtml(payload, companySettings)
   const win = window.open('', '_blank')
   if (!win) { alert('Please allow pop-ups to generate the PDF quote.'); return }
   win.document.write(html)

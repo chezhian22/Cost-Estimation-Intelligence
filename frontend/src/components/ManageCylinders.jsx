@@ -1,6 +1,82 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 
+function blockNonNumeric(e) {
+  const nav = ['Backspace','Delete','Tab','Enter','Escape','ArrowLeft','ArrowRight','Home','End']
+  if (nav.includes(e.key) || e.ctrlKey || e.metaKey) return
+  if (e.key >= '0' && e.key <= '9') return
+  e.preventDefault()
+}
+
+function EditModal({ cylinder, onClose, onSaved }) {
+  const [teeth, setTeeth]   = useState(String(cylinder.teeth))
+  const [paper, setPaper]   = useState(String(cylinder.paper_size))
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState(null)
+
+  async function handleSave(e) {
+    e.preventDefault()
+    const t = parseInt(teeth, 10)
+    const p = parseInt(paper, 10)
+    if (!t || !p) { setError('Both fields are required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await api.updateTooth(cylinder.id, t, p)
+      onSaved(updated)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="edit-modal-header">
+          <span className="edit-modal-header-icon">⚙</span>
+          <span className="edit-modal-header-title">Edit Cylinder</span>
+        </div>
+        <form onSubmit={handleSave}>
+          <div className="edit-modal-body">
+            <div className="field">
+              <label className="field-label">Teeth Count</label>
+              <input
+                type="number" min="1" step="1"
+                value={teeth}
+                onChange={(e) => setTeeth(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                autoFocus
+                required
+              />
+            </div>
+            <div className="field">
+              <label className="field-label">Paper Size <span className="unit">(mm)</span></label>
+              <input
+                type="number" min="1" step="1"
+                value={paper}
+                onChange={(e) => setPaper(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                required
+              />
+            </div>
+            {error && <div className="selector-error">⚠ {error}</div>}
+          </div>
+          <div className="edit-modal-footer">
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ManageCylinders({ isAdmin = false }) {
   const [cylinders, setCylinders] = useState([])
   const [loading, setLoading]     = useState(true)
@@ -12,11 +88,7 @@ export default function ManageCylinders({ isAdmin = false }) {
   const [addError, setAddError]     = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
-  const [editingId, setEditingId]   = useState(null)
-  const [editTeeth, setEditTeeth]   = useState('')
-  const [editPaper, setEditPaper]   = useState('')
-  const [savingId, setSavingId]     = useState(null)
-  const [editError, setEditError]   = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
 
   useEffect(() => {
     api.getTeeth()
@@ -56,35 +128,6 @@ export default function ManageCylinders({ isAdmin = false }) {
     }
   }
 
-  function startEdit(c) {
-    setEditingId(c.id)
-    setEditTeeth(String(c.teeth))
-    setEditPaper(String(c.paper_size))
-    setEditError(null)
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    setEditError(null)
-  }
-
-  async function handleSaveEdit(c) {
-    const teeth      = parseInt(editTeeth, 10)
-    const paper_size = parseInt(editPaper, 10)
-    if (!teeth || !paper_size) { setEditError('Both fields are required'); return }
-    setSavingId(c.id)
-    setEditError(null)
-    try {
-      const updated = await api.updateTooth(c.id, teeth, paper_size)
-      setCylinders((prev) => prev.map((x) => x.id === updated.id ? updated : x).sort((a, b) => a.teeth - b.teeth))
-      setEditingId(null)
-    } catch (e) {
-      setEditError(e.message)
-    } finally {
-      setSavingId(null)
-    }
-  }
-
   async function handleToggleAvailability(c) {
     setTogglingId(c.id)
     try {
@@ -95,6 +138,13 @@ export default function ManageCylinders({ isAdmin = false }) {
     } finally {
       setTogglingId(null)
     }
+  }
+
+  function handleSaved(updated) {
+    setCylinders((prev) =>
+      prev.map((x) => x.id === updated.id ? updated : x).sort((a, b) => a.teeth - b.teeth)
+    )
+    setEditTarget(null)
   }
 
   return (
@@ -116,6 +166,7 @@ export default function ManageCylinders({ isAdmin = false }) {
                 placeholder="e.g. 64"
                 value={newTeeth}
                 onChange={(e) => setNewTeeth(e.target.value)}
+                onKeyDown={blockNonNumeric}
                 required
               />
             </div>
@@ -126,6 +177,7 @@ export default function ManageCylinders({ isAdmin = false }) {
                 placeholder="e.g. 520"
                 value={newPaper}
                 onChange={(e) => setNewPaper(e.target.value)}
+                onKeyDown={blockNonNumeric}
                 required
               />
             </div>
@@ -181,28 +233,19 @@ export default function ManageCylinders({ isAdmin = false }) {
                   const circ   = +(c.teeth * 3.175).toFixed(3)
                   const plus20 = Math.round(c.paper_size * 1.2)
                   const avail  = c.available !== false
-                  const isEditing = editingId === c.id
                   return (
                     <tr key={c.id} className={!avail ? 'row-unavailable' : ''}>
                       <td style={{ textAlign: 'left' }}>{i + 1}</td>
-                      <td>
-                        {isEditing
-                          ? <input className="inline-edit-input" type="number" min="1" step="1" value={editTeeth} onChange={(e) => setEditTeeth(e.target.value)} />
-                          : c.teeth}
-                      </td>
-                      <td>{isEditing ? '—' : circ}</td>
-                      <td>
-                        {isEditing
-                          ? <input className="inline-edit-input" type="number" min="1" step="1" value={editPaper} onChange={(e) => setEditPaper(e.target.value)} />
-                          : c.paper_size}
-                      </td>
-                      <td>{isEditing ? '—' : plus20}</td>
+                      <td>{c.teeth}</td>
+                      <td>{circ}</td>
+                      <td>{c.paper_size}</td>
+                      <td>{plus20}</td>
                       <td>
                         {isAdmin ? (
                           <button
                             className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`}
-                            onClick={() => !isEditing && handleToggleAvailability(c)}
-                            disabled={togglingId === c.id || isEditing}
+                            onClick={() => handleToggleAvailability(c)}
+                            disabled={togglingId === c.id}
                             title="Click to toggle availability"
                           >
                             <span className="avail-dot" />
@@ -216,20 +259,8 @@ export default function ManageCylinders({ isAdmin = false }) {
                         )}
                       </td>
                       {isAdmin && (
-                        <td style={{ textAlign: 'right', paddingRight: '1rem', whiteSpace: 'nowrap' }}>
-                          {isEditing ? (
-                            <span style={{ display: 'inline-flex', gap: '0.4rem', flexDirection: 'column', alignItems: 'flex-end' }}>
-                              <span style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                <button className="inline-save-btn" onClick={() => handleSaveEdit(c)} disabled={savingId === c.id}>
-                                  {savingId === c.id ? '…' : 'Save'}
-                                </button>
-                                <button className="inline-cancel-btn" onClick={cancelEdit} disabled={savingId === c.id}>Cancel</button>
-                              </span>
-                              {editError && <span className="field-error">{editError}</span>}
-                            </span>
-                          ) : (
-                            <button className="inline-edit-btn" onClick={() => startEdit(c)}>Edit</button>
-                          )}
+                        <td style={{ textAlign: 'right', paddingRight: '1rem' }}>
+                          <button className="inline-edit-btn" onClick={() => setEditTarget(c)}>Edit</button>
                         </td>
                       )}
                     </tr>
@@ -239,6 +270,14 @@ export default function ManageCylinders({ isAdmin = false }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {editTarget && (
+        <EditModal
+          cylinder={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={handleSaved}
+        />
       )}
     </section>
   )

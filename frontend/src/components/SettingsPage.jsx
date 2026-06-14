@@ -1,6 +1,31 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 
+const NAV = ['Backspace','Delete','Tab','Enter','Escape','ArrowLeft','ArrowRight','Home','End']
+
+const RESTRICT = {
+  // digits, +, -, space  — phone numbers
+  phone: {
+    key:   (e) => { if (NAV.includes(e.key) || e.ctrlKey || e.metaKey) return; if (/[0-9+\- ]/.test(e.key)) return; e.preventDefault() },
+    paste: (e) => { if (!/^[0-9+\- ]*$/.test(e.clipboardData.getData('text'))) e.preventDefault() },
+  },
+  // letters, spaces, hyphens, dots, apostrophes — city / state / country
+  alpha: {
+    key:   (e) => { if (NAV.includes(e.key) || e.ctrlKey || e.metaKey) return; if (/[a-zA-Z '.,-]/.test(e.key)) return; e.preventDefault() },
+    paste: (e) => { if (!/^[a-zA-Z '.,-]*$/.test(e.clipboardData.getData('text'))) e.preventDefault() },
+  },
+  // alphanumeric only — GST number (auto-uppercased on change)
+  gst: {
+    key:   (e) => { if (NAV.includes(e.key) || e.ctrlKey || e.metaKey) return; if (/[a-zA-Z0-9]/.test(e.key)) return; e.preventDefault() },
+    paste: (e) => { if (!/^[a-zA-Z0-9]*$/.test(e.clipboardData.getData('text'))) e.preventDefault() },
+  },
+  // digits + decimal only — percentage fields
+  percent: {
+    key:   (e) => { if (NAV.includes(e.key) || e.ctrlKey || e.metaKey) return; if (/[0-9.]/.test(e.key)) return; e.preventDefault() },
+    paste: (e) => { if (!/^\d*\.?\d*$/.test(e.clipboardData.getData('text'))) e.preventDefault() },
+  },
+}
+
 const FIELDS = [
   {
     section: 'Company Identity',
@@ -10,9 +35,9 @@ const FIELDS = [
       </svg>
     ),
     rows: [
-      { key: 'company_name', label: 'Company Name',   placeholder: 'Chromaprint India',         required: true },
-      { key: 'tagline',      label: 'Tagline',         placeholder: 'Quality Labels & Packaging' },
-      { key: 'industry',     label: 'Industry',        placeholder: 'Label Printing & Packaging' },
+      { key: 'company_name', label: 'Company Name', placeholder: 'Chromaprint India',         required: true, maxLength: 100 },
+      { key: 'tagline',      label: 'Tagline',       placeholder: 'Quality Labels & Packaging',               maxLength: 150 },
+      { key: 'industry',     label: 'Industry',      placeholder: 'Label Printing & Packaging',               maxLength: 100 },
     ],
   },
   {
@@ -23,9 +48,9 @@ const FIELDS = [
       </svg>
     ),
     rows: [
-      { key: 'email',   label: 'Email Address', placeholder: 'sales@chromaprintindia.com', type: 'email' },
-      { key: 'phone',   label: 'Phone Number',  placeholder: '+91 422 264 2738' },
-      { key: 'website', label: 'Website',        placeholder: 'https://chromaprintindia.com', type: 'url' },
+      { key: 'email',   label: 'Email Address', placeholder: 'sales@chromaprintindia.com', type: 'email', maxLength: 200 },
+      { key: 'phone',   label: 'Phone Number',  placeholder: '+91 422 264 2738', restrict: 'phone', maxLength: 15 },
+      { key: 'website', label: 'Website',        placeholder: 'https://chromaprintindia.com', type: 'url', maxLength: 300 },
     ],
   },
   {
@@ -36,10 +61,10 @@ const FIELDS = [
       </svg>
     ),
     rows: [
-      { key: 'address',  label: 'Street Address', placeholder: 'SF No. 215/2, Mettupalayam Road', wide: true },
-      { key: 'location', label: 'City',            placeholder: 'Coimbatore' },
-      { key: 'state',    label: 'State',            placeholder: 'Tamil Nadu' },
-      { key: 'country',  label: 'Country',          placeholder: 'India' },
+      { key: 'address',  label: 'Street Address', placeholder: 'SF No. 215/2, Mettupalayam Road', wide: true, maxLength: 200 },
+      { key: 'location', label: 'City',  placeholder: 'Coimbatore', restrict: 'alpha', maxLength: 100 },
+      { key: 'state',    label: 'State', placeholder: 'Tamil Nadu',  restrict: 'alpha', maxLength: 100 },
+      { key: 'country',  label: 'Country', placeholder: 'India',     restrict: 'alpha', maxLength: 100 },
     ],
   },
   {
@@ -50,9 +75,9 @@ const FIELDS = [
       </svg>
     ),
     rows: [
-      { key: 'gst_number', label: 'GST Number',  placeholder: '33AAACB0000A1Z5' },
-      { key: 'cgst_pct',   label: 'CGST %',       placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any' },
-      { key: 'sgst_pct',   label: 'SGST %',       placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any' },
+      { key: 'gst_number', label: 'GST Number', placeholder: '33AAACB0000A1Z5', restrict: 'gst', maxLength: 15 },
+      { key: 'cgst_pct',   label: 'CGST %', placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any', restrict: 'percent' },
+      { key: 'sgst_pct',   label: 'SGST %', placeholder: 'e.g. 9', type: 'number', min: 0, max: 100, step: 'any', restrict: 'percent' },
     ],
     hint: 'CGST + SGST = Total GST. Set by admin as per applicable tax rate.',
   },
@@ -207,7 +232,9 @@ export default function SettingsPage() {
               {section}
             </div>
             <div className="sp-grid">
-              {rows.map(({ key, label, placeholder, required, type, wide, min, max, step }) => (
+              {rows.map(({ key, label, placeholder, required, type, wide, min, max, step, maxLength, restrict }) => {
+                const r = restrict ? RESTRICT[restrict] : null
+                return (
                 <div key={key} className={`sp-field${wide ? ' sp-field--wide' : ''}`}>
                   <label className="sp-label">
                     {label}
@@ -221,10 +248,18 @@ export default function SettingsPage() {
                     min={min}
                     max={max}
                     step={step}
-                    onChange={e => handleChange(key, e.target.value === '' ? null : (type === 'number' ? parseFloat(e.target.value) : e.target.value))}
+                    maxLength={maxLength}
+                    onKeyDown={r?.key}
+                    onPaste={r?.paste}
+                    onChange={e => {
+                      let val = e.target.value
+                      if (restrict === 'gst') val = val.toUpperCase()
+                      handleChange(key, val === '' ? null : (type === 'number' ? parseFloat(val) : val))
+                    }}
                   />
                 </div>
-              ))}
+                )
+              })}
             </div>
             {hint && (
               <p style={{ marginTop: '0.55rem', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>

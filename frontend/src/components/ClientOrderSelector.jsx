@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { toast } from '../utils/toast'
 
 function nextOrderNumber(orders) {
   if (!orders || orders.length === 0) return 'ORDER-001'
@@ -32,13 +33,19 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
   const [orderBusy, setOrderBusy]       = useState(false)
   const [orderErr, setOrderErr]         = useState(null)
 
+  // rename order inline
+  const [editingOrder, setEditingOrder]   = useState(false)
+  const [editOrderName, setEditOrderName] = useState('')
+  const [renameBusy, setRenameBusy]       = useState(false)
+  const [renameErr, setRenameErr]         = useState(null)
+
   useEffect(() => {
-    api.getClients().then(setClients).catch(() => {})
+    api.getClients().then(setClients).catch((e) => toast.error(e.message || 'Failed to load clients'))
   }, [])
 
   useEffect(() => {
     if (!selectedClient) { setOrders([]); return }
-    api.getOrders(selectedClient.id).then(setOrders).catch(() => {})
+    api.getOrders(selectedClient.id).then(setOrders).catch((e) => toast.error(e.message || 'Failed to load orders'))
   }, [selectedClient])
 
   useEffect(() => {
@@ -130,6 +137,37 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
       setOrderErr(err.message)
     } finally {
       setOrderBusy(false)
+    }
+  }
+
+  function startRenameOrder() {
+    setEditOrderName(selectedOrder.name)
+    setRenameErr(null)
+    setEditingOrder(true)
+  }
+
+  function cancelRenameOrder() {
+    setEditingOrder(false)
+    setEditOrderName('')
+    setRenameErr(null)
+  }
+
+  async function handleRenameOrder(e) {
+    e.preventDefault()
+    const name = editOrderName.trim()
+    if (!name || name === selectedOrder.name) { cancelRenameOrder(); return }
+    setRenameBusy(true)
+    setRenameErr(null)
+    try {
+      const updated = await api.updateOrder(selectedOrder.id, name)
+      setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o))
+      setSelectedOrder(updated)
+      onOrderChange(updated.id, updated.name)
+      cancelRenameOrder()
+    } catch (err) {
+      setRenameErr(err.message)
+    } finally {
+      setRenameBusy(false)
     }
   }
 
@@ -239,21 +277,64 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
           <label className="field-label">◈ Order <span className="field-required">*</span></label>
           {orders.length === 0 ? (
             <div className="no-order-note">No orders yet — create one below.</div>
+          ) : editingOrder ? (
+            <form className="cos-inline-form" onSubmit={handleRenameOrder}>
+              <input
+                className="cos-inline-input"
+                type="text"
+                value={editOrderName}
+                onChange={(e) => setEditOrderName(e.target.value)}
+                disabled={renameBusy}
+                autoFocus
+                maxLength={200}
+              />
+              {renameErr && <div className="cos-inline-err">{renameErr}</div>}
+              <div className="cos-inline-actions">
+                <button
+                  className="cos-inline-btn cos-inline-btn--primary"
+                  type="submit"
+                  disabled={renameBusy || !editOrderName.trim()}
+                >
+                  {renameBusy ? '…' : 'Save'}
+                </button>
+                <button
+                  className="cos-inline-btn"
+                  type="button"
+                  onClick={cancelRenameOrder}
+                  disabled={renameBusy}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           ) : (
-            <select
-              className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
-              value={selectedOrder?.id ?? ''}
-              onChange={(e) => {
-                const id = parseInt(e.target.value, 10)
-                const o = orders.find((x) => x.id === id)
-                if (o) pickOrder(o)
-              }}
-            >
-              <option value="">— Select an order —</option>
-              {orders.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              <select
+                style={{ flex: 1 }}
+                className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
+                value={selectedOrder?.id ?? ''}
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10)
+                  const o = orders.find((x) => x.id === id)
+                  if (o) pickOrder(o)
+                }}
+              >
+                <option value="">— Select an order —</option>
+                {orders.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+              {selectedOrder && (
+                <button
+                  type="button"
+                  className="combobox-clear"
+                  onClick={startRenameOrder}
+                  title="Rename order"
+                >
+                  ✎
+                </button>
+              )}
+            </div>
           )}
           {fieldErrors.order && !selectedOrder && (
             <span className="field-error">{fieldErrors.order}</span>
@@ -278,10 +359,8 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
                     className="cos-inline-input"
                     type="text"
                     value={newOrderName}
-                    onChange={(e) => setNewOrderName(e.target.value)}
-                    disabled={orderBusy}
-                    autoFocus
-                    maxLength={200}
+                    readOnly
+                    style={{ opacity: 0.7, cursor: 'not-allowed', background: 'var(--bg-raised)' }}
                   />
                 </div>
                 <div className="cos-order-field">
@@ -292,6 +371,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
                     value={newOrderDate}
                     onChange={(e) => setNewOrderDate(e.target.value)}
                     disabled={orderBusy}
+                    autoFocus
                   />
                 </div>
               </div>
@@ -300,7 +380,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
                 <button
                   className="cos-inline-btn cos-inline-btn--primary"
                   type="submit"
-                  disabled={orderBusy || !newOrderName.trim()}
+                  disabled={orderBusy}
                 >
                   {orderBusy ? '…' : 'Create Order'}
                 </button>

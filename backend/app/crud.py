@@ -146,6 +146,16 @@ def create_order(db: Session, client_id: int, data: schemas.OrderCreate) -> mode
     return obj
 
 
+def update_order(db: Session, order_id: int, name: str) -> Optional[models.Order]:
+    obj = get_order(db, order_id)
+    if not obj:
+        return None
+    obj.name = name.strip()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 # ── Substrates ───────────────────────────────────────────────────────────────
 def list_substrates(db: Session) -> List[models.Substrate]:
     return db.query(models.Substrate).order_by(models.Substrate.id).all()

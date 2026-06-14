@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../api'
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
+import { toast } from '../utils/toast'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
@@ -13,14 +14,16 @@ function fmtDateTime(dt) {
 
 // ── Calculation Detail Modal ──────────────────────────────────────────────────
 function CalcDetailModal({ calcId, onClose }) {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(null)
     api.getCalculation(calcId)
       .then(setData)
-      .catch(() => {})
+      .catch((e) => setLoadError(e.message || 'Failed to load calculation'))
       .finally(() => setLoading(false))
   }, [calcId])
 
@@ -50,6 +53,10 @@ function CalcDetailModal({ calcId, onClose }) {
             <div className="history-spinner" />
             <span>Loading calculation…</span>
           </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="error-banner" style={{ margin: '2rem 1.5rem' }}>⚠ {loadError}</div>
         )}
 
         {!loading && data && (
@@ -315,7 +322,7 @@ function StatusBadge({ calcId, status, onChoose, onSave }) {
         await api.updateQuoteStatus(calcId, next)
       }
       onChoose(calcId, next)
-    } catch { /* keep current on error */ }
+    } catch (e) { toast.error(e.message || 'Failed to update status') }
     finally { setSaving(false) }
   }
 

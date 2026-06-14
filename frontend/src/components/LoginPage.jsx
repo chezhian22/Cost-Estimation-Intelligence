@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { api, setToken } from '../api'
+import { api } from '../api'
 
 export default function LoginPage({ onLogin }) {
   const [email,    setEmail]    = useState('')
@@ -14,7 +14,6 @@ export default function LoginPage({ onLogin }) {
     setLoading(true); setError(null)
     try {
       const res = await api.login(email.trim(), password)
-      setToken(res.access_token)
       onLogin(res.user)
     } catch (err) {
       setError(err.message)

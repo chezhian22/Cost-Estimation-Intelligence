@@ -203,7 +203,7 @@ class CalculationRequest(BaseModel):
         examples=[85],
     )
     order_qty: Optional[int] = Field(
-        None, ge=0,
+        None, ge=1,
         description="Label quantity for this order. Stored for reference and pre-fills the calculator on edit.",
         examples=[10000],
     )
@@ -408,9 +408,8 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="Plain-text password.")
 
 
-class TokenResponse(BaseModel):
-    access_token: str = Field(..., description="JWT bearer token.")
-    token_type: str   = Field("bearer")
+class LoginResponse(BaseModel):
+    """Returned on successful login. The JWT is delivered via an HttpOnly cookie."""
     user: "UserOut"
 
 
@@ -477,4 +476,4 @@ class CompanySettingsUpdate(BaseModel):
     sgst_pct:     Optional[float]  = Field(None, ge=0, le=100)
 
 
-TokenResponse.model_rebuild()
+LoginResponse.model_rebuild()

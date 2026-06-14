@@ -1,6 +1,83 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 
+function blockNonNumeric(e) {
+  const nav = ['Backspace','Delete','Tab','Enter','Escape','ArrowLeft','ArrowRight','Home','End']
+  if (nav.includes(e.key) || e.ctrlKey || e.metaKey) return
+  if (e.key >= '0' && e.key <= '9') return
+  if (e.key === '.') return
+  e.preventDefault()
+}
+
+function EditModal({ substrate, onClose, onSaved }) {
+  const [name, setName]     = useState(substrate.name)
+  const [price, setPrice]   = useState(String(substrate.price))
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState(null)
+
+  async function handleSave(e) {
+    e.preventDefault()
+    const n = name.trim()
+    const p = parseFloat(price)
+    if (!n || isNaN(p) || p < 0) { setError('Valid name and price required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await api.updateSubstrate(substrate.id, n, p)
+      onSaved(updated)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="edit-modal-header">
+          <span className="edit-modal-header-icon">▤</span>
+          <span className="edit-modal-header-title">Edit Substrate</span>
+        </div>
+        <form onSubmit={handleSave}>
+          <div className="edit-modal-body">
+            <div className="field">
+              <label className="field-label">Substrate Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+                required
+                maxLength={120}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label">Price <span className="unit">(₹ / m²)</span></label>
+              <input
+                type="number" min="0" step="0.5"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                required
+              />
+            </div>
+            {error && <div className="selector-error">⚠ {error}</div>}
+          </div>
+          <div className="edit-modal-footer">
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ManageSubstrates({ isAdmin = false }) {
   const [substrates, setSubstrates] = useState([])
   const [loading, setLoading]       = useState(true)
@@ -12,11 +89,7 @@ export default function ManageSubstrates({ isAdmin = false }) {
   const [addError, setAddError]     = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
-  const [editingId, setEditingId]   = useState(null)
-  const [editName, setEditName]     = useState('')
-  const [editPrice, setEditPrice]   = useState('')
-  const [savingId, setSavingId]     = useState(null)
-  const [editError, setEditError]   = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
 
   useEffect(() => {
     api.getSubstrates()
@@ -56,35 +129,6 @@ export default function ManageSubstrates({ isAdmin = false }) {
     }
   }
 
-  function startEdit(s) {
-    setEditingId(s.id)
-    setEditName(s.name)
-    setEditPrice(String(s.price))
-    setEditError(null)
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    setEditError(null)
-  }
-
-  async function handleSaveEdit(s) {
-    const name  = editName.trim()
-    const price = parseFloat(editPrice)
-    if (!name || isNaN(price) || price < 0) { setEditError('Valid name and price required'); return }
-    setSavingId(s.id)
-    setEditError(null)
-    try {
-      const updated = await api.updateSubstrate(s.id, name, price)
-      setSubstrates((prev) => prev.map((x) => x.id === updated.id ? updated : x).sort((a, b) => a.name.localeCompare(b.name)))
-      setEditingId(null)
-    } catch (e) {
-      setEditError(e.message)
-    } finally {
-      setSavingId(null)
-    }
-  }
-
   async function handleToggleAvailability(s) {
     setTogglingId(s.id)
     try {
@@ -95,6 +139,13 @@ export default function ManageSubstrates({ isAdmin = false }) {
     } finally {
       setTogglingId(null)
     }
+  }
+
+  function handleSaved(updated) {
+    setSubstrates((prev) =>
+      prev.map((x) => x.id === updated.id ? updated : x).sort((a, b) => a.name.localeCompare(b.name))
+    )
+    setEditTarget(null)
   }
 
   return (
@@ -126,6 +177,7 @@ export default function ManageSubstrates({ isAdmin = false }) {
                 placeholder="e.g. 45"
                 value={newPrice}
                 onChange={(e) => setNewPrice(e.target.value)}
+                onKeyDown={blockNonNumeric}
                 required
               />
             </div>
@@ -177,26 +229,17 @@ export default function ManageSubstrates({ isAdmin = false }) {
               ) : (
                 substrates.map((s, i) => {
                   const avail = s.available !== false
-                  const isEditing = editingId === s.id
                   return (
                     <tr key={s.id} className={!avail ? 'row-unavailable' : ''}>
                       <td style={{ textAlign: 'left' }}>{i + 1}</td>
-                      <td style={{ textAlign: 'left' }}>
-                        {isEditing
-                          ? <input className="inline-edit-input" type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                          : s.name}
-                      </td>
-                      <td>
-                        {isEditing
-                          ? <input className="inline-edit-input" type="number" min="0" step="0.5" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
-                          : Number(s.price).toFixed(2)}
-                      </td>
+                      <td style={{ textAlign: 'left' }}>{s.name}</td>
+                      <td>{Number(s.price).toFixed(2)}</td>
                       <td>
                         {isAdmin ? (
                           <button
                             className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`}
-                            onClick={() => !isEditing && handleToggleAvailability(s)}
-                            disabled={togglingId === s.id || isEditing}
+                            onClick={() => handleToggleAvailability(s)}
+                            disabled={togglingId === s.id}
                             title="Click to toggle availability"
                           >
                             <span className="avail-dot" />
@@ -210,20 +253,8 @@ export default function ManageSubstrates({ isAdmin = false }) {
                         )}
                       </td>
                       {isAdmin && (
-                        <td style={{ textAlign: 'right', paddingRight: '1rem', whiteSpace: 'nowrap' }}>
-                          {isEditing ? (
-                            <span style={{ display: 'inline-flex', gap: '0.4rem', flexDirection: 'column', alignItems: 'flex-end' }}>
-                              <span style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                <button className="inline-save-btn" onClick={() => handleSaveEdit(s)} disabled={savingId === s.id}>
-                                  {savingId === s.id ? '…' : 'Save'}
-                                </button>
-                                <button className="inline-cancel-btn" onClick={cancelEdit} disabled={savingId === s.id}>Cancel</button>
-                              </span>
-                              {editError && <span className="field-error">{editError}</span>}
-                            </span>
-                          ) : (
-                            <button className="inline-edit-btn" onClick={() => startEdit(s)}>Edit</button>
-                          )}
+                        <td style={{ textAlign: 'right', paddingRight: '1rem' }}>
+                          <button className="inline-edit-btn" onClick={() => setEditTarget(s)}>Edit</button>
                         </td>
                       )}
                     </tr>
@@ -233,6 +264,14 @@ export default function ManageSubstrates({ isAdmin = false }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {editTarget && (
+        <EditModal
+          substrate={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={handleSaved}
+        />
       )}
     </section>
   )

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, setToken } from './api'
+import { api } from './api'
 import { generatePDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
@@ -15,6 +15,7 @@ import UserManagementPage from './components/UserManagementPage'
 import SettingsPage from './components/SettingsPage'
 import Dashboard from './pages/Dashboard/Dashboard'
 import PDFPreview from './pages/Estimating/PDFPreview/PDFPreview'
+import Toast from './components/Toast'
 
 const DEFAULTS = {
   width: 64.5,
@@ -146,23 +147,23 @@ export default function App() {
     localStorage.setItem('cp-theme', theme)
   }, [theme])
 
-  // Restore session from stored token
+  // Restore session from cookie
   useEffect(() => {
     api.getMe()
       .then(user => setCurrentUser(user))
-      .catch(() => { setToken(null) })
+      .catch(() => {})
       .finally(() => setAuthLoading(false))
   }, [])
 
-  function handleLogout() {
-    setToken(null)
+  async function handleLogout() {
+    await api.logout().catch(() => {})
     setCurrentUser(null)
   }
 
   useEffect(() => {
     api.getSubstrates()
       .then(setSubstrates)
-      .catch(() => {})
+      .catch((e) => console.warn('Substrates unavailable:', e.message))
   }, [])
 
   // After recalculation, preserve the previously selected cylinder by teeth count
@@ -209,7 +210,7 @@ export default function App() {
     if (!inp.yield_pct  || parseFloat(inp.yield_pct)  <= 0) errs.yield_pct  = 'Required'
     if (!inp.substrate_price && inp.substrate_price !== 0 || parseFloat(inp.substrate_price) <= 0) errs.substrate_price = 'Required'
     if (!inp.exchange_rate || parseFloat(inp.exchange_rate) < 1) errs.exchange_rate = 'Required'
-    if (!inp.order_qty || parseInt(inp.order_qty, 10) <= 0) errs.order_qty = 'Required'
+    if (!inp.order_qty || parseInt(inp.order_qty, 10) < 1) errs.order_qty = 'Minimum 1'
     return errs
   }
 
@@ -715,6 +716,7 @@ export default function App() {
       <footer>
         <strong>Chroma Print</strong> · Cost Estimation Intelligence · Label Estimator
       </footer>
+      <Toast />
     </>
   )
 }
