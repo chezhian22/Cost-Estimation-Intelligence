@@ -127,6 +127,12 @@ def _migrate():
                     "ALTER TABLE teeth_data ADD COLUMN available INTEGER NOT NULL DEFAULT 1"
                 ))
 
+        # calculation_versions — order_qty added after initial release
+        if "calculation_versions" in tables:
+            ver_cols = {c["name"] for c in insp.get_columns("calculation_versions")}
+            if "order_qty" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN order_qty INTEGER NULL"))
+
         # company_settings — add missing columns if table was created before this migration
         if "company_settings" in tables:
             cs_cols = {c["name"] for c in insp.get_columns("company_settings")}
@@ -695,16 +701,19 @@ def run_calculation(
 
     teeth_data = [{"teeth": t.teeth, "paper_size": t.paper_size} for t in teeth_rows]
 
-    result = calculator.calculate(
-        width=req.width,
-        height=req.height,
-        yield_pct=req.yield_pct,
-        substrate_price=req.substrate_price,
-        foil_cost=req.foil_cost,
-        exchange_rate=req.exchange_rate,
-        teeth_data=teeth_data,
-        custom_cost=req.custom_cost,
-    )
+    try:
+        result = calculator.calculate(
+            width=req.width,
+            height=req.height,
+            yield_pct=req.yield_pct,
+            substrate_price=req.substrate_price,
+            foil_cost=req.foil_cost,
+            exchange_rate=req.exchange_rate,
+            teeth_data=teeth_data,
+            custom_cost=req.custom_cost,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     calculation_id = None
     if req.save:
@@ -733,6 +742,19 @@ def get_calculations(db: Session = Depends(get_db)):
     Only calculations submitted with `save: true` appear here.
     """
     calcs = crud.list_calculations(db)
+
+    # Single bulk query for confirmed versions across all returned calcs
+    calc_id_list = [c.id for c in calcs]
+    confirmed_ver_rows = (
+        db.query(models.CalculationVersion)
+        .filter(
+            models.CalculationVersion.calculation_id.in_(calc_id_list),
+            models.CalculationVersion.status == "confirmed",
+        )
+        .all()
+    ) if calc_id_list else []
+    confirmed_ver_map = {v.calculation_id: v.version_number for v in confirmed_ver_rows}
+
     out = []
     for c in calcs:
         client_name = None
@@ -767,6 +789,7 @@ def get_calculations(db: Session = Depends(get_db)):
             created_by_name=created_by_name,
             updated_by_name=updated_by_name,
             updated_at=c.updated_at,
+            confirmed_version_number=confirmed_ver_map.get(c.id),
         ))
     return out
 
@@ -919,16 +942,19 @@ def create_version(
     if not teeth_rows:
         raise HTTPException(status_code=400, detail="No available cylinders found.")
     teeth_data = [{"teeth": t.teeth, "paper_size": t.paper_size} for t in teeth_rows]
-    result = calculator.calculate(
-        width=req.width,
-        height=req.height,
-        yield_pct=req.yield_pct,
-        substrate_price=req.substrate_price,
-        foil_cost=req.foil_cost,
-        exchange_rate=req.exchange_rate,
-        teeth_data=teeth_data,
-        custom_cost=req.custom_cost,
-    )
+    try:
+        result = calculator.calculate(
+            width=req.width,
+            height=req.height,
+            yield_pct=req.yield_pct,
+            substrate_price=req.substrate_price,
+            foil_cost=req.foil_cost,
+            exchange_rate=req.exchange_rate,
+            teeth_data=teeth_data,
+            custom_cost=req.custom_cost,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     uid = current_user.id if current_user else None
     version = crud.create_version(db, calc_id, req, result, uid)
     return {**result, "version_id": version.id, "version_number": version.version_number, "calculation_id": calc_id}

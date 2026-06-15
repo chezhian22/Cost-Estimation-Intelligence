@@ -143,6 +143,7 @@ class CalculationVersion(Base):
     custom_cost    = Column(Float, nullable=False, default=0)
     selected_teeth = Column(Integer, nullable=True)
     exchange_rate  = Column(Float, nullable=False)
+    order_qty      = Column(Integer, nullable=True)
     result         = Column(JSON, nullable=False)
     status         = Column(String(20), nullable=False, default="pending")
     created_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)

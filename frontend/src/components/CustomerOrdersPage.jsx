@@ -37,7 +37,7 @@ function buildInvoicePayload(calcData, clientName, orderName) {
   const rows     = result.rows      || []
   const pricing  = result.pricing   || {}
   const row      = rows[matched.index] || {}
-  const orderQty = calcData.order_qty || 0
+  const orderQty = calcData.order_qty ?? calcData._parent_order_qty ?? 0
   const pricePerLabel = pricing.price_inr_label || 0
   const subtotal = orderQty > 0 ? orderQty * pricePerLabel : 0
   const totalUsd = orderQty > 0 ? orderQty * (pricing.price_usd_label || 0) : 0
@@ -71,7 +71,7 @@ function buildInvoicePayload(calcData, clientName, orderName) {
 }
 
 function buildQuotationPayload(calcData, clientName, orderName) {
-  const orderQty = calcData.order_qty || 0
+  const orderQty = calcData.order_qty ?? calcData._parent_order_qty ?? 0
   return {
     client: {
       name:     clientName || calcData.client_name || 'N/A',
@@ -270,6 +270,12 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                 <span className="cop-detail-meta-label">Rate:</span>
                 <span className="cop-detail-meta-val">₹{fmt(data.exchange_rate,0)} / $</span>
               </span>
+              {data.order_qty != null && (
+                <span className="cop-detail-meta-item">
+                  <span className="cop-detail-meta-label">Qty:</span>
+                  <span className="cop-detail-meta-val">{Number(data.order_qty).toLocaleString()} labels</span>
+                </span>
+              )}
               <span className="cop-detail-meta-item">
                 <span className="cop-detail-meta-label">Saved:</span>
                 <span className="cop-detail-meta-val">{fmtDateTime(data.created_at)}</span>
@@ -280,8 +286,8 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
             <div className="cop-detail-body">
               {data.result && (
                 <>
-                  <CylinderTable result={data.result} orderQty="" pressSpeed={0} />
-                  <PricingPanel result={data.result} orderQty="" />
+                  <CylinderTable result={data.result} orderQty={data.order_qty ? String(data.order_qty) : ''} pressSpeed={0} />
+                  <PricingPanel result={data.result} orderQty={data.order_qty ? String(data.order_qty) : ''} />
                 </>
               )}
             </div>
@@ -471,7 +477,7 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
       <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cop-detail-header">
           <button className="cop-detail-close" onClick={onClose}>← Close</button>
-          <span className="cop-detail-title">Edit v{version.version_number}</span>
+          <span className="cop-detail-title">V{version.version_number}</span>
           <span className="cop-status-badge cop-status-confirmed">
             <span className="cop-status-dot" /> Approved
           </span>
@@ -499,6 +505,12 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
             <span className="cop-detail-meta-label">Rate:</span>
             <span className="cop-detail-meta-val">₹{fmt(version.exchange_rate,0)} / $</span>
           </span>
+          {(version.order_qty ?? version._parent_order_qty) != null && (
+            <span className="cop-detail-meta-item">
+              <span className="cop-detail-meta-label">Qty:</span>
+              <span className="cop-detail-meta-val">{Number(version.order_qty ?? version._parent_order_qty).toLocaleString()} labels</span>
+            </span>
+          )}
           <span className="cop-detail-meta-item">
             <span className="cop-detail-meta-label">Saved:</span>
             <span className="cop-detail-meta-val">{fmtDateTime(version.created_at)}</span>
@@ -507,8 +519,8 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
         <div className="cop-detail-body">
           {version.result && (
             <>
-              <CylinderTable result={version.result} orderQty="" pressSpeed={0} />
-              <PricingPanel result={version.result} orderQty="" />
+              <CylinderTable result={version.result} orderQty={(version.order_qty ?? version._parent_order_qty) ? String(version.order_qty ?? version._parent_order_qty) : ''} pressSpeed={0} />
+              <PricingPanel result={version.result} orderQty={(version.order_qty ?? version._parent_order_qty) ? String(version.order_qty ?? version._parent_order_qty) : ''} />
             </>
           )}
         </div>
@@ -700,7 +712,13 @@ function OrderPanel({ order, hideHeader, clientName }) {
 
         // Also find any approved edited versions across all calcs in this order
         if (cs.length > 0) {
-          const arrays = await Promise.all(cs.map((c) => api.getVersions(c.id).catch(() => [])))
+          const arrays = await Promise.all(
+            cs.map((c) =>
+              api.getVersions(c.id)
+                .then((vs) => vs.map((v) => ({ ...v, _parent_order_qty: c.order_qty })))
+                .catch(() => [])
+            )
+          )
           setApprovedVersions(arrays.flat().filter((v) => v.status === 'confirmed'))
         }
       })
@@ -839,7 +857,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                 calc={{ ...v, pricing: v.result?.pricing }}
                 isApproved={true}
                 hasOtherApproved={false}
-                versionLabel={`Edit v${v.version_number}`}
+                versionLabel={`V${v.version_number}`}
                 onViewDetail={() => setVersionDetailModal(v)}
                 onApproveRequest={() => {}}
                 clientName={clientName}

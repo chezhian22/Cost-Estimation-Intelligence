@@ -11,7 +11,7 @@ function nextOrderNumber(orders) {
   return `ORDER-${String(Math.max(...nums, 0) + 1).padStart(3, '0')}`
 }
 
-export default function ClientOrderSelector({ onClientChange, onOrderChange, fieldErrors = {} }) {
+export default function ClientOrderSelector({ onClientChange, onOrderChange, fieldErrors = {}, initialClientId = null, initialOrderId = null }) {
   const [clients, setClients]               = useState([])
   const [query, setQuery]                   = useState('')
   const [dropdownOpen, setDropdownOpen]     = useState(false)
@@ -56,6 +56,25 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Pre-select client when editing an existing calculation
+  useEffect(() => {
+    if (!initialClientId || !clients.length || selectedClient) return
+    const client = clients.find(c => c.id === initialClientId)
+    if (!client) return
+    setSelectedClient(client)
+    setQuery(client.name)
+    onClientChange(client.id, client.name)
+  }, [clients, initialClientId])
+
+  // Pre-select order after orders load for the pre-selected client
+  useEffect(() => {
+    if (!initialOrderId || !orders.length || selectedOrder) return
+    const order = orders.find(o => o.id === initialOrderId)
+    if (!order) return
+    setSelectedOrder(order)
+    onOrderChange(order.id, order.name)
+  }, [orders, initialOrderId])
 
   const filteredClients = clients.filter((c) =>
     c.name.toLowerCase().includes(query.toLowerCase())

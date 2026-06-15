@@ -92,6 +92,12 @@ function CalcDetailModal({ calcId, onClose }) {
                 <span className="cop-detail-meta-label">Rate:</span>
                 <span className="cop-detail-meta-val">₹{fmt(data.exchange_rate,0)} / $</span>
               </span>
+              {data.order_qty != null && (
+                <span className="cop-detail-meta-item">
+                  <span className="cop-detail-meta-label">Qty:</span>
+                  <span className="cop-detail-meta-val">{Number(data.order_qty).toLocaleString()} labels</span>
+                </span>
+              )}
               <span className="cop-detail-meta-item">
                 <span className="cop-detail-meta-label">Saved:</span>
                 <span className="cop-detail-meta-val">{fmtDateTime(data.created_at)}</span>
@@ -101,8 +107,8 @@ function CalcDetailModal({ calcId, onClose }) {
             <div className="cop-detail-body">
               {data.result && (
                 <>
-                  <CylinderTable result={data.result} orderQty="" pressSpeed={0} />
-                  <PricingPanel result={data.result} orderQty="" />
+                  <CylinderTable result={data.result} orderQty={data.order_qty ? String(data.order_qty) : ''} pressSpeed={0} />
+                  <PricingPanel result={data.result} orderQty={data.order_qty ? String(data.order_qty) : ''} />
                 </>
               )}
             </div>
@@ -148,7 +154,7 @@ function VersionDetailModal({ version, onClose }) {
       <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cop-detail-header">
           <button className="cop-detail-close" onClick={onClose}>← Close</button>
-          <span className="cop-detail-title">Edit v{version.version_number}</span>
+          <span className="cop-detail-title">V{version.version_number}</span>
           <span className={`cop-status-badge ${cfg.cls}`}>
             <span className="cop-status-dot" /> {cfg.label}
           </span>
@@ -176,6 +182,12 @@ function VersionDetailModal({ version, onClose }) {
             <span className="cop-detail-meta-label">Rate:</span>
             <span className="cop-detail-meta-val">₹{fmt(version.exchange_rate,0)} / $</span>
           </span>
+          {version.order_qty != null && (
+            <span className="cop-detail-meta-item">
+              <span className="cop-detail-meta-label">Qty:</span>
+              <span className="cop-detail-meta-val">{Number(version.order_qty).toLocaleString()} labels</span>
+            </span>
+          )}
           {version.created_by_name && (
             <span className="cop-detail-meta-item">
               <span className="cop-detail-meta-label">By:</span>
@@ -190,8 +202,8 @@ function VersionDetailModal({ version, onClose }) {
         <div className="cop-detail-body">
           {version.result && (
             <>
-              <CylinderTable result={version.result} orderQty="" pressSpeed={0} />
-              <PricingPanel result={version.result} orderQty="" />
+              <CylinderTable result={version.result} orderQty={version.order_qty ? String(version.order_qty) : ''} pressSpeed={0} />
+              <PricingPanel result={version.result} orderQty={version.order_qty ? String(version.order_qty) : ''} />
             </>
           )}
         </div>
@@ -202,7 +214,7 @@ function VersionDetailModal({ version, onClose }) {
 }
 
 // ── Versions section — tree layout ───────────────────────────────────────────
-function VersionsSection({ calcId, onStatusChange, refreshAt }) {
+function VersionsSection({ calcId, parentCalc, onStatusChange, refreshAt, onEditVersion }) {
   const [versions, setVersions] = useState(null)
   const [loading, setLoading]   = useState(true)
   const [detailVersion, setDetailVersion] = useState(null)
@@ -253,7 +265,7 @@ function VersionsSection({ calcId, onStatusChange, refreshAt }) {
             {/* Horizontal arm + arrowhead connecting from trunk to card */}
             <div className="qh-tree-arm" />
             <div className={`qh-v-card${v.status === 'confirmed' ? ' qh-v-card--confirmed' : v.status === 'rejected' ? ' qh-v-card--rejected' : ''}`}>
-              <span className="qh-v-badge">Edit v{v.version_number}</span>
+              <span className="qh-v-badge">V{v.version_number}</span>
               <span className="qh-v-size">{fmt(v.width,1)} × {fmt(v.height,1)} mm</span>
               <span className="qh-v-sub">{v.substrate_name || 'Custom'}</span>
               {v.created_by_name
@@ -271,9 +283,21 @@ function VersionsSection({ calcId, onStatusChange, refreshAt }) {
                   onChoose={(id, next) => handleStatusChange(id, next)}
                 />
               </div>
-              <button className="qh-v-view-btn" onClick={() => setDetailVersion(v)}>
-                View
-              </button>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                {onEditVersion && parentCalc && (
+                  <button
+                    className="qh-v-view-btn"
+                    style={{ background: 'rgba(26,188,171,0.12)', color: 'var(--teal)' }}
+                    onClick={() => onEditVersion(v, parentCalc)}
+                    title={`Edit V${v.version_number} — creates next version`}
+                  >
+                    Edit
+                  </button>
+                )}
+                <button className="qh-v-view-btn" onClick={() => setDetailVersion(v)}>
+                  View
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -365,7 +389,7 @@ function StatusBadge({ calcId, status, onChoose, onSave }) {
   )
 }
 
-export default function QuoteHistory({ onEditCalc }) {
+export default function QuoteHistory({ onEditCalc, onEditVersion }) {
   const [quotes, setQuotes]               = useState(null)
   const [clients, setClients]             = useState([])
   const [orders, setOrders]               = useState([])
@@ -585,6 +609,7 @@ export default function QuoteHistory({ onEditCalc }) {
                             >
                               <polyline points="6 9 12 15 18 9"/>
                             </svg>
+                            <span className="qh-v-badge" style={{ marginRight: '0.35rem', fontSize: '0.6rem', padding: '1px 5px' }}>V0</span>
                             {q.client_name ?? <span style={{ color: 'var(--text-dim)' }}>—</span>}
                           </div>
                         </td>
@@ -623,7 +648,24 @@ export default function QuoteHistory({ onEditCalc }) {
                           ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          <StatusBadge calcId={q.id} status={q.status} onChoose={handleStatusChange} />
+                          {q.confirmed_version_number != null ? (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                              fontSize: '0.72rem', fontWeight: 700,
+                              color: 'var(--teal)',
+                              background: 'rgba(26,188,171,0.12)',
+                              border: '1px solid rgba(26,188,171,0.35)',
+                              borderRadius: 6, padding: '3px 8px',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                              </svg>
+                              V{q.confirmed_version_number} confirmed
+                            </span>
+                          ) : (
+                            <StatusBadge calcId={q.id} status={q.status} onChoose={handleStatusChange} />
+                          )}
                         </td>
                         <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center' }}>
@@ -669,8 +711,10 @@ export default function QuoteHistory({ onEditCalc }) {
                               </div>
                               <VersionsSection
                                 calcId={q.id}
+                                parentCalc={q}
                                 onStatusChange={(next) => handleVersionStatusChange(q.id, next)}
                                 refreshAt={versionsRefreshAt}
+                                onEditVersion={onEditVersion}
                               />
                             </div>
                           </td>

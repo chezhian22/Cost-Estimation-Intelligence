@@ -69,10 +69,14 @@ def calculate(
         circumference = teeth * 3.175                 # B = A * 3.175
         input_width = circumference / width           # C = B / width
         around = js_round(input_width)                # D = ROUND(C, 0)
+        if around == 0:
+            continue  # label wider than cylinder circumference — skip
         label_width = circumference / around          # E = B / D
         paper_plus_20 = paper_size + 20               # G = F + 20
         input_height = paper_size / height            # H = F / height
         across = math.floor(input_height)             # I = ROUNDDOWN(H, 0)
+        if across == 0:
+            continue  # label taller than paper width — skip
         label_height = paper_size / across + 20 / across  # J = F/I + 20/I
 
         rows.append({
@@ -87,6 +91,12 @@ def calculate(
             "across": across,
             "label_height": label_height,
         })
+
+    if not rows:
+        raise ValueError(
+            "No valid cylinder found for the given label dimensions. "
+            "The label may be too large for all available cylinders."
+        )
 
     label_widths = [r["label_width"] for r in rows]
 
