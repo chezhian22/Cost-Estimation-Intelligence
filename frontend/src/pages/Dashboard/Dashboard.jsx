@@ -1,41 +1,30 @@
-import React from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
+import { api } from '../../api'
 import './Dashboard.css'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
 
-const ORDERS_PER_MONTH = [
-  { month: 'Jan', orders: 8  },
-  { month: 'Feb', orders: 12 },
-  { month: 'Mar', orders: 15 },
-  { month: 'Apr', orders: 11 },
-  { month: 'May', orders: 18 },
-  { month: 'Jun', orders: 23 },
-]
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-const CALC_STATUS = [
-  { name: 'Confirmed', value: 21, color: '#1ABCAB' },
-  { name: 'Pending',   value: 13, color: '#f59e0b' },
-  { name: 'Rejected',  value: 4,  color: '#ef4444' },
-]
+function monthKey(iso) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${d.getMonth()}`
+}
 
-const TOP_CLIENTS = [
-  { name: 'Kingfisher',     orders: 12 },
-  { name: 'Tata',           orders: 8  },
-  { name: 'Diageo',         orders: 6  },
-  { name: 'Heineken',       orders: 4  },
-  { name: 'Anheuser-Busch', orders: 3  },
-]
-
-const ACTIVITY = [
-  { id: 1, action: 'KF-2026-001 confirmed',            client: 'Kingfisher',     time: '2 min ago',  color: '#1ABCAB' },
-  { id: 2, action: 'New order created',                client: 'Tata Consumer',  time: '18 min ago', color: '#1ABCAB' },
-  { id: 3, action: 'DG-2026-001 calculation updated',  client: 'Diageo',         time: '1 hr ago',   color: '#f59e0b' },
-  { id: 4, action: 'New client added',                 client: 'Heineken',       time: '3 hrs ago',  color: '#1ABCAB' },
-  { id: 5, action: 'HK-2026-003 rejected',             client: 'Heineken',       time: '5 hrs ago',  color: '#ef4444' },
-  { id: 6, action: 'AB-2026-001 pending review',       client: 'Anheuser-Busch', time: 'Yesterday',  color: '#f59e0b' },
-]
+function relativeTime(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'Yesterday'
+  return `${days} days ago`
+}
 
 const KPI_ICONS = {
   clients: (
@@ -69,15 +58,11 @@ const KPI_ICONS = {
   ),
 }
 
-const KPI_DATA = [
-  { label: 'Total Clients',        value: 24, icon: KPI_ICONS.clients,   borderColor: '#1ABCAB', trend: +3, trendLabel: 'this month'     },
-  { label: 'Total Orders',         value: 87, icon: KPI_ICONS.orders,    borderColor: '#0ea5e9', trend: +7, trendLabel: 'this month'     },
-  { label: 'Pending Calculations', value: 12, icon: KPI_ICONS.pending,   borderColor: '#f59e0b', trend: -2, trendLabel: 'from last month' },
-  { label: 'Confirmed This Month', value: 8,  icon: KPI_ICONS.confirmed, borderColor: '#10b981', trend: +2, trendLabel: 'from last month' },
-]
-
 function TrendBadge({ trend, label }) {
+  if (trend === null || trend === undefined) return null
   const up = trend > 0
+  const zero = trend === 0
+  if (zero) return <span className="db-trend-badge db-trend-up">→ {label}</span>
   return (
     <span className={`db-trend-badge ${up ? 'db-trend-up' : 'db-trend-down'}`}>
       {up ? '↑' : '↓'} {Math.abs(trend)} {label}
@@ -85,14 +70,14 @@ function TrendBadge({ trend, label }) {
   )
 }
 
-function KpiCard({ icon, label, value, borderColor, trend, trendLabel }) {
+function KpiCard({ icon, label, value, borderColor, trend, trendLabel, loading }) {
   return (
     <div className="db-kpi-card" style={{ borderLeftColor: borderColor }}>
       <div className="db-kpi-top">
         <span className="db-kpi-icon">{icon}</span>
-        <TrendBadge trend={trend} label={trendLabel} />
+        {!loading && <TrendBadge trend={trend} label={trendLabel} />}
       </div>
-      <div className="db-kpi-value">{value}</div>
+      <div className="db-kpi-value">{loading ? '—' : (value ?? 0)}</div>
       <div className="db-kpi-label">{label}</div>
     </div>
   )
@@ -103,7 +88,7 @@ function BarTooltip({ active, payload, label }) {
   return (
     <div className="db-tooltip">
       <div className="db-tooltip-label">{label}</div>
-      <div className="db-tooltip-val">{payload[0].value} orders</div>
+      <div className="db-tooltip-val">{payload[0].value} quotes</div>
     </div>
   )
 }
@@ -123,12 +108,123 @@ function HorizTooltip({ active, payload, label }) {
   return (
     <div className="db-tooltip">
       <div className="db-tooltip-label">{label}</div>
-      <div className="db-tooltip-val">{payload[0].value} orders</div>
+      <div className="db-tooltip-val">{payload[0].value} quotes</div>
     </div>
   )
 }
 
 export default function Dashboard({ onNavigate }) {
+  const [clients, setClients] = useState([])
+  const [calcs,   setCalcs]   = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      api.getClients().catch(() => []),
+      api.getHistory().catch(() => []),
+    ]).then(([c, h]) => {
+      setClients(c)
+      setCalcs(h)
+      setLoading(false)
+    })
+  }, [])
+
+  const stats = useMemo(() => {
+    const now = new Date()
+    const thisKey  = monthKey(now.toISOString())
+    const lastKey  = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString())
+
+    const confirmed     = calcs.filter(c => c.status === 'confirmed').length
+    const pending       = calcs.filter(c => c.status === 'pending').length
+    const rejected      = calcs.filter(c => c.status === 'rejected').length
+
+    const confirmedThisMonth = calcs.filter(c =>
+      c.status === 'confirmed' && monthKey(c.updated_at || c.created_at) === thisKey
+    ).length
+
+    const calcsThisMonth = calcs.filter(c => monthKey(c.created_at) === thisKey).length
+    const calcsLastMonth = calcs.filter(c => monthKey(c.created_at) === lastKey).length
+
+    const clientsThisMonth = clients.filter(c => monthKey(c.created_at) === thisKey).length
+
+    // Last 6 months for bar chart
+    const ordersPerMonth = Array.from({ length: 6 }, (_, i) => {
+      const d   = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+      const key = monthKey(d.toISOString())
+      return {
+        month:  MONTH_LABELS[d.getMonth()],
+        orders: calcs.filter(c => monthKey(c.created_at) === key).length,
+      }
+    })
+
+    // Status pie
+    const calcStatus = [
+      { name: 'Confirmed', value: confirmed, color: '#1ABCAB' },
+      { name: 'Pending',   value: pending,   color: '#f59e0b' },
+      { name: 'Rejected',  value: rejected,  color: '#ef4444' },
+    ]
+
+    // Top 5 clients by quote count
+    const clientCounts = {}
+    calcs.forEach(c => {
+      if (c.client_name) clientCounts[c.client_name] = (clientCounts[c.client_name] || 0) + 1
+    })
+    const topClients = Object.entries(clientCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, orders]) => ({ name, orders }))
+
+    // Recent activity — last 6 by updated_at or created_at
+    const recentActivity = [...calcs]
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+      .slice(0, 6)
+      .map(c => ({
+        id:     c.id,
+        action: `${c.order_name || 'Quote #' + c.id} — ${c.status}`,
+        client: c.client_name || 'No client',
+        time:   relativeTime(c.updated_at || c.created_at),
+        color:  c.status === 'confirmed' ? '#1ABCAB' : c.status === 'rejected' ? '#ef4444' : '#f59e0b',
+      }))
+
+    return {
+      totalClients:       clients.length,
+      totalCalcs:         calcs.length,
+      pending,
+      confirmedThisMonth,
+      clientsThisMonth,
+      calcsTrend:         calcsThisMonth - calcsLastMonth,
+      ordersPerMonth,
+      calcStatus,
+      topClients,
+      recentActivity,
+    }
+  }, [clients, calcs])
+
+  const kpiData = [
+    {
+      label: 'Total Clients',        value: stats.totalClients,       icon: KPI_ICONS.clients,
+      borderColor: '#1ABCAB', trend: stats.clientsThisMonth,  trendLabel: 'new this month',
+    },
+    {
+      label: 'Total Quotes',         value: stats.totalCalcs,         icon: KPI_ICONS.orders,
+      borderColor: '#0ea5e9', trend: stats.calcsTrend,        trendLabel: 'vs last month',
+    },
+    {
+      label: 'Pending Quotes',       value: stats.pending,            icon: KPI_ICONS.pending,
+      borderColor: '#f59e0b', trend: null,                    trendLabel: '',
+    },
+    {
+      label: 'Confirmed This Month', value: stats.confirmedThisMonth, icon: KPI_ICONS.confirmed,
+      borderColor: '#10b981', trend: null,                    trendLabel: '',
+    },
+  ]
+
+  const chartSubLabel = (() => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+    return `${MONTH_LABELS[start.getMonth()]} – ${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`
+  })()
+
   return (
     <div className="db-page">
 
@@ -136,8 +232,8 @@ export default function Dashboard({ onNavigate }) {
       <section className="db-section">
         <h2 className="db-section-title">Overview</h2>
         <div className="db-kpi-grid">
-          {KPI_DATA.map(kpi => (
-            <KpiCard key={kpi.label} {...kpi} />
+          {kpiData.map(kpi => (
+            <KpiCard key={kpi.label} {...kpi} loading={loading} />
           ))}
         </div>
       </section>
@@ -149,15 +245,15 @@ export default function Dashboard({ onNavigate }) {
 
           <div className="db-chart-card">
             <div className="db-chart-header">
-              <span className="db-chart-title">Orders per Month</span>
-              <span className="db-chart-sub">Jan – Jun 2026</span>
+              <span className="db-chart-title">Quotes per Month</span>
+              <span className="db-chart-sub">{chartSubLabel}</span>
             </div>
             <div className="db-chart-body">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={ORDERS_PER_MONTH} barSize={28} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                <BarChart data={stats.ordersPerMonth} barSize={28} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(26,188,171,0.08)' }} />
                   <Bar dataKey="orders" fill="#1ABCAB" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -167,14 +263,14 @@ export default function Dashboard({ onNavigate }) {
 
           <div className="db-chart-card">
             <div className="db-chart-header">
-              <span className="db-chart-title">Order Status Breakdown</span>
+              <span className="db-chart-title">Quote Status Breakdown</span>
               <span className="db-chart-sub">All time</span>
             </div>
             <div className="db-chart-body">
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
-                    data={CALC_STATUS}
+                    data={stats.calcStatus}
                     cx="50%"
                     cy="42%"
                     innerRadius={52}
@@ -182,7 +278,7 @@ export default function Dashboard({ onNavigate }) {
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {CALC_STATUS.map((entry, i) => (
+                    {stats.calcStatus.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -205,23 +301,29 @@ export default function Dashboard({ onNavigate }) {
 
           <div className="db-chart-card">
             <div className="db-chart-header">
-              <span className="db-chart-title">Top 5 Clients by Orders</span>
+              <span className="db-chart-title">Top Clients by Quotes</span>
             </div>
             <div className="db-chart-body">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart
-                  data={TOP_CLIENTS}
-                  layout="vertical"
-                  barSize={16}
-                  margin={{ top: 0, right: 16, bottom: 0, left: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" width={112} tick={{ fontSize: 12, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<HorizTooltip />} cursor={{ fill: 'rgba(245,158,11,0.08)' }} />
-                  <Bar dataKey="orders" fill="#f59e0b" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {stats.topClients.length === 0 && !loading ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '3rem 0', fontSize: '0.82rem' }}>
+                  No data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={stats.topClients}
+                    layout="vertical"
+                    barSize={16}
+                    margin={{ top: 0, right: 16, bottom: 0, left: 4 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" width={112} tick={{ fontSize: 12, fontFamily: 'DM Sans, sans-serif' }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<HorizTooltip />} cursor={{ fill: 'rgba(245,158,11,0.08)' }} />
+                    <Bar dataKey="orders" fill="#f59e0b" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -229,21 +331,27 @@ export default function Dashboard({ onNavigate }) {
             <div className="db-chart-header">
               <span className="db-chart-title">Recent Activity</span>
             </div>
-            <div className="db-activity-list">
-              {ACTIVITY.map(item => (
-                <div key={item.id} className="db-activity-item">
-                  <div className="db-activity-dot" style={{ background: item.color, boxShadow: `0 0 6px ${item.color}55` }} />
-                  <div className="db-activity-content">
-                    <div className="db-activity-action">{item.action}</div>
-                    <div className="db-activity-meta">
-                      <span className="db-activity-client">{item.client}</span>
-                      <span className="db-activity-sep">·</span>
-                      <span className="db-activity-time">{item.time}</span>
+            {stats.recentActivity.length === 0 && !loading ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '3rem 0', fontSize: '0.82rem' }}>
+                No recent activity
+              </div>
+            ) : (
+              <div className="db-activity-list">
+                {stats.recentActivity.map(item => (
+                  <div key={item.id} className="db-activity-item">
+                    <div className="db-activity-dot" style={{ background: item.color, boxShadow: `0 0 6px ${item.color}55` }} />
+                    <div className="db-activity-content">
+                      <div className="db-activity-action">{item.action}</div>
+                      <div className="db-activity-meta">
+                        <span className="db-activity-client">{item.client}</span>
+                        <span className="db-activity-sep">·</span>
+                        <span className="db-activity-time">{item.time}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>

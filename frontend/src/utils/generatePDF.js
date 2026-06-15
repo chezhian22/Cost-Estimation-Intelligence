@@ -98,30 +98,7 @@ export function buildPDFHtml(
   const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
   const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
   if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
-
-  const cyl          = approved_cylinder
-  const qty          = Number(inputs.total_qty) || 0
-  const ratePerLabel = Number(pricing.selling_price_per_label || 0)
-  const subtotal     = Number(pricing.total_cost_inr || (qty * ratePerLabel) || 0)
-  const totalUsd     = Number(pricing.total_cost_usd || 0)
-
-  const cgstPct = (companySettings.cgst_pct != null && companySettings.cgst_pct !== '')
-    ? Number(companySettings.cgst_pct) : null
-  const sgstPct = (companySettings.sgst_pct != null && companySettings.sgst_pct !== '')
-    ? Number(companySettings.sgst_pct) : null
-  const hasTax   = cgstPct !== null && sgstPct !== null && !isNaN(cgstPct) && !isNaN(sgstPct)
-  const cgstAmt  = hasTax ? subtotal * cgstPct / 100 : 0
-  const sgstAmt  = hasTax ? subtotal * sgstPct / 100 : 0
-  const totalInr = hasTax ? subtotal + cgstAmt + sgstAmt : subtotal
-
-  const subLine = [
-    inputs.substrate,
-    inputs.label_width_mm && inputs.label_height_mm
-      ? `${Number(inputs.label_width_mm).toFixed(1)} \xd7 ${Number(inputs.label_height_mm).toFixed(1)} mm`
-      : null,
-    cyl.teeth                      ? `Cyl. ${cyl.teeth}T`              : null,
-    cyl.across && cyl.around       ? `Layout ${cyl.across}\xd7${cyl.around}` : null,
-  ].filter(Boolean).join(' \xb7 ')
+  const coLogo = companySettings.logo_url || ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">

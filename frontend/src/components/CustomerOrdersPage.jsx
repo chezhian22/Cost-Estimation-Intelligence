@@ -346,14 +346,46 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
               ) : approvedId != null ? (
                 <>
                   <span className="cop-detail-other-approved">Another calculation is already approved for this order.</span>
-                  <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
-                    ★ Approve this instead
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <button
+                      className="cop-pdf-btn"
+                      disabled={quotationLoading}
+                      onClick={async () => {
+                        setQuotationLoading(true)
+                        try {
+                          let cs = {}
+                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+                        } finally { setQuotationLoading(false) }
+                      }}
+                    >
+                      {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                    </button>
+                    <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
+                      ★ Approve this instead
+                    </button>
+                  </div>
                 </>
               ) : (
-                <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
-                  ★ Approve this Calculation
-                </button>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                  <button
+                    className="cop-pdf-btn"
+                    disabled={quotationLoading}
+                    onClick={async () => {
+                      setQuotationLoading(true)
+                      try {
+                        let cs = {}
+                        try { cs = await api.getCompanySettings() } catch (_) {}
+                        generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+                      } finally { setQuotationLoading(false) }
+                    }}
+                  >
+                    {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                  </button>
+                  <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
+                    ★ Approve this Calculation
+                  </button>
+                </div>
               )}
             </div>
           </>
@@ -623,27 +655,29 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
 
       {/* approve action */}
       <div className="cop-calc-actions" onClick={(e) => e.stopPropagation()}>
-        {isApproved ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          {isApproved && (
             <span className="cop-approved-chip">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
               Approved
             </span>
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
-              {quotationLoading ? (
-                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
-              ) : (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                </svg>
-              )}
-              Quotation
-            </button>
+          )}
+          <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
+            {quotationLoading ? (
+              <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            )}
+            Quotation
+          </button>
+          {isApproved ? (
             <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Download client invoice">
               {pdfLoading ? (
                 <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
@@ -655,16 +689,16 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
               )}
               Invoice
             </button>
-          </div>
-        ) : (
-          <button
-            className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
-            onClick={() => onApproveRequest(calc)}
-            title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
-          >
-            Approve
-          </button>
-        )}
+          ) : (
+            <button
+              className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
+              onClick={() => onApproveRequest(calc)}
+              title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
+            >
+              Approve
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

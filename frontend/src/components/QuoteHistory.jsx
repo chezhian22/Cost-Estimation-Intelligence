@@ -4,6 +4,7 @@ import { api } from '../api'
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 import { toast } from '../utils/toast'
+import { generateQuotationPDF } from '../utils/generatePDF'
 
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
@@ -135,13 +136,44 @@ function UserChip({ name }) {
 }
 
 // ── Version Detail Modal ──────────────────────────────────────────────────────
-function VersionDetailModal({ version, onClose }) {
+function VersionDetailModal({ version, onClose, clientName, orderName }) {
+  const [quotationLoading, setQuotationLoading] = useState(false)
+
   const statusCfg = {
     confirmed: { label: 'Confirmed', cls: 'cop-status-confirmed' },
     pending:   { label: 'Draft',     cls: 'cop-status-pending'   },
     rejected:  { label: 'Rejected',  cls: 'cop-status-rejected'  },
   }
   const cfg = statusCfg[version.status] ?? statusCfg.pending
+
+  async function handleQuotationPDF() {
+    setQuotationLoading(true)
+    try {
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateQuotationPDF({
+        client:  { name: clientName || 'N/A', location: '', email: '', phone: '' },
+        order:   { label: orderName || '', ref: `Edit v${version.version_number}` },
+        inputs: {
+          label_width_mm:  version.width,
+          label_height_mm: version.height,
+          yield_pct:       version.yield_pct       || 85,
+          substrate_name:  version.substrate_name  || 'Custom',
+          substrate_price: version.substrate_price || 0,
+          foil_cost:       version.foil_cost        || 0,
+          custom_cost:     version.custom_cost      ?? 0,
+          exchange_rate:   version.exchange_rate    || 85,
+          order_qty:       0,
+        },
+        result:     version.result || {},
+        preparedBy: version.created_by_name || '',
+      }, cs)
+    } catch (err) {
+      toast.error(err.message || 'PDF generation failed')
+    } finally {
+      setQuotationLoading(false)
+    }
+  }
 
   return createPortal(
     <div className="cop-detail-overlay" onClick={onClose}>
@@ -195,6 +227,22 @@ function VersionDetailModal({ version, onClose }) {
             </>
           )}
         </div>
+        <div className="cop-detail-footer">
+          <span />
+          <button className="cop-pdf-btn" onClick={handleQuotationPDF} disabled={quotationLoading}>
+            {quotationLoading ? (
+              <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            )}
+            {quotationLoading ? 'Generating…' : 'Quotation'}
+          </button>
+        </div>
       </div>
     </div>,
     document.body
@@ -202,10 +250,41 @@ function VersionDetailModal({ version, onClose }) {
 }
 
 // ── Versions section — tree layout ───────────────────────────────────────────
-function VersionsSection({ calcId, onStatusChange, refreshAt }) {
+function VersionsSection({ calcId, onStatusChange, refreshAt, clientName, orderName }) {
   const [versions, setVersions] = useState(null)
   const [loading, setLoading]   = useState(true)
   const [detailVersion, setDetailVersion] = useState(null)
+  const [pdfLoadingIds, setPdfLoadingIds] = useState(new Set())
+
+  async function handleVersionQuotationPDF(e, v) {
+    e.stopPropagation()
+    setPdfLoadingIds(prev => new Set(prev).add(v.id))
+    try {
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateQuotationPDF({
+        client:  { name: clientName || 'N/A', location: '', email: '', phone: '' },
+        order:   { label: orderName || '', ref: `Edit v${v.version_number}` },
+        inputs: {
+          label_width_mm:  v.width,
+          label_height_mm: v.height,
+          yield_pct:       v.yield_pct       || 85,
+          substrate_name:  v.substrate_name  || 'Custom',
+          substrate_price: v.substrate_price || 0,
+          foil_cost:       v.foil_cost        || 0,
+          custom_cost:     v.custom_cost      ?? 0,
+          exchange_rate:   v.exchange_rate    || 85,
+          order_qty:       0,
+        },
+        result:     v.result || {},
+        preparedBy: v.created_by_name || '',
+      }, cs)
+    } catch (err) {
+      toast.error(err.message || 'PDF generation failed')
+    } finally {
+      setPdfLoadingIds(prev => { const s = new Set(prev); s.delete(v.id); return s })
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -274,12 +353,25 @@ function VersionsSection({ calcId, onStatusChange, refreshAt }) {
               <button className="qh-v-view-btn" onClick={() => setDetailVersion(v)}>
                 View
               </button>
+              <button
+                className="qh-v-view-btn"
+                onClick={(e) => handleVersionQuotationPDF(e, v)}
+                disabled={pdfLoadingIds.has(v.id)}
+                title="Download internal quotation"
+              >
+                {pdfLoadingIds.has(v.id) ? '…' : 'Quotation'}
+              </button>
             </div>
           </div>
         ))}
       </div>
       {detailVersion && (
-        <VersionDetailModal version={detailVersion} onClose={() => setDetailVersion(null)} />
+        <VersionDetailModal
+          version={detailVersion}
+          onClose={() => setDetailVersion(null)}
+          clientName={clientName}
+          orderName={orderName}
+        />
       )}
     </>
   )
@@ -377,6 +469,38 @@ export default function QuoteHistory({ onEditCalc }) {
   const [detailCalcId, setDetailCalcId]     = useState(null)
   const [expandedRows, setExpandedRows]     = useState(new Set())
   const [versionsRefreshAt, setVersionsRefreshAt] = useState(null)
+  const [pdfLoadingIds, setPdfLoadingIds]   = useState(new Set())
+
+  async function handleQuotationPDF(e, q) {
+    e.stopPropagation()
+    setPdfLoadingIds(prev => new Set(prev).add(q.id))
+    try {
+      const data = await api.getCalculation(q.id)
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateQuotationPDF({
+        client:  { name: data.client_name || 'N/A', location: data.client_location || '', email: data.client_email || '', phone: data.client_phone || '' },
+        order:   { order_id: `CALC-${data.id}`, label: data.order_name || '' },
+        inputs: {
+          label_width_mm:  data.width,
+          label_height_mm: data.height,
+          yield_pct:       data.yield_pct       || 85,
+          substrate_name:  data.substrate_name  || 'Custom',
+          substrate_price: data.substrate_price || 0,
+          foil_cost:       data.foil_cost        || 0,
+          custom_cost:     data.custom_cost      ?? 0,
+          exchange_rate:   data.exchange_rate    || 85,
+          order_qty:       data.order_qty        || 0,
+        },
+        result:     data.result || {},
+        preparedBy: '',
+      }, cs)
+    } catch (err) {
+      toast.error(err.message || 'PDF generation failed')
+    } finally {
+      setPdfLoadingIds(prev => { const s = new Set(prev); s.delete(q.id); return s })
+    }
+  }
 
   function toggleExpand(id) {
     setExpandedRows((prev) => {
@@ -651,6 +775,24 @@ export default function QuoteHistory({ onEditCalc }) {
                               </svg>
                               View
                             </button>
+                            <button
+                              className="qh-action-btn"
+                              onClick={(e) => handleQuotationPDF(e, q)}
+                              disabled={pdfLoadingIds.has(q.id)}
+                              title="Download internal quotation"
+                            >
+                              {pdfLoadingIds.has(q.id) ? (
+                                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                              ) : (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                  <polyline points="14 2 14 8 20 8"/>
+                                  <line x1="16" y1="13" x2="8" y2="13"/>
+                                  <line x1="16" y1="17" x2="8" y2="17"/>
+                                </svg>
+                              )}
+                              Quotation
+                            </button>
                           </div>
                         </td>
                       </tr>,
@@ -671,6 +813,8 @@ export default function QuoteHistory({ onEditCalc }) {
                                 calcId={q.id}
                                 onStatusChange={(next) => handleVersionStatusChange(q.id, next)}
                                 refreshAt={versionsRefreshAt}
+                                clientName={q.client_name}
+                                orderName={q.order_name}
                               />
                             </div>
                           </td>
