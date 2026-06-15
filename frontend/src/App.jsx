@@ -478,7 +478,7 @@ export default function App() {
           {NAV_SECTIONS.map(({ section, icon, links }) => (
             <div key={section || '__top'}>
               {section && (
-                <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+                <div className="nav-section-label" style={{ marginTop: '0.9rem' }}>
                   {icon && <span className="nav-section-icon">{icon}</span>}
                   {section}
                 </div>
@@ -516,7 +516,7 @@ export default function App() {
 
           {isAdmin && (
             <div>
-              <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+              <div className="nav-section-label" style={{ marginTop: '0.9rem' }}>
                 <span className="nav-section-icon">{ADMIN_SECTION.icon}</span>
                 {ADMIN_SECTION.section}
               </div>

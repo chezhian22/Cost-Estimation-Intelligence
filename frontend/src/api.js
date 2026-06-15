@@ -121,4 +121,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ calc_id: calcId, to_email: toEmail, subject, body }),
     }),
+
+  changePassword: (email, oldPassword, newPassword) =>
+    request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, old_password: oldPassword, new_password: newPassword }),
+    }),
 }

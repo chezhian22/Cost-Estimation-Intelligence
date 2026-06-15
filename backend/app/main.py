@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
 from .invoice_pdf import generate_invoice_pdf_bytes
-from .auth import create_access_token, decode_token
+from .auth import create_access_token, decode_token, hash_password, verify_password
 from .database import Base, engine, get_db
 from .security import check_request_body
 
@@ -1019,6 +1019,19 @@ def logout(response: Response):
 def get_me(current_user: models.User = Depends(get_current_user)):
     """Returns the currently authenticated user's profile."""
     return current_user
+
+
+@app.post("/api/auth/change-password", tags=["auth"])
+def change_password(body: schemas.ChangePasswordRequest, db: Session = Depends(get_db)):
+    """Allow a user to change their own password by verifying their current password first."""
+    user = crud.get_user_by_email(db, body.email.strip())
+    if not user or not verify_password(body.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid email or current password")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Account is inactive")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"status": "ok"}
 
 
 # ── User Management (admin only) ──────────────────────────────────────────────

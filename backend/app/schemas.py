@@ -495,4 +495,10 @@ class SendInvoiceEmailRequest(BaseModel):
     body:      str
 
 
+class ChangePasswordRequest(BaseModel):
+    email:        str = Field(..., max_length=200)
+    old_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+
 LoginResponse.model_rebuild()
