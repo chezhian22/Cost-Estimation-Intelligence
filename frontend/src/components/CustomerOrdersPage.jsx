@@ -1,11 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
-<<<<<<< HEAD
 import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
-=======
-import { generatePDF } from '../utils/generatePDF'
 import { toast } from '../utils/toast'
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 
@@ -34,7 +30,6 @@ function fmtDateTime(dt) {
 }
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
-<<<<<<< HEAD
 // ── PDF payload builders ──────────────────────────────────────────────────────
 function buildInvoicePayload(calcData, clientName, orderName) {
   const result   = calcData.result  || {}
@@ -61,44 +56,11 @@ function buildInvoicePayload(calcData, clientName, orderName) {
       label_height_mm: calcData.height,
       substrate:       calcData.substrate_name || 'Custom',
       total_qty:       orderQty,
-=======
-// ── PDF helper ────────────────────────────────────────────────────────────────
-function buildPDFPayload(calcData, clientName, orderName) {
-  const result  = calcData.result || {}
-  const matched = result.matched  || {}
-  const rows    = result.rows     || []
-  const pricing = result.pricing  || {}
-  const row     = rows[matched.index] || {}
-  const orderQty = Number(calcData.order_qty) || 0
-
-  const ratePerLabel = (pricing.rate_2 || 0) / 1000
-  const totalInr     = orderQty * ratePerLabel
-  const totalUsd     = orderQty * (pricing.price_usd_label || 0)
-
-  return {
-    client: {
-      name:     clientName || calcData.client_name || '',
-      location: calcData.client_location || '',
-      email:    calcData.client_email    || '',
-      phone:    calcData.client_phone    || '',
-    },
-    order: {
-      label:    orderName || calcData.order_name || '',
-      order_id: calcData.order_id ? String(calcData.order_id) : '',
-    },
-    inputs: {
-      total_qty:       orderQty,
-      substrate:       calcData.substrate_name || 'Custom',
-      label_width_mm:  row.label_width,
-      label_height_mm: row.label_height,
-      exchange_rate:   calcData.exchange_rate || 85,
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     },
     approved_cylinder: {
       teeth:  row.teeth,
       around: row.around,
       across: row.across,
-<<<<<<< HEAD
     },
     pricing: {
       selling_price_per_label: pricePerLabel,
@@ -133,15 +95,6 @@ function buildQuotationPayload(calcData, clientName, orderName) {
     },
     result:     calcData.result || {},
     preparedBy: '',
-=======
-    },
-    pricing: {
-      ...pricing,
-      selling_price_per_label: ratePerLabel,
-      total_cost_inr:          totalInr  || pricing.total_cost_inr  || 0,
-      total_cost_usd:          totalUsd  || pricing.total_cost_usd  || 0,
-    },
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
   }
 }
 
@@ -248,19 +201,12 @@ function EditClientModal({ client, onUpdated, onClose }) {
 // ── Calculation Detail Modal ──────────────────────────────────────────────────
 // Shows the full CylinderTable + PricingPanel for a saved calculation,
 // plus Approve / Unapprove buttons.
-<<<<<<< HEAD
 function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName }) {
-  const [data, setData]                       = useState(null)
-  const [loading, setLoading]                 = useState(true)
-  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [data, setData]                         = useState(null)
+  const [loading, setLoading]                   = useState(true)
+  const [loadError, setLoadError]               = useState(null)
+  const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
-=======
-function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName, companySettings = {} }) {
-  const [data, setData]           = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [loadError, setLoadError] = useState(null)
-  const [pdfLoading, setPdfLoading] = useState(false)
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   useEffect(() => {
     setLoading(true)
@@ -375,16 +321,11 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                       disabled={pdfLoading}
                       onClick={async () => {
                         setPdfLoading(true)
-<<<<<<< HEAD
                         try {
                           let cs = {}
                           try { cs = await api.getCompanySettings() } catch (_) {}
                           generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
                         } finally { setPdfLoading(false) }
-=======
-                        try { generatePDF(buildPDFPayload(data, clientName, orderName), companySettings) }
-                        finally { setPdfLoading(false) }
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
                       }}
                     >
                       {pdfLoading ? (
@@ -497,14 +438,9 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
 }
 
 // ── Version quote detail modal (data already loaded from getVersions) ────────
-<<<<<<< HEAD
 function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
-  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
-=======
-function VersionQuoteDetailModal({ version, onClose, clientName, orderName, companySettings = {} }) {
-  const [pdfLoading, setPdfLoading] = useState(false)
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   async function handleInvoice() {
     setPdfLoading(true)
@@ -513,7 +449,6 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName, comp
       try { cs = await api.getCompanySettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(
         { ...version, result: version.result },
-<<<<<<< HEAD
         clientName, orderName,
       ), cs)
     } finally { setPdfLoading(false) }
@@ -529,14 +464,6 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName, comp
         clientName, orderName,
       ), cs)
     } finally { setQuotationLoading(false) }
-=======
-        clientName,
-        orderName,
-      ), companySettings)
-    } finally {
-      setPdfLoading(false)
-    }
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
   }
 
   return (
@@ -621,31 +548,18 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName, comp
 }
 
 // ── Calculation row ───────────────────────────────────────────────────────────
-<<<<<<< HEAD
 function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName }) {
-  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
-=======
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName, companySettings = {} }) {
-  const [pdfLoading, setPdfLoading] = useState(false)
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   async function handleInvoicePDF(e) {
     e.stopPropagation()
     setPdfLoading(true)
     try {
-<<<<<<< HEAD
       const data = calc.result ? calc : await api.getCalculation(calc.id)
       let cs = {}
       try { cs = await api.getCompanySettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
-=======
-      // version rows already carry result; base calcs need a full fetch
-      const data = calc.result
-        ? calc
-        : await api.getCalculation(calc.id)
-      generatePDF(buildPDFPayload(data, clientName, orderName), companySettings)
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     } catch (err) {
       toast.error(err.message || 'PDF generation failed')
     } finally {

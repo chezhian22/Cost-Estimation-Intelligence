@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react'
-<<<<<<< HEAD
-import { api, setToken } from './api'
-import { generateInvoicePDF, generateQuotationPDF } from './utils/generatePDF'
-=======
 import { api } from './api'
-import { generatePDF } from './utils/generatePDF'
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
+import { generateInvoicePDF, generateQuotationPDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'

@@ -1,11 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import './PDFPreview.css'
-<<<<<<< HEAD
-import { generateInvoicePDF } from '../../../utils/generatePDF'
-=======
 import { buildPDFHtml, generatePDF } from '../../../utils/generatePDF'
 import { api } from '../../../api'
->>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
 const SAMPLE = {
   client: {
