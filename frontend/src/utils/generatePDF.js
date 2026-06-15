@@ -5,6 +5,7 @@
 const ind = (n, d = 2) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 
+<<<<<<< HEAD
 // Shared pricing computation for any cylinder row + inputs
 function computeRow(row, inputs) {
   if (!row?.label_width || !row?.label_height) {
@@ -48,6 +49,9 @@ function openWindow(html) {
 // NEVER show internal data: substrate cost, yield, waste, markup tiers, costs.
 // ─────────────────────────────────────────────────────────────────────────────
 export function generateInvoicePDF(
+=======
+export function buildPDFHtml(
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
   { client = {}, order = {}, inputs = {}, approved_cylinder = {}, pricing = {} },
   companySettings = {}
 ) {
@@ -86,6 +90,24 @@ export function generateInvoicePDF(
     cyl.across && cyl.around       ? `Layout ${cyl.across}\xd7${cyl.around}` : null,
   ].filter(Boolean).join(' \xb7 ')
 
+  // ── Company info from settings ──
+  const coName    = companySettings.company_name || 'CHROMAPRINT'
+  const coTagline = companySettings.tagline      || 'India Private Limited'
+  const coPhone   = companySettings.phone        || '+91-422-2642738'
+  const coEmail   = companySettings.email        || 'sales@chromaprintindia.com'
+  const coWebsite = companySettings.website      || ''
+  const coGst     = companySettings.gst_number   || ''
+  const coAddrParts = [
+    companySettings.address,
+    companySettings.location,
+    companySettings.state,
+    companySettings.country,
+  ].filter(Boolean)
+  const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
+
+  const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
+  if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -111,9 +133,27 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 .doc-date{font-size:10px;color:#64748b;margin-top:3px}
 .doc-valid{font-size:10px;color:#64748b;margin-top:2px}
 .divider{border:none;height:3px;background:#1abcab;margin:0 36px}
+<<<<<<< HEAD
 .bill-section{padding:24px 36px 20px;border-bottom:1px solid #f1f5f9}
 .bill-label{font-size:8px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
 .bill-name{font-size:16px;font-weight:800;color:#1e293b;line-height:1.2;margin-bottom:4px}
+=======
+
+/* ─── Bill to ─── */
+.bill-section{
+  padding:24px 36px 20px;
+  border-bottom:1px solid #f1f5f9;
+}
+.bill-label{
+  font-size:8px;font-weight:800;
+  letter-spacing:0.14em;text-transform:uppercase;
+  color:#94a3b8;margin-bottom:8px;
+}
+.bill-name{
+  font-size:24px;font-weight:900;
+  color:#1e293b;line-height:1;margin-bottom:4px;
+}
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 .bill-detail{font-size:10.5px;color:#64748b;line-height:1.8}
 .order-ref{margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;font-size:10px;color:#64748b;line-height:1.8}
 .items-wrap{padding:0 36px}
@@ -156,8 +196,15 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
   <div class="inv-header">
     <div>
       <div class="co-name">${coName}</div>
+<<<<<<< HEAD
       <div class="co-sub">Label Printing &amp; Packaging</div>
       <div class="co-meta">${coAddr}<br>${coPhone} &nbsp;|&nbsp; ${coEmail}</div>
+=======
+      ${coTagline ? `<div class="co-sub">${coTagline}</div>` : ''}
+      <div class="co-meta">
+        ${coMetaLines.join('<br>')}
+      </div>
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     </div>
     <div class="hdr-right">
       <div class="doc-type">INVOICE</div>
@@ -241,6 +288,7 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
     </div>
     <div class="footer-contact">
       <strong>${coName}</strong>
+<<<<<<< HEAD
       ${coEmail}<br>
       ${coPhone}
     </div>
@@ -646,6 +694,9 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
       ${coEmail}<br>
       ${coPhone}
       <div class="sig-line">Authorised Signatory</div>
+=======
+      ${[coEmail, coPhone, coWebsite].filter(Boolean).join('<br>')}
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     </div>
   </div>
 
@@ -653,5 +704,18 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 </body>
 </html>`
 
+<<<<<<< HEAD
   openWindow(html)
+=======
+  return html
+}
+
+export function generatePDF(payload, companySettings = {}) {
+  const html = buildPDFHtml(payload, companySettings)
+  const win = window.open('', '_blank')
+  if (!win) { alert('Please allow pop-ups to generate the PDF quote.'); return }
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 }

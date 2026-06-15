@@ -15,3 +15,6 @@ dist/
 
 #claude
 .claude
+
+# Docs
+CHANGES.md

@@ -2,8 +2,11 @@
 
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException, Security
+import os
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
@@ -11,15 +14,22 @@ from sqlalchemy.orm import Session
 from . import calculator, crud, models, schemas
 from .auth import create_access_token, decode_token
 from .database import Base, engine, get_db
+from .security import check_request_body
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _extract_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    """Cookie takes priority; Bearer header is accepted as fallback (API clients / tests)."""
+    return request.cookies.get("cp_token") or (credentials.credentials if credentials else None)
+
+
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> models.User:
-    token = credentials.credentials if credentials else None
+    token = _extract_token(request, credentials)
     payload = decode_token(token) if token else None
     if not payload:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -36,10 +46,11 @@ def require_admin(current_user: models.User = Depends(get_current_user)) -> mode
 
 
 def get_optional_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> models.User | None:
-    token = credentials.credentials if credentials else None
+    token = _extract_token(request, credentials)
     payload = decode_token(token) if token else None
     if not payload:
         return None
@@ -133,6 +144,10 @@ def _migrate():
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
 
 _migrate()
+
+# Validate that the live DB schema matches the models before accepting requests.
+from .schema_validator import validate_db_schema  # noqa: E402
+validate_db_schema(engine, Base)
 
 # Seed default admin user (runs only if no users exist)
 from .database import SessionLocal as _SL  # noqa: E402
@@ -241,13 +256,47 @@ python -m app.seed
     },
 )
 
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── SQL injection guard ───────────────────────────────────────────────────────
+@app.middleware("http")
+async def sql_injection_guard(request: Request, call_next):
+    """
+    Scan every mutating request body for SQL injection patterns before any
+    route handler or DB layer is reached.
+
+    The ORM already parameterises all queries (making DB-level injection
+    impossible), but this middleware adds a visible second layer that:
+      • Rejects the request immediately with 400 if a pattern is found.
+      • Logs the client IP, path, and matched patterns for audit purposes.
+    """
+    if request.method in ("POST", "PUT", "PATCH"):
+        raw = await request.body()          # Starlette caches this; route handlers can still read it
+        client_ip = request.client.host if request.client else "unknown"
+        findings = check_request_body(raw, client_ip, request.url.path)
+        if findings:
+            patterns = list({p for _, p in findings})
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": "Request rejected: input contains disallowed SQL patterns.",
+                    "patterns": patterns,
+                },
+            )
+    return await call_next(request)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -358,6 +407,19 @@ def add_order(client_id: int, data: schemas.OrderCreate, db: Session = Depends(g
     return crud.create_order(db, client_id, data)
 
 
+@app.patch(
+    "/api/orders/{order_id}",
+    tags=["orders"],
+    response_model=schemas.OrderOut,
+    summary="Rename an order",
+)
+def update_order(order_id: int, data: schemas.OrderCreate, db: Session = Depends(get_db)):
+    obj = crud.update_order(db, order_id, data.name)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return obj
+
+
 @app.get(
     "/api/orders/{order_id}/calculations",
     tags=["orders"],
@@ -428,6 +490,9 @@ def add_substrate(data: schemas.SubstrateCreate, db: Session = Depends(get_db)):
     - `name` should be descriptive (e.g. `"PP Gloss"`, `"PET Silver Metalized"`).
     - `price` is in **₹ per m²**.
     """
+    existing = db.query(models.Substrate).filter(models.Substrate.name == data.name.strip()).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Substrate name already exists")
     return crud.create_substrate(db, data)
 
 
@@ -520,6 +585,9 @@ def add_teeth(data: schemas.TeethCreate, db: Session = Depends(get_db)):
 
     The new cylinder is immediately available for future `POST /api/calculate` calls.
     """
+    existing = db.query(models.TeethData).filter(models.TeethData.teeth == data.teeth).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="A cylinder with this teeth count already exists")
     return crud.create_teeth(db, data)
 
 
@@ -785,10 +853,14 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "substrate_price": obj.substrate_price,
         "foil_cost": obj.foil_cost,
         "exchange_rate": obj.exchange_rate,
+        "order_qty": obj.order_qty,
         "created_at": obj.created_at,
         "client_id": obj.client_id,
         "order_id": obj.order_id,
-        "client_name": client.name if client else None,
+        "client_name":     client.name     if client else None,
+        "client_location": client.location if client else None,
+        "client_email":    client.email    if client else None,
+        "client_phone":    client.phone    if client else None,
         "order_name":  order.name  if order  else None,
         "status": obj.status or "pending",
         "result": obj.result,
@@ -884,18 +956,40 @@ def update_version_status(
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-@app.post("/api/auth/login", response_model=schemas.TokenResponse, tags=["auth"])
-def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate with email + password. Returns a JWT bearer token."""
-    user = crud.authenticate_user(db, body.email, body.password)
-    if not user:
+_COOKIE_NAME     = "cp_token"
+_SECURE_COOKIE   = os.getenv("ENVIRONMENT", "development") == "production"
+_COOKIE_MAX_AGE  = 8 * 3600   # matches TOKEN_EXPIRE_HOURS in auth.py
+
+
+@app.post("/api/auth/login", response_model=schemas.LoginResponse, tags=["auth"])
+def login(body: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)):
+    """Authenticate with email + password. Sets an HttpOnly cookie carrying the JWT."""
+    from .auth import verify_password  # noqa: PLC0415
+
+    user = crud.get_user_by_email(db, body.email.strip().lower())
+    # Verify password before revealing anything about account status (prevents email enumeration)
+    if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Contact your administrator.")
     token = create_access_token(user.id, user.username, user.role)
-    return schemas.TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        user=schemas.UserOut.model_validate(user),
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=_SECURE_COOKIE,
+        samesite="lax",
+        max_age=_COOKIE_MAX_AGE,
+        path="/",
     )
+    return schemas.LoginResponse(user=schemas.UserOut.model_validate(user))
+
+
+@app.post("/api/auth/logout", status_code=200, tags=["auth"])
+def logout(response: Response):
+    """Clear the session cookie."""
+    response.delete_cookie(key=_COOKIE_NAME, path="/")
+    return {"status": "ok"}
 
 
 @app.get("/api/auth/me", response_model=schemas.UserOut, tags=["auth"])

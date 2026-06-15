@@ -1,5 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
+import { toast } from '../utils/toast'
+
+function blockNonNumeric(e) {
+  const allowed = ['Backspace','Delete','Tab','Enter','Escape',
+                   'ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End']
+  if (allowed.includes(e.key) || e.ctrlKey || e.metaKey) return
+  if (e.key >= '0' && e.key <= '9') return
+  if (e.key === '.') return
+  e.preventDefault()
+}
+
+function pasteNumbersOnly(e) {
+  const text = e.clipboardData.getData('text')
+  if (!/^\d*\.?\d*$/.test(text)) e.preventDefault()
+}
 
 
 const LABELS      = ['A', 'B', 'C', 'D']
@@ -48,19 +63,19 @@ function QuoteLoader({ onLoaded }) {
   const [orderId, setOrderId]   = useState('')
   const [fetching, setFetching] = useState(false)
 
-  useEffect(() => { api.getClients().then(setClients).catch(() => {}) }, [])
+  useEffect(() => { api.getClients().then(setClients).catch((e) => toast.error(e.message || 'Failed to load clients')) }, [])
 
   async function handleClient(id) {
     setClientId(id); setOrderId(''); setOrders([]); setCalcs([])
     if (!id) return
-    const os = await api.getOrders(parseInt(id, 10)).catch(() => [])
+    const os = await api.getOrders(parseInt(id, 10)).catch((e) => { toast.error(e.message || 'Failed to load orders'); return [] })
     setOrders(os)
   }
 
   async function handleOrder(id) {
     setOrderId(id); setCalcs([])
     if (!id) return
-    const cs = await api.getOrderCalculations(parseInt(id, 10)).catch(() => [])
+    const cs = await api.getOrderCalculations(parseInt(id, 10)).catch((e) => { toast.error(e.message || 'Failed to load quotes'); return [] })
     setCalcs(cs)
   }
 
@@ -70,7 +85,7 @@ function QuoteLoader({ onLoaded }) {
     try {
       const full = await api.getCalculation(parseInt(id, 10))
       onLoaded(full)
-    } catch { /* ignore */ }
+    } catch (e) { toast.error(e.message || 'Failed to load quote') }
     finally { setFetching(false) }
   }
 
@@ -120,8 +135,6 @@ function QuoteLoader({ onLoaded }) {
 function SlotCard({ index, slot, color, onChange }) {
   const [mode, setMode] = useState('manual')
 
-  const f = (key) => (e) => onChange({ [key]: e.target.value })
-
   function switchMode(m) {
     setMode(m)
     if (m === 'manual') onChange({ quoteResult: null })
@@ -164,7 +177,7 @@ function SlotCard({ index, slot, color, onChange }) {
         <div className="field" style={{ marginBottom: '0.6rem' }}>
           <label className="field-label">Label <span className="unit">(optional)</span></label>
           <input type="text" placeholder={`Quote ${LABELS[index]}`}
-            value={slot.label} onChange={f('label')} />
+            value={slot.label} onChange={(e) => onChange({ label: e.target.value })} />
         </div>
 
         {mode === 'quote' ? (
@@ -173,31 +186,76 @@ function SlotCard({ index, slot, color, onChange }) {
           <div className="field-stack">
             <div className="field">
               <label className="field-label">↔ Width <span className="unit">(mm)</span></label>
-              <input type="number" min="1" step="0.1" value={slot.width} onChange={f('width')} />
+              <input type="number" min="1" max="99999" step="0.1" value={slot.width}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '') { onChange({ width: '' }); return }
+                  const num = parseFloat(raw)
+                  if (isNaN(num)) return
+                  onChange({ width: num < 0 ? Math.abs(num) : num > 99999 ? 99999 : num })
+                }} />
             </div>
             <div className="field">
               <label className="field-label">↕ Height <span className="unit">(mm)</span></label>
-              <input type="number" min="1" step="0.1" value={slot.height} onChange={f('height')} />
+              <input type="number" min="1" max="99999" step="0.1" value={slot.height}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '') { onChange({ height: '' }); return }
+                  const num = parseFloat(raw)
+                  if (isNaN(num)) return
+                  onChange({ height: num < 0 ? Math.abs(num) : num > 99999 ? 99999 : num })
+                }} />
             </div>
             <div className="field">
               <label className="field-label">◎ Yield <span className="unit">(%)</span></label>
-              <input type="number" min="1" max="100" step="1" value={slot.yield_pct} onChange={f('yield_pct')} />
+              <input type="number" min="1" max="100" step="1" value={slot.yield_pct}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '') { onChange({ yield_pct: '' }); return }
+                  const num = parseFloat(raw)
+                  if (isNaN(num)) return
+                  onChange({ yield_pct: num < 0 ? Math.abs(num) : num > 100 ? 100 : num })
+                }} />
             </div>
             <div className="field">
               <label className="field-label">▤ Substrate</label>
-              <input type="text" placeholder="e.g. PP Gloss" value={slot.substrate_name} onChange={f('substrate_name')} />
+              <input type="text" placeholder="e.g. PP Gloss" value={slot.substrate_name}
+                onChange={(e) => onChange({ substrate_name: e.target.value })} />
             </div>
             <div className="field">
               <label className="field-label">₹ Substrate Price <span className="unit">(/m²)</span></label>
-              <input type="number" min="0" step="0.5" value={slot.substrate_price} onChange={f('substrate_price')} />
+              <input type="number" min="0" max="99999" step="0.5" value={slot.substrate_price}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => onChange({ substrate_price: e.target.value })} />
             </div>
             <div className="field">
               <label className="field-label">✦ Foil Cost</label>
-              <input type="number" min="0" step="0.5" value={slot.foil_cost} onChange={f('foil_cost')} />
+              <input type="number" min="0" max="99999" step="0.5" value={slot.foil_cost}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '' || raw === '.') { onChange({ foil_cost: raw }); return }
+                  const num = parseFloat(raw)
+                  if (isNaN(num) || num < 0) return
+                  if (Math.floor(num).toString().length > 5) return
+                  onChange({ foil_cost: raw })
+                }} />
             </div>
             <div className="field">
               <label className="field-label">⇄ Exchange Rate <span className="unit">(₹/$)</span></label>
-              <input type="number" min="1" step="0.5" value={slot.exchange_rate} onChange={f('exchange_rate')} />
+              <input type="number" min="1" max="99999" step="0.5" value={slot.exchange_rate}
+                onKeyDown={blockNonNumeric} onPaste={pasteNumbersOnly}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  if (raw === '' || raw === '.') { onChange({ exchange_rate: raw }); return }
+                  const num = parseFloat(raw)
+                  if (isNaN(num) || num < 0) return
+                  if (Math.floor(num).toString().length > 5) return
+                  onChange({ exchange_rate: raw })
+                }} />
             </div>
           </div>
         )}

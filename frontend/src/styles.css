@@ -508,6 +508,35 @@ header {
   font-size: 0.87rem; display: flex; align-items: center; gap: 0.5rem;
 }
 
+/* ─── TOAST NOTIFICATIONS ─── */
+.toast-container {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+  display: flex; flex-direction: column; gap: 0.5rem; max-width: 420px;
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.75rem 1rem; border-radius: 8px;
+  font-size: 0.875rem; line-height: 1.4;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  animation: toast-in 0.2s ease;
+}
+.toast-error {
+  background: #1f0a0a; border: 1px solid rgba(239,68,68,0.45); color: #fca5a5;
+}
+.toast-warn {
+  background: #1a1200; border: 1px solid rgba(234,179,8,0.45); color: #fde68a;
+}
+.toast-msg { flex: 1; }
+.toast-close {
+  background: none; border: none; cursor: pointer; font-size: 1.1rem;
+  line-height: 1; padding: 0; color: inherit; opacity: 0.6; flex-shrink: 0;
+}
+.toast-close:hover { opacity: 1; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── CARD ─── */
 .card {
   background: var(--bg-card);
@@ -1363,6 +1392,58 @@ tbody tr.selected-cylinder td:first-child { color: #a5b4fc; box-shadow: inset 4p
 .cop-modal-btn:hover { border-color: var(--teal); color: var(--teal-light) }
 .cop-modal-btn--primary { background: linear-gradient(135deg, #1aa880, #36E5C2); border-color: var(--teal); color: #000; font-weight: 700 }
 .cop-modal-btn--primary:hover { opacity: 0.87; color: #000 }
+
+/* ─── EDIT MODAL (Cylinders / Substrates) ─── */
+.edit-modal-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.edit-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--teal);
+  border-radius: var(--radius);
+  width: 100%; max-width: 400px;
+  box-shadow: var(--shadow-float);
+  animation: cop-fadeScaleIn 0.18s ease;
+  overflow: hidden;
+}
+.edit-modal-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 1.1rem 1.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.edit-modal-header-icon {
+  font-size: 1.1rem; color: var(--teal-light); flex-shrink: 0;
+}
+.edit-modal-header-title {
+  font-size: 0.97rem; font-weight: 800; color: var(--text-bright);
+}
+.edit-modal-body {
+  padding: 1.25rem 1.5rem;
+  display: flex; flex-direction: column; gap: 0.9rem;
+}
+.edit-modal-footer {
+  display: flex; gap: 0.6rem; justify-content: flex-end;
+  padding: 0.9rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+.edit-modal-btn {
+  padding: 0.5rem 1.2rem; font-size: 0.84rem; font-weight: 600;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: transparent; color: var(--text);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.edit-modal-btn:hover { border-color: var(--teal); color: var(--teal-light); }
+.edit-modal-btn--primary {
+  background: linear-gradient(135deg, #1aa880, #36E5C2);
+  border-color: var(--teal); color: #000; font-weight: 700;
+}
+.edit-modal-btn--primary:hover { opacity: 0.87; color: #000; }
+.edit-modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── COMPARISON PAGE ─── */
 .cmp-page {

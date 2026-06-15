@@ -1,10 +1,29 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+<<<<<<< HEAD
 import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
+=======
+import { generatePDF } from '../utils/generatePDF'
+import { toast } from '../utils/toast'
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function blockNonPhone(e) {
+  const allowed = ['Backspace','Delete','Tab','Enter','Escape',
+                   'ArrowLeft','ArrowRight','Home','End']
+  if (allowed.includes(e.key) || e.ctrlKey || e.metaKey) return
+  if (e.key >= '0' && e.key <= '9') return
+  if (e.key === '+' || e.key === '-' || e.key === ' ') return
+  e.preventDefault()
+}
+
+function pastePhoneOnly(e) {
+  const text = e.clipboardData.getData('text')
+  if (!/^[0-9+\- ]*$/.test(text)) e.preventDefault()
+}
+
 function fmtDate(dt) {
   if (!dt) return '—'
   return new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -15,6 +34,7 @@ function fmtDateTime(dt) {
 }
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
+<<<<<<< HEAD
 // ── PDF payload builders ──────────────────────────────────────────────────────
 function buildInvoicePayload(calcData, clientName, orderName) {
   const result   = calcData.result  || {}
@@ -41,11 +61,44 @@ function buildInvoicePayload(calcData, clientName, orderName) {
       label_height_mm: calcData.height,
       substrate:       calcData.substrate_name || 'Custom',
       total_qty:       orderQty,
+=======
+// ── PDF helper ────────────────────────────────────────────────────────────────
+function buildPDFPayload(calcData, clientName, orderName) {
+  const result  = calcData.result || {}
+  const matched = result.matched  || {}
+  const rows    = result.rows     || []
+  const pricing = result.pricing  || {}
+  const row     = rows[matched.index] || {}
+  const orderQty = Number(calcData.order_qty) || 0
+
+  const ratePerLabel = (pricing.rate_2 || 0) / 1000
+  const totalInr     = orderQty * ratePerLabel
+  const totalUsd     = orderQty * (pricing.price_usd_label || 0)
+
+  return {
+    client: {
+      name:     clientName || calcData.client_name || '',
+      location: calcData.client_location || '',
+      email:    calcData.client_email    || '',
+      phone:    calcData.client_phone    || '',
+    },
+    order: {
+      label:    orderName || calcData.order_name || '',
+      order_id: calcData.order_id ? String(calcData.order_id) : '',
+    },
+    inputs: {
+      total_qty:       orderQty,
+      substrate:       calcData.substrate_name || 'Custom',
+      label_width_mm:  row.label_width,
+      label_height_mm: row.label_height,
+      exchange_rate:   calcData.exchange_rate || 85,
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     },
     approved_cylinder: {
       teeth:  row.teeth,
       around: row.around,
       across: row.across,
+<<<<<<< HEAD
     },
     pricing: {
       selling_price_per_label: pricePerLabel,
@@ -80,6 +133,15 @@ function buildQuotationPayload(calcData, clientName, orderName) {
     },
     result:     calcData.result || {},
     preparedBy: '',
+=======
+    },
+    pricing: {
+      ...pricing,
+      selling_price_per_label: ratePerLabel,
+      total_cost_inr:          totalInr  || pricing.total_cost_inr  || 0,
+      total_cost_usd:          totalUsd  || pricing.total_cost_usd  || 0,
+    },
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
   }
 }
 
@@ -160,7 +222,8 @@ function EditClientModal({ client, onUpdated, onClose }) {
               className="cop-input" type="tel"
               placeholder="e.g. +91 98765 43210"
               value={phone} onChange={(e) => setPhone(e.target.value)}
-              disabled={busy} maxLength={30}
+              onKeyDown={blockNonPhone} onPaste={pastePhoneOnly}
+              disabled={busy} maxLength={15}
             />
           </div>
           {err && <div className="cop-inline-err">{err}</div>}
@@ -185,17 +248,26 @@ function EditClientModal({ client, onUpdated, onClose }) {
 // ── Calculation Detail Modal ──────────────────────────────────────────────────
 // Shows the full CylinderTable + PricingPanel for a saved calculation,
 // plus Approve / Unapprove buttons.
+<<<<<<< HEAD
 function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName }) {
   const [data, setData]                       = useState(null)
   const [loading, setLoading]                 = useState(true)
   const [pdfLoading, setPdfLoading]           = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+=======
+function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName, companySettings = {} }) {
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(null)
     api.getCalculation(calcId)
       .then(setData)
-      .catch(() => {})
+      .catch((e) => setLoadError(e.message || 'Failed to load calculation'))
       .finally(() => setLoading(false))
   }, [calcId])
 
@@ -220,6 +292,10 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
             <div className="history-spinner" />
             <span>Loading calculation…</span>
           </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="error-banner" style={{ margin: '2rem 1.5rem' }}>⚠ {loadError}</div>
         )}
 
         {!loading && data && (
@@ -299,11 +375,16 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                       disabled={pdfLoading}
                       onClick={async () => {
                         setPdfLoading(true)
+<<<<<<< HEAD
                         try {
                           let cs = {}
                           try { cs = await api.getCompanySettings() } catch (_) {}
                           generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
                         } finally { setPdfLoading(false) }
+=======
+                        try { generatePDF(buildPDFPayload(data, clientName, orderName), companySettings) }
+                        finally { setPdfLoading(false) }
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
                       }}
                     >
                       {pdfLoading ? (
@@ -416,9 +497,14 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
 }
 
 // ── Version quote detail modal (data already loaded from getVersions) ────────
+<<<<<<< HEAD
 function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
   const [pdfLoading, setPdfLoading]           = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+=======
+function VersionQuoteDetailModal({ version, onClose, clientName, orderName, companySettings = {} }) {
+  const [pdfLoading, setPdfLoading] = useState(false)
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   async function handleInvoice() {
     setPdfLoading(true)
@@ -427,6 +513,7 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
       try { cs = await api.getCompanySettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(
         { ...version, result: version.result },
+<<<<<<< HEAD
         clientName, orderName,
       ), cs)
     } finally { setPdfLoading(false) }
@@ -442,6 +529,14 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
         clientName, orderName,
       ), cs)
     } finally { setQuotationLoading(false) }
+=======
+        clientName,
+        orderName,
+      ), companySettings)
+    } finally {
+      setPdfLoading(false)
+    }
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
   }
 
   return (
@@ -526,20 +621,33 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
 }
 
 // ── Calculation row ───────────────────────────────────────────────────────────
+<<<<<<< HEAD
 function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName }) {
   const [pdfLoading, setPdfLoading]           = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+=======
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName, companySettings = {} }) {
+  const [pdfLoading, setPdfLoading] = useState(false)
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
 
   async function handleInvoicePDF(e) {
     e.stopPropagation()
     setPdfLoading(true)
     try {
+<<<<<<< HEAD
       const data = calc.result ? calc : await api.getCalculation(calc.id)
       let cs = {}
       try { cs = await api.getCompanySettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
+=======
+      // version rows already carry result; base calcs need a full fetch
+      const data = calc.result
+        ? calc
+        : await api.getCalculation(calc.id)
+      generatePDF(buildPDFPayload(data, clientName, orderName), companySettings)
+>>>>>>> 2e4c72e5189ae91d8f0ec97f1f4410a1690df393
     } catch (err) {
-      console.error(err)
+      toast.error(err.message || 'PDF generation failed')
     } finally {
       setPdfLoading(false)
     }
@@ -655,6 +763,11 @@ function OrderPanel({ order, hideHeader, clientName }) {
   const [approvedId, setApprovedId] = useState(null)
   const [approvedVersions, setApprovedVersions] = useState([])
   const [busy, setBusy]           = useState(false)
+  const [companySettings, setCompanySettings] = useState({})
+
+  useEffect(() => {
+    api.getCompanySettings().then(setCompanySettings).catch(() => {})
+  }, [])
 
   // Modal states — only one shows at a time, except detailModal can layer over conflict
   const [detailModal, setDetailModal]         = useState(null) // { calcId, pendingCalcForConflict }
@@ -704,7 +817,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
       await api.updateQuoteStatus(calc.id, 'confirmed')
       setApprovedId(calc.id)
       setCalcs((prev) => prev.map((c) => ({ ...c, status: c.id === calc.id ? 'confirmed' : c.status })))
-    } catch (e) { console.error(e) }
+    } catch (e) { toast.error(e.message || 'Failed to approve quote') }
     setBusy(false)
   }
 
@@ -737,7 +850,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                : c.id === approvedCalc.id ? 'pending'
                : c.status,
       })))
-    } catch (e) { console.error(e) }
+    } catch (e) { toast.error(e.message || 'Failed to swap approval') }
     setBusy(false)
   }
 
@@ -754,7 +867,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
       if (pendingCalcForConflict) {
         setApproveConfirm(pendingCalcForConflict)
       }
-    } catch (e) { console.error(e) }
+    } catch (e) { toast.error(e.message || 'Failed to unapprove quote') }
     setBusy(false)
   }
 
@@ -803,6 +916,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                 onApproveRequest={handleApproveRequest}
                 clientName={clientName}
                 orderName={order.name}
+                companySettings={companySettings}
               />
             ))}
             {approvedVersions.map((v) => (
@@ -816,6 +930,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                 onApproveRequest={() => {}}
                 clientName={clientName}
                 orderName={order.name}
+                companySettings={companySettings}
               />
             ))}
           </div>
@@ -833,6 +948,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
           onClose={() => setDetailModal(null)}
           clientName={clientName}
           orderName={order.name}
+          companySettings={companySettings}
         />
       )}
 
@@ -842,6 +958,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
           onClose={() => setVersionDetailModal(null)}
           clientName={clientName}
           orderName={order.name}
+          companySettings={companySettings}
         />
       )}
 
@@ -884,18 +1001,16 @@ function NewOrderForm({ clientId, existingOrders, onCreated, onCancel }) {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const [orderName, setOrderName] = useState(nextNum)
+  const orderName                = nextNum()
   const [orderDate, setOrderDate] = useState(today)
   const [busy, setBusy]           = useState(false)
   const [err, setErr]             = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const name = orderName.trim()
-    if (!name) return
     setBusy(true); setErr(null)
     try {
-      const created = await api.createOrder(clientId, name, orderDate || null)
+      const created = await api.createOrder(clientId, orderName, orderDate || null)
       onCreated(created)
     } catch (ex) {
       setErr(ex.message)
@@ -912,8 +1027,9 @@ function NewOrderForm({ clientId, existingOrders, onCreated, onCancel }) {
           <label className="cop-label">Order Name</label>
           <input
             className="cop-input" type="text"
-            value={orderName} onChange={(e) => setOrderName(e.target.value)}
-            disabled={busy} maxLength={200} autoFocus
+            value={orderName}
+            readOnly
+            style={{ opacity: 0.7, cursor: 'not-allowed', background: 'var(--bg-raised)' }}
           />
         </div>
         <div className="cop-field">
@@ -921,13 +1037,13 @@ function NewOrderForm({ clientId, existingOrders, onCreated, onCancel }) {
           <input
             className="cop-input" type="date"
             value={orderDate} onChange={(e) => setOrderDate(e.target.value)}
-            disabled={busy}
+            disabled={busy} autoFocus
           />
         </div>
       </div>
       {err && <div className="cop-inline-err">{err}</div>}
       <div className="cop-new-order-actions">
-        <button className="cop-btn cop-btn--primary" type="submit" disabled={busy || !orderName.trim()}>
+        <button className="cop-btn cop-btn--primary" type="submit" disabled={busy}>
           {busy ? '…' : '+ Create Order'}
         </button>
         <button className="cop-btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
@@ -954,8 +1070,9 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
         try {
           const os = await api.getOrders(client.id)
           setOrders(os)
-        } catch {
+        } catch (e) {
           setOrders([])
+          toast.error(e.message || 'Failed to load orders')
         } finally {
           setLoading(false)
         }
@@ -1189,7 +1306,8 @@ function NewCustomerDrawer({ onCreated, onClose }) {
               className="cop-input" type="tel"
               placeholder="e.g. +91 98765 43210"
               value={phone} onChange={(e) => setPhone(e.target.value)}
-              disabled={busy} maxLength={30}
+              onKeyDown={blockNonPhone} onPaste={pastePhoneOnly}
+              disabled={busy} maxLength={15}
             />
           </div>
 

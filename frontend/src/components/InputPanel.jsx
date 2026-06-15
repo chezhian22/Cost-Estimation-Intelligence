@@ -174,7 +174,7 @@ export default function InputPanel({
         <div className="field">
           <label className="field-label" htmlFor="input-order-qty">⊞ Order Quantity <span className="unit">(labels)</span> <span className="field-required">*</span></label>
           <input
-            type="number" id="input-order-qty" step="100" min="0"
+            type="number" id="input-order-qty" step="100" min="1"
             placeholder="e.g. 10000"
             className={fieldErrors.order_qty ? 'input-error' : ''}
             value={inputs.order_qty}
