@@ -127,6 +127,14 @@ class CompanySettings(Base):
     logo           = Column(Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=True)
     updated_at     = Column(DateTime,    nullable=True)
 
+    # SMTP / email settings
+    smtp_host      = Column(String(200), nullable=True)
+    smtp_port      = Column(Integer,     nullable=True, default=587)
+    smtp_user      = Column(String(200), nullable=True)
+    smtp_password  = Column(String(500), nullable=True)
+    smtp_use_tls   = Column(Boolean,     nullable=True, default=True)
+    smtp_from_name = Column(String(120), nullable=True)
+
 
 class CalculationVersion(Base):
     """An edited revision of a saved calculation."""

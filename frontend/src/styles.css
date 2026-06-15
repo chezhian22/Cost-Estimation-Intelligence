@@ -2431,3 +2431,64 @@ footer strong { color: var(--text-muted); font-weight: 500 }
   max-width: 440px;
 }
 .calc-empty-sub strong { color: var(--teal); opacity: 0.85 }
+
+/* ─── Draft Email Modal ──────────────────────────────────────────────────── */
+.qh-email-field { display: flex; flex-direction: column; gap: 0.3rem }
+.qh-email-label {
+  font-size: 0.69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.qh-email-to {
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+}
+.qh-email-addr { color: var(--teal); text-decoration: none; font-weight: 600 }
+.qh-email-addr:hover { text-decoration: underline }
+.qh-email-input {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.84rem;
+  color: var(--text);
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.qh-email-input:focus { border-color: var(--teal) }
+.qh-email-textarea {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.75rem;
+  font-size: 0.76rem;
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  width: 100%;
+  resize: vertical;
+  line-height: 1.65;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.qh-email-textarea:focus { border-color: var(--teal) }
+.qh-action-btn--email {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.28);
+  color: #818cf8;
+}
+.qh-action-btn--email:hover:not(:disabled) {
+  background: rgba(99,102,241,0.16);
+  border-color: #818cf8;
+}

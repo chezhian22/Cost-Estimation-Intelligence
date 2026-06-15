@@ -115,4 +115,10 @@ export const api = {
   },
 
   deleteCompanyLogo: () => request('/api/settings/company/logo', { method: 'DELETE' }),
+
+  sendInvoiceEmail: (calcId, toEmail, subject, body) =>
+    request('/api/send-invoice-email', {
+      method: 'POST',
+      body: JSON.stringify({ calc_id: calcId, to_email: toEmail, subject, body }),
+    }),
 }

@@ -457,24 +457,42 @@ class CompanySettingsOut(BaseModel):
     gst_number:   Optional[str]    = None
     cgst_pct:     Optional[float]  = None
     sgst_pct:     Optional[float]  = None
-    logo:         Optional[str]    = None
-    updated_at:   Optional[datetime] = None
+    logo:           Optional[str]    = None
+    updated_at:     Optional[datetime] = None
+    smtp_host:      Optional[str]    = None
+    smtp_port:      Optional[int]    = 587
+    smtp_user:      Optional[str]    = None
+    smtp_use_tls:   Optional[bool]   = True
+    smtp_from_name: Optional[str]    = None
 
 
 class CompanySettingsUpdate(BaseModel):
-    company_name: Optional[str]    = Field(None, max_length=120)
-    tagline:      Optional[str]    = Field(None, max_length=200)
-    industry:     Optional[str]    = Field(None, max_length=120)
-    address:      Optional[str]    = Field(None, max_length=300)
-    location:     Optional[str]    = Field(None, max_length=120)
-    state:        Optional[str]    = Field(None, max_length=100)
-    country:      Optional[str]    = Field(None, max_length=100)
-    email:        Optional[str]    = Field(None, max_length=200)
-    phone:        Optional[str]    = Field(None, max_length=30)
-    website:      Optional[str]    = Field(None, max_length=200)
-    gst_number:   Optional[str]    = Field(None, max_length=50)
-    cgst_pct:     Optional[float]  = Field(None, ge=0, le=100)
-    sgst_pct:     Optional[float]  = Field(None, ge=0, le=100)
+    company_name:   Optional[str]    = Field(None, max_length=120)
+    tagline:        Optional[str]    = Field(None, max_length=200)
+    industry:       Optional[str]    = Field(None, max_length=120)
+    address:        Optional[str]    = Field(None, max_length=300)
+    location:       Optional[str]    = Field(None, max_length=120)
+    state:          Optional[str]    = Field(None, max_length=100)
+    country:        Optional[str]    = Field(None, max_length=100)
+    email:          Optional[str]    = Field(None, max_length=200)
+    phone:          Optional[str]    = Field(None, max_length=30)
+    website:        Optional[str]    = Field(None, max_length=200)
+    gst_number:     Optional[str]    = Field(None, max_length=50)
+    cgst_pct:       Optional[float]  = Field(None, ge=0, le=100)
+    sgst_pct:       Optional[float]  = Field(None, ge=0, le=100)
+    smtp_host:      Optional[str]    = Field(None, max_length=200)
+    smtp_port:      Optional[int]    = Field(None, ge=1, le=65535)
+    smtp_user:      Optional[str]    = Field(None, max_length=200)
+    smtp_password:  Optional[str]    = Field(None, max_length=500)
+    smtp_use_tls:   Optional[bool]   = None
+    smtp_from_name: Optional[str]    = Field(None, max_length=120)
+
+
+class SendInvoiceEmailRequest(BaseModel):
+    calc_id:   int
+    to_email:  str
+    subject:   str
+    body:      str
 
 
 LoginResponse.model_rebuild()

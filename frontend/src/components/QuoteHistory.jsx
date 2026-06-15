@@ -835,6 +835,7 @@ export default function QuoteHistory({ onEditCalc }) {
           onClose={() => setDetailCalcId(null)}
         />
       )}
+
     </section>
   )
 }

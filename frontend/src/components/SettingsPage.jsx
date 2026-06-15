@@ -81,6 +81,23 @@ const FIELDS = [
     ],
     hint: 'CGST + SGST = Total GST. Set by admin as per applicable tax rate.',
   },
+  {
+    section: 'Email / SMTP',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+        <polyline points="22,6 12,13 2,6"/>
+      </svg>
+    ),
+    rows: [
+      { key: 'smtp_host',      label: 'SMTP Host',       placeholder: 'smtp.gmail.com', maxLength: 200 },
+      { key: 'smtp_port',      label: 'SMTP Port',       placeholder: '587', type: 'number', min: 1, max: 65535 },
+      { key: 'smtp_user',      label: 'SMTP Username',   placeholder: 'you@gmail.com', type: 'email', maxLength: 200 },
+      { key: 'smtp_password',  label: 'App Password',    placeholder: 'Gmail App Password (not your login password)', type: 'password', maxLength: 500 },
+      { key: 'smtp_from_name', label: 'From Name',       placeholder: 'Chromaprint India', maxLength: 120 },
+    ],
+    hint: 'For Gmail: use smtp.gmail.com, port 587, your Gmail address, and an App Password (myaccount.google.com → Security → App passwords).',
+  },
 ]
 
 export default function SettingsPage() {

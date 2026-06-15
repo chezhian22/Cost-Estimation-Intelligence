@@ -14,6 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
+from .invoice_pdf import generate_invoice_pdf_bytes
 from .auth import create_access_token, decode_token
 from .database import Base, engine, get_db
 from .security import check_request_body
@@ -141,7 +142,13 @@ def _migrate():
                 ("updated_at", "DATETIME NULL"),
                 ("cgst_pct",   "FLOAT NULL"),
                 ("sgst_pct",   "FLOAT NULL"),
-                ("logo",       "MEDIUMTEXT NULL"),
+                ("logo",           "MEDIUMTEXT NULL"),
+                ("smtp_host",      "VARCHAR(200) NULL"),
+                ("smtp_port",      "INT NULL DEFAULT 587"),
+                ("smtp_user",      "VARCHAR(200) NULL"),
+                ("smtp_password",  "VARCHAR(500) NULL"),
+                ("smtp_use_tls",   "BOOLEAN NULL DEFAULT TRUE"),
+                ("smtp_from_name", "VARCHAR(120) NULL"),
             ]:
                 if col not in cs_cols:
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
@@ -1138,3 +1145,74 @@ def delete_company_logo(
 ):
     """Remove the stored company logo. Admin only."""
     return crud.update_company_logo(db, None)
+
+
+# ── Send Invoice Email ─────────────────────────────────────────────────────────
+@app.post("/api/send-invoice-email", tags=["email"], summary="Send invoice PDF by email")
+def send_invoice_email(
+    body: schemas.SendInvoiceEmailRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import smtplib, ssl
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+
+    cs = crud.get_company_settings(db)
+    if not cs.smtp_host or not cs.smtp_user or not cs.smtp_password:
+        raise HTTPException(
+            status_code=400,
+            detail="SMTP not configured. Go to Settings → Email to set up your mail server.",
+        )
+
+    calc = crud.get_calculation(db, body.calc_id)
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+
+    client = crud.get_client(db, calc.client_id) if calc.client_id else None
+    order  = crud.get_order(db, calc.order_id)   if calc.order_id  else None
+
+    # Generate PDF
+    try:
+        pdf_bytes = generate_invoice_pdf_bytes(calc, order, client, cs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+
+    inv_no    = f"INV-{__import__('datetime').datetime.utcnow().year}-{str(calc.id).zfill(4)}"
+    from_name = cs.smtp_from_name or cs.company_name or "ChromaPrint India"
+
+    msg = MIMEMultipart()
+    msg["From"]    = f"{from_name} <{cs.smtp_user}>"
+    msg["To"]      = body.to_email
+    msg["Subject"] = body.subject
+    msg.attach(MIMEText(body.body, "plain", "utf-8"))
+
+    attachment = MIMEApplication(pdf_bytes, _subtype="pdf")
+    attachment.add_header("Content-Disposition", "attachment", filename=f"{inv_no}.pdf")
+    msg.attach(attachment)
+
+    port     = cs.smtp_port or 587
+    use_tls  = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
+    ctx      = ssl.create_default_context()
+
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as server:
+                server.login(cs.smtp_user, cs.smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as server:
+                server.ehlo()
+                if use_tls:
+                    server.starttls(context=ctx)
+                server.login(cs.smtp_user, cs.smtp_password)
+                server.send_message(msg)
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=400, detail="SMTP authentication failed. Check your username and password (use an App Password for Gmail).")
+    except smtplib.SMTPException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Connection error: {e}")
+
+    return {"status": "sent", "to": body.to_email}
