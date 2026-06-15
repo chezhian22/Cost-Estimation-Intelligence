@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, setToken } from './api'
-import { generatePDF } from './utils/generatePDF'
+import { generateInvoicePDF, generateQuotationPDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
 import CylinderTable from './components/CylinderTable'
 import PricingPanel from './components/PricingPanel'
@@ -272,14 +272,40 @@ export default function App() {
       .finally(() => setApprovingCyl(false))
   }
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadQuotation = async () => {
+    if (!result) return
+    let companySettings = {}
+    try { companySettings = await api.getCompanySettings() } catch (_) {}
+    generateQuotationPDF({
+      client: { name: clientName || '', location: '', email: '', phone: '' },
+      order:  {
+        order_id: result.calculation_id ? `CALC-${result.calculation_id}` : '',
+        label:    orderName || '',
+        ref:      editingCalc ? `Edit v${result.version_number ?? '?'}` : '',
+      },
+      inputs: {
+        label_width_mm:  parseFloat(inputs.width),
+        label_height_mm: parseFloat(inputs.height),
+        yield_pct:       parseFloat(inputs.yield_pct)       || 85,
+        substrate_name:  inputs.substrate_name              || 'Custom',
+        substrate_price: parseFloat(inputs.substrate_price) || 0,
+        foil_cost:       parseFloat(inputs.foil_cost)       || 0,
+        custom_cost:     parseFloat(inputs.custom_cost)     || 0,
+        exchange_rate:   parseFloat(inputs.exchange_rate)   || 85,
+        order_qty:       parseFloat(inputs.order_qty)       || 0,
+      },
+      result,
+      preparedBy: currentUser?.username || '',
+    }, companySettings)
+  }
+
+  const handleDownloadInvoice = async () => {
     if (!result) return
     const selIdx = selectedCylIdx ?? result.matched.index
     const selRow = result.rows[selIdx]
     const p      = result.pricing
     const qty    = parseFloat(inputs.order_qty) || 0
 
-    // Recompute pricing when a non-matched cylinder is selected (mirrors PricingPanel)
     const isCustomSel = selIdx !== result.matched.index
     const effectiveP  = (isCustomSel && selRow) ? (() => {
       const label_w_cm = selRow.label_width  / 10
@@ -302,15 +328,10 @@ export default function App() {
     const subtotal      = qty > 0 ? qty * pricePerLabel : 0
     const totalUsd      = qty > 0 ? qty * (effectiveP.price_usd_label || 0) : 0
 
-    // Fetch company settings for CGST/SGST — admin only endpoint, non-admins fall back gracefully
     let companySettings = {}
-    try {
-      companySettings = await api.getCompanySettings()
-    } catch (_) {
-      // non-admin or network error — PDF will show "GST: As applicable"
-    }
+    try { companySettings = await api.getCompanySettings() } catch (_) {}
 
-    generatePDF({
+    generateInvoicePDF({
       client: { name: clientName || '', location: '', email: '', phone: '' },
       order:  {
         order_id: result.calculation_id ? `CALC-${result.calculation_id}` : '',
@@ -594,14 +615,25 @@ export default function App() {
                   </svg>
                 </button>
 
+                {result && hasCalculated && (
+                  <button className="btn-download-pdf" onClick={handleDownloadQuotation} title="Download internal quotation comparison">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    Download Quotation
+                  </button>
+                )}
                 {result && quoteConfirmed && (
-                  <button className="btn-download-pdf" onClick={handleDownloadPDF} title="Download PDF quote for client">
+                  <button className="btn-download-pdf" onClick={handleDownloadInvoice} title="Download client invoice">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/>
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Download PDF
+                    Download Invoice
                   </button>
                 )}
               </div>
@@ -639,13 +671,22 @@ export default function App() {
                     <div className="confirm-quote-sub">You can now download the PDF quote for the client.</div>
                   </div>
                   <div className="confirm-quote-actions">
-                    <button className="btn-download-pdf" onClick={handleDownloadPDF}>
+                    <button className="btn-download-pdf" onClick={handleDownloadQuotation} title="Download internal quotation comparison">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      Download Quotation
+                    </button>
+                    <button className="btn-download-pdf" onClick={handleDownloadInvoice} title="Download client invoice">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                         <polyline points="7 10 12 15 17 10"/>
                         <line x1="12" y1="15" x2="12" y2="3"/>
                       </svg>
-                      Download PDF
+                      Download Invoice
                     </button>
                   </div>
                 </div>

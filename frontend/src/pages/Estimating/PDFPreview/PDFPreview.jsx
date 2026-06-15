@@ -1,6 +1,6 @@
 import React from 'react'
 import './PDFPreview.css'
-import { generatePDF } from '../../../utils/generatePDF'
+import { generateInvoicePDF } from '../../../utils/generatePDF'
 
 const SAMPLE = {
   client: {

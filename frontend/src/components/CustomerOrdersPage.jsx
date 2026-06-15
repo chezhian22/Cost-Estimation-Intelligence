@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
-import { generatePDF } from '../utils/generatePDF'
+import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
 import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 
@@ -15,50 +15,71 @@ function fmtDateTime(dt) {
 }
 const fmt = (v, d = 2) => (v != null ? Number(v).toFixed(d) : '—')
 
-// ── PDF helper ────────────────────────────────────────────────────────────────
-function buildPDFPayload(calcData, clientName, orderName) {
-  const result   = calcData.result || {}
-  const matched  = result.matched  || {}
-  const rows     = result.rows     || []
-  const pricing  = result.pricing  || {}
+// ── PDF payload builders ──────────────────────────────────────────────────────
+function buildInvoicePayload(calcData, clientName, orderName) {
+  const result   = calcData.result  || {}
+  const matched  = result.matched   || {}
+  const rows     = result.rows      || []
+  const pricing  = result.pricing   || {}
   const row      = rows[matched.index] || {}
-  const year     = new Date().getFullYear()
-  const rand     = String(Math.floor(1000 + Math.random() * 9000))
-  const orderQty = calcData.order_qty || null
+  const orderQty = calcData.order_qty || 0
+  const pricePerLabel = pricing.price_inr_label || 0
+  const subtotal = orderQty > 0 ? orderQty * pricePerLabel : 0
+  const totalUsd = orderQty > 0 ? orderQty * (pricing.price_usd_label || 0) : 0
 
   return {
-    client:  clientName || calcData.client_name || 'N/A',
-    order:   orderName  || calcData.order_name  || 'N/A',
-    quoteNo: `QT-${year}-${rand}`,
+    client: {
+      name:     clientName || calcData.client_name || 'N/A',
+      location: '', email: '', phone: '',
+    },
+    order: {
+      order_id: calcData.id ? `CALC-${calcData.id}` : '',
+      label:    orderName  || calcData.order_name || '',
+    },
     inputs: {
-      width:           calcData.width,
-      height:          calcData.height,
-      yield_pct:       calcData.yield_pct,
-      substrate_price: calcData.substrate_price,
-      foil_cost:       calcData.foil_cost || 0,
-      custom_cost:     pricing.custom_cost || 0,
-      exchange_rate:   calcData.exchange_rate || 85,
-      order_qty:       orderQty || 0,
-      substrate_name:  calcData.substrate_name || 'Custom',
+      label_width_mm:  calcData.width,
+      label_height_mm: calcData.height,
+      substrate:       calcData.substrate_name || 'Custom',
+      total_qty:       orderQty,
     },
-    cylinder: {
-      teeth:         row.teeth,
-      circumference: row.circumference,
-      label_width:   row.label_width,
-      label_height:  row.label_height,
-      around:        row.around,
-      across:        row.across,
-      paper_size:    row.paper_size,
-      efficiency:    row.efficiency,
+    approved_cylinder: {
+      teeth:  row.teeth,
+      around: row.around,
+      across: row.across,
     },
-    pricing,
-    order_analytics: orderQty > 0 && row.paper_size ? {
-      qty:           orderQty,
-      sqm_needed:    orderQty / (pricing.adj_labels || 1),
-      linear_meters: (orderQty / (pricing.adj_labels || 1)) / ((row.paper_size || 1000) / 1000),
-      total_inr_2:   orderQty * ((pricing.rate_2 || 0) / 1000),
-      total_usd_2:   orderQty * (pricing.price_usd_label || 0),
-    } : null,
+    pricing: {
+      selling_price_per_label: pricePerLabel,
+      total_cost_inr:          subtotal,
+      total_cost_usd:          totalUsd,
+    },
+  }
+}
+
+function buildQuotationPayload(calcData, clientName, orderName) {
+  const orderQty = calcData.order_qty || 0
+  return {
+    client: {
+      name:     clientName || calcData.client_name || 'N/A',
+      location: '', email: '', phone: '',
+    },
+    order: {
+      order_id: calcData.id ? `CALC-${calcData.id}` : '',
+      label:    orderName  || calcData.order_name || '',
+      ref:      calcData.version_number ? `Edit v${calcData.version_number}` : '',
+    },
+    inputs: {
+      label_width_mm:  calcData.width,
+      label_height_mm: calcData.height,
+      yield_pct:       calcData.yield_pct       || 85,
+      substrate_name:  calcData.substrate_name  || 'Custom',
+      substrate_price: calcData.substrate_price || 0,
+      foil_cost:       calcData.foil_cost        || 0,
+      custom_cost:     calcData.custom_cost  ?? (calcData.result?.pricing?.custom_cost || 0),
+      exchange_rate:   calcData.exchange_rate    || 85,
+      order_qty:       orderQty,
+    },
+    result:     calcData.result || {},
+    preparedBy: '',
   }
 }
 
@@ -165,9 +186,10 @@ function EditClientModal({ client, onUpdated, onClose }) {
 // Shows the full CylinderTable + PricingPanel for a saved calculation,
 // plus Approve / Unapprove buttons.
 function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName }) {
-  const [data, setData]           = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [data, setData]                       = useState(null)
+  const [loading, setLoading]                 = useState(true)
+  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [quotationLoading, setQuotationLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -250,11 +272,38 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                   <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                     <button
                       className="cop-pdf-btn"
+                      disabled={quotationLoading}
+                      onClick={async () => {
+                        setQuotationLoading(true)
+                        try {
+                          let cs = {}
+                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+                        } finally { setQuotationLoading(false) }
+                      }}
+                    >
+                      {quotationLoading ? (
+                        <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                          <line x1="16" y1="13" x2="8" y2="13"/>
+                          <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                      )}
+                      {quotationLoading ? 'Generating…' : 'Quotation'}
+                    </button>
+                    <button
+                      className="cop-pdf-btn"
                       disabled={pdfLoading}
                       onClick={async () => {
                         setPdfLoading(true)
-                        try { generatePDF(buildPDFPayload(data, clientName, orderName)) }
-                        finally { setPdfLoading(false) }
+                        try {
+                          let cs = {}
+                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
+                        } finally { setPdfLoading(false) }
                       }}
                     >
                       {pdfLoading ? (
@@ -265,7 +314,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                           <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
                       )}
-                      {pdfLoading ? 'Generating…' : 'Download PDF'}
+                      {pdfLoading ? 'Generating…' : 'Invoice'}
                     </button>
                     <button className="cop-detail-unapprove-btn" onClick={() => onUnapprove(calcId)}>
                       ↩ Unapprove
@@ -368,19 +417,31 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
 
 // ── Version quote detail modal (data already loaded from getVersions) ────────
 function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [quotationLoading, setQuotationLoading] = useState(false)
 
-  function handlePDF() {
+  async function handleInvoice() {
     setPdfLoading(true)
     try {
-      generatePDF(buildPDFPayload(
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateInvoicePDF(buildInvoicePayload(
         { ...version, result: version.result },
-        clientName,
-        orderName,
-      ))
-    } finally {
-      setPdfLoading(false)
-    }
+        clientName, orderName,
+      ), cs)
+    } finally { setPdfLoading(false) }
+  }
+
+  async function handleQuotation() {
+    setQuotationLoading(true)
+    try {
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateQuotationPDF(buildQuotationPayload(
+        { ...version, result: version.result },
+        clientName, orderName,
+      ), cs)
+    } finally { setQuotationLoading(false) }
   }
 
   return (
@@ -432,17 +493,32 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
 
         <div className="cop-detail-footer">
           <span className="cop-detail-approved-note">★ This version is approved for this order</span>
-          <button className="cop-pdf-btn" onClick={handlePDF} disabled={pdfLoading}>
-            {pdfLoading ? (
-              <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            )}
-            {pdfLoading ? 'Generating…' : 'Download PDF'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <button className="cop-pdf-btn" onClick={handleQuotation} disabled={quotationLoading}>
+              {quotationLoading ? (
+                <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              )}
+              {quotationLoading ? 'Generating…' : 'Quotation'}
+            </button>
+            <button className="cop-pdf-btn" onClick={handleInvoice} disabled={pdfLoading}>
+              {pdfLoading ? (
+                <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              )}
+              {pdfLoading ? 'Generating…' : 'Invoice'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -451,21 +527,36 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
 
 // ── Calculation row ───────────────────────────────────────────────────────────
 function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName }) {
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLoading, setPdfLoading]           = useState(false)
+  const [quotationLoading, setQuotationLoading] = useState(false)
 
-  async function handlePDF(e) {
+  async function handleInvoicePDF(e) {
     e.stopPropagation()
     setPdfLoading(true)
     try {
-      // version rows already carry result; base calcs need a full fetch
-      const data = calc.result
-        ? calc
-        : await api.getCalculation(calc.id)
-      generatePDF(buildPDFPayload(data, clientName, orderName))
+      const data = calc.result ? calc : await api.getCalculation(calc.id)
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
     } catch (err) {
       console.error(err)
     } finally {
       setPdfLoading(false)
+    }
+  }
+
+  async function handleQuotationPDF(e) {
+    e.stopPropagation()
+    setQuotationLoading(true)
+    try {
+      const data = calc.result ? calc : await api.getCalculation(calc.id)
+      let cs = {}
+      try { cs = await api.getCompanySettings() } catch (_) {}
+      generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setQuotationLoading(false)
     }
   }
 
@@ -518,7 +609,20 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
               </svg>
               Approved
             </span>
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handlePDF} disabled={pdfLoading} title="Download PDF quote">
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
+              {quotationLoading ? (
+                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              )}
+              Quotation
+            </button>
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Download client invoice">
               {pdfLoading ? (
                 <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
               ) : (
@@ -527,7 +631,7 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
               )}
-              PDF
+              Invoice
             </button>
           </div>
         ) : (
