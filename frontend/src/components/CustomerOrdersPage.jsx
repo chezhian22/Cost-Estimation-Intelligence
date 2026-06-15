@@ -99,8 +99,8 @@ function buildQuotationPayload(calcData, clientName, orderName) {
   }
 }
 
-// ── Edit Client Modal ─────────────────────────────────────────────────────────
-function EditClientModal({ client, onUpdated, onClose }) {
+// ── Edit Client Drawer ────────────────────────────────────────────────────────
+function EditClientDrawer({ client, onUpdated, onClose }) {
   const [name,     setName]     = useState(client.name)
   const [location, setLocation] = useState(client.location || '')
   const [industry, setIndustry] = useState(client.industry || '')
@@ -131,10 +131,16 @@ function EditClientModal({ client, onUpdated, onClose }) {
   }
 
   return (
-    <div className="cop-edit-overlay" onClick={onClose}>
-      <div className="cop-edit-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="cop-edit-title">Edit Customer</div>
-        <form onSubmit={handleSubmit}>
+    <div className="cop-drawer-overlay" onClick={onClose}>
+      <div className="cop-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="cop-drawer-header">
+          <div className="cop-drawer-title">Edit Customer</div>
+          <button className="cop-drawer-close" onClick={onClose}>✕</button>
+        </div>
+
+        <form className="cop-drawer-form" onSubmit={handleSubmit}>
+          <div className="cop-drawer-section-label">Company Details</div>
+
           <div className="cop-field">
             <label className="cop-label">Company Name <span className="cop-required">*</span></label>
             <input
@@ -143,6 +149,7 @@ function EditClientModal({ client, onUpdated, onClose }) {
               disabled={busy} maxLength={120} autoFocus
             />
           </div>
+
           <div className="cop-field">
             <label className="cop-label">Location</label>
             <input
@@ -152,6 +159,7 @@ function EditClientModal({ client, onUpdated, onClose }) {
               disabled={busy} maxLength={200}
             />
           </div>
+
           <div className="cop-field">
             <label className="cop-label">Industry</label>
             <input
@@ -161,6 +169,7 @@ function EditClientModal({ client, onUpdated, onClose }) {
               disabled={busy} maxLength={120}
             />
           </div>
+
           <div className="cop-field">
             <label className="cop-label">Email</label>
             <input
@@ -170,6 +179,7 @@ function EditClientModal({ client, onUpdated, onClose }) {
               disabled={busy} maxLength={200}
             />
           </div>
+
           <div className="cop-field">
             <label className="cop-label">Phone</label>
             <input
@@ -180,16 +190,18 @@ function EditClientModal({ client, onUpdated, onClose }) {
               disabled={busy} maxLength={15}
             />
           </div>
+
           {err && <div className="cop-inline-err">{err}</div>}
-          <div className="cop-edit-actions">
+
+          <div className="cop-drawer-actions">
             <button
-              className="cop-modal-btn cop-modal-btn--primary"
+              className="cop-btn cop-btn--primary cop-btn--full"
               type="submit"
               disabled={busy || !name.trim()}
             >
-              {busy ? 'Saving…' : 'Save Changes'}
+              {busy ? <><span className="cop-spinner" /> Saving…</> : 'Save Changes'}
             </button>
-            <button className="cop-modal-btn" type="button" onClick={onClose} disabled={busy}>
+            <button className="cop-btn cop-btn--full" type="button" onClick={onClose} disabled={busy}>
               Cancel
             </button>
           </div>
@@ -1397,7 +1409,7 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
       </div>
 
       {showEdit && (
-        <EditClientModal
+        <EditClientDrawer
           client={client}
           onUpdated={handleClientUpdated}
           onClose={() => setShowEdit(false)}
@@ -1553,7 +1565,7 @@ export default function CustomerOrdersPage() {
   }
 
   function handleClientUpdated(updated) {
-    setClients((prev) => prev.map((c) => c.id === updated.id ? { ...c, name: updated.name } : c))
+    setClients((prev) => prev.map((c) => c.id === updated.id ? { ...c, ...updated } : c))
   }
 
   const filtered = clients.filter((c) =>

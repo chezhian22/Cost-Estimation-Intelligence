@@ -1,5 +1,21 @@
 """Server-side invoice PDF generation using fpdf2."""
+import base64
+import io
+import re
 from datetime import datetime
+
+
+def _embed_logo(pdf, logo_data_url: str, x: float, y: float, size: float):
+    """Decode a base64 data-URL and draw it as an image in the PDF."""
+    try:
+        m = re.match(r'data:image/(\w+);base64,(.+)', logo_data_url, re.DOTALL)
+        if not m:
+            return
+        img_type = m.group(1).upper().replace("JPEG", "JPG")
+        raw = base64.b64decode(m.group(2))
+        pdf.image(io.BytesIO(raw), x=x, y=y, w=size, h=size, type=img_type)
+    except Exception:
+        pass  # silently skip if logo fails (missing Pillow, bad data, etc.)
 
 
 def generate_invoice_pdf_bytes(calc, order, client, cs) -> bytes:
@@ -17,7 +33,11 @@ def generate_invoice_pdf_bytes(calc, order, client, cs) -> bytes:
 
     # ── Teal header band ──────────────────────────────────────────────────────
     pdf.set_fill_color(26, 188, 171)
-    pdf.rect(0, 0, 215, 38, "F")
+    pdf.rect(0, 0, 215, 42, "F")
+
+    # Logo — top-right of header band
+    if cs.logo:
+        _embed_logo(pdf, cs.logo, x=174, y=4, size=34)
 
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 17)
@@ -36,7 +56,7 @@ def generate_invoice_pdf_bytes(calc, order, client, cs) -> bytes:
 
     # ── Invoice title + right-side meta ───────────────────────────────────────
     pdf.set_text_color(15, 30, 28)
-    pdf.set_y(46)
+    pdf.set_y(50)
 
     pdf.set_font("Helvetica", "B", 26)
     pdf.cell(110, 12, "INVOICE", ln=False)
