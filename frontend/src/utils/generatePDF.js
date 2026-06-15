@@ -98,7 +98,7 @@ export function buildPDFHtml(
   const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
   const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
   if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
-  const coLogo = companySettings.logo_url || ''
+  const coLogo = companySettings.logo || ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -133,6 +133,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
   padding:32px 36px 26px;
   gap:20px;
 }
+.co-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:10px;border:2px solid rgba(26,188,171,0.25)}
 .co-name{
   font-size:24px;font-weight:900;
   color:#1abcab;letter-spacing:-0.02em;line-height:1;
@@ -352,6 +353,7 @@ export function generateQuotationPDF(
   const coPhone = companySettings.phone || '+91-422-2642738'
   const coEmail = companySettings.email || 'sales@chromaprintindia.com'
   const coGst   = companySettings.gst_number || ''
+  const coLogo  = companySettings.logo || ''
 
   const rows    = result.rows    || []
   const matched = result.matched || {}
@@ -520,6 +522,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 .btn-close:hover{background:#cbd5e1}
 .doc{width:820px;margin:28px auto;background:#fff;border-radius:6px;box-shadow:0 4px 30px rgba(0,0,0,.14);overflow:hidden}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding:30px 36px 24px;gap:20px}
+.co-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:10px;border:2px solid rgba(26,188,171,0.25)}
 .co-name{font-size:22px;font-weight:900;color:#1abcab;letter-spacing:-.02em;line-height:1}
 .co-sub{font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8;margin-top:3px}
 .co-meta{font-size:10px;color:#64748b;margin-top:8px;line-height:1.8}
@@ -623,6 +626,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
   <!-- Header -->
   <div class="hdr">
     <div>
+      ${coLogo ? `<img src="${coLogo}" alt="${coName}" class="co-logo">` : ''}
       <div class="co-name">${coName}</div>
       <div class="co-sub">Label Printing &amp; Packaging</div>
       <div class="co-meta">${coAddr}<br>${coPhone} &nbsp;|&nbsp; ${coEmail}</div>
