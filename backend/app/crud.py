@@ -415,6 +415,16 @@ def get_company_settings(db: Session) -> models.CompanySettings:
     return obj
 
 
+def update_company_logo(db: Session, logo_data) -> models.CompanySettings:
+    from datetime import datetime as _dt
+    obj = get_company_settings(db)
+    obj.logo = logo_data
+    obj.updated_at = _dt.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def upsert_company_settings(db: Session, data: schemas.CompanySettingsUpdate) -> models.CompanySettings:
     from datetime import datetime as _dt
     obj = get_company_settings(db)

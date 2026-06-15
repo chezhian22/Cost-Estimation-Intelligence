@@ -457,6 +457,7 @@ class CompanySettingsOut(BaseModel):
     gst_number:   Optional[str]    = None
     cgst_pct:     Optional[float]  = None
     sgst_pct:     Optional[float]  = None
+    logo:         Optional[str]    = None
     updated_at:   Optional[datetime] = None
 
 

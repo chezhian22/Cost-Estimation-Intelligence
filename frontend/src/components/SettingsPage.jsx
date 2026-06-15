@@ -86,16 +86,49 @@ const FIELDS = [
 export default function SettingsPage() {
   const [form, setForm]         = useState({})
   const [loading, setLoading]   = useState(true)
-  const [saving, setSaving]     = useState(false)
-  const [error, setError]       = useState(null)
-  const [saved, setSaved]       = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [error, setError]           = useState(null)
+  const [saved, setSaved]           = useState(false)
   const [logoPreview, setLogoPreview] = useState(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoError, setLogoError]   = useState(null)
 
   useEffect(() => {
     api.getCompanySettings()
-      .then(data => { setForm(data); setLoading(false) })
+      .then(data => { setForm(data); setLogoPreview(data.logo || null); setLoading(false) })
       .catch(e  => { setError(e.message); setLoading(false) })
   }, [])
+
+  async function handleLogoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoError(null)
+    setLogoUploading(true)
+    try {
+      const updated = await api.uploadCompanyLogo(file)
+      setLogoPreview(updated.logo)
+      setForm(prev => ({ ...prev, logo: updated.logo }))
+    } catch (err) {
+      setLogoError(err.message)
+    } finally {
+      setLogoUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleLogoRemove() {
+    setLogoError(null)
+    setLogoUploading(true)
+    try {
+      await api.deleteCompanyLogo()
+      setLogoPreview(null)
+      setForm(prev => ({ ...prev, logo: null }))
+    } catch (err) {
+      setLogoError(err.message)
+    } finally {
+      setLogoUploading(false)
+    }
+  }
 
   function handleChange(key, value) {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -196,31 +229,39 @@ export default function SettingsPage() {
             </div>
             <div className="sp-logo-actions">
               <p className="sp-logo-hint">
-                Upload your company logo. Recommended size: <strong>400 × 120 px</strong>, PNG or SVG with transparent background.
+                Upload your company logo. Recommended size: <strong>400 × 120 px</strong>, PNG or SVG with transparent background. Max 2 MB.
               </p>
+              {logoError && (
+                <p style={{ color: 'var(--danger, #e53e3e)', fontSize: '0.78rem', marginBottom: '0.5rem' }}>⚠ {logoError}</p>
+              )}
               <div className="sp-logo-btns">
-                <label className="sp-logo-upload-btn" title="Coming soon">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  Upload Logo
-                  {/* input disabled — functionality not yet implemented */}
-                  <input type="file" accept="image/*" disabled style={{ display: 'none' }} />
+                <label className={`sp-logo-upload-btn${logoUploading ? ' sp-logo-upload-btn--loading' : ''}`}>
+                  {logoUploading ? (
+                    <><span className="cop-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Uploading…</>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      {logoPreview ? 'Change Logo' : 'Upload Logo'}
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    disabled={logoUploading}
+                    style={{ display: 'none' }}
+                    onChange={handleLogoChange}
+                  />
                 </label>
-                {logoPreview && (
-                  <button type="button" className="sp-logo-remove-btn" onClick={() => setLogoPreview(null)}>
+                {logoPreview && !logoUploading && (
+                  <button type="button" className="sp-logo-remove-btn" onClick={handleLogoRemove}>
                     Remove
                   </button>
                 )}
               </div>
-              <p className="sp-logo-coming-soon">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                Logo upload will be available in a future update.
-              </p>
             </div>
           </div>
         </div>

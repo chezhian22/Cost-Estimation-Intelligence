@@ -40,6 +40,7 @@ export function buildPDFHtml(
   ].filter(Boolean).join(' · ')
 
   // ── Company info from settings ──
+  const coLogo    = companySettings.logo         || null
   const coName    = companySettings.company_name || 'CHROMAPRINT'
   const coTagline = companySettings.tagline      || 'India Private Limited'
   const coPhone   = companySettings.phone        || '+91-422-2642738'
@@ -110,6 +111,12 @@ body{
   align-items:flex-start;
   padding:32px 36px 26px;
   gap:20px;
+}
+.co-logo{
+  width:72px;height:72px;
+  object-fit:cover;
+  display:block;margin-bottom:8px;
+  border-radius:50%;
 }
 .co-name{
   font-size:24px;font-weight:900;
@@ -270,6 +277,7 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
   <!-- Header -->
   <div class="inv-header">
     <div>
+      ${coLogo ? `<img src="${coLogo}" alt="${coName}" class="co-logo">` : ''}
       <div class="co-name">${coName}</div>
       ${coTagline ? `<div class="co-sub">${coTagline}</div>` : ''}
       <div class="co-meta">

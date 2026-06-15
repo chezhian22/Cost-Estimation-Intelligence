@@ -4,7 +4,9 @@ from typing import List
 
 import os
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security
+import base64
+
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -139,9 +141,19 @@ def _migrate():
                 ("updated_at", "DATETIME NULL"),
                 ("cgst_pct",   "FLOAT NULL"),
                 ("sgst_pct",   "FLOAT NULL"),
+                ("logo",       "MEDIUMTEXT NULL"),
             ]:
                 if col not in cs_cols:
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
+
+            # Upgrade logo from TEXT → MEDIUMTEXT if it was created by an older deploy
+            if "logo" in cs_cols:
+                try:
+                    conn.execute(text(
+                        "ALTER TABLE company_settings MODIFY COLUMN logo MEDIUMTEXT NULL"
+                    ))
+                except Exception:
+                    pass  # SQLite or already MEDIUMTEXT — safe to ignore
 
 _migrate()
 
@@ -284,18 +296,22 @@ async def sql_injection_guard(request: Request, call_next):
       • Logs the client IP, path, and matched patterns for audit purposes.
     """
     if request.method in ("POST", "PUT", "PATCH"):
-        raw = await request.body()          # Starlette caches this; route handlers can still read it
-        client_ip = request.client.host if request.client else "unknown"
-        findings = check_request_body(raw, client_ip, request.url.path)
-        if findings:
-            patterns = list({p for _, p in findings})
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "Request rejected: input contains disallowed SQL patterns.",
-                    "patterns": patterns,
-                },
-            )
+        content_type = request.headers.get("content-type", "")
+        # Skip body scan for file uploads — multipart data is binary and reading
+        # the body here breaks Starlette's multipart parser in the route handler.
+        if "multipart/form-data" not in content_type:
+            raw = await request.body()
+            client_ip = request.client.host if request.client else "unknown"
+            findings = check_request_body(raw, client_ip, request.url.path)
+            if findings:
+                patterns = list({p for _, p in findings})
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "detail": "Request rejected: input contains disallowed SQL patterns.",
+                        "patterns": patterns,
+                    },
+                )
     return await call_next(request)
 
 
@@ -1078,3 +1094,47 @@ def update_company_settings(
 ):
     """Update company profile fields. Admin only. Partial updates supported."""
     return crud.upsert_company_settings(db, body)
+
+
+_LOGO_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+_LOGO_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/svg+xml", "image/webp", "image/gif"}
+
+
+@app.post(
+    "/api/settings/company/logo",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Upload company logo",
+)
+async def upload_company_logo(
+    file: UploadFile = File(...),
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Upload a company logo image. Max 2 MB. Admin only."""
+    content_type = file.content_type or ""
+    if content_type not in _LOGO_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{content_type}'. Allowed: PNG, JPEG, SVG, WebP, GIF.",
+        )
+    data = await file.read()
+    if len(data) > _LOGO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Logo file exceeds the 2 MB limit.")
+    b64 = base64.b64encode(data).decode("ascii")
+    data_url = f"data:{content_type};base64,{b64}"
+    return crud.update_company_logo(db, data_url)
+
+
+@app.delete(
+    "/api/settings/company/logo",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Remove company logo",
+)
+def delete_company_logo(
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Remove the stored company logo. Admin only."""
+    return crud.update_company_logo(db, None)

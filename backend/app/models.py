@@ -2,7 +2,8 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, JSON
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, JSON, Text
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -123,6 +124,7 @@ class CompanySettings(Base):
     gst_number     = Column(String(50),  nullable=True)
     cgst_pct       = Column(Float,       nullable=True, default=None)
     sgst_pct       = Column(Float,       nullable=True, default=None)
+    logo           = Column(Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=True)
     updated_at     = Column(DateTime,    nullable=True)
 
 
