@@ -56,7 +56,34 @@ export function buildPDFHtml(
   const invNo   = `INV-${year}-${Math.floor(1000 + Math.random() * 9000)}`
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
-  const coName    = (companySettings.company_name || 'CHROMAPRINT').toUpperCase()
+  const cyl = approved_cylinder
+  const qty = Number(inputs.total_qty) || 0
+  const ratePerLabel = Number(pricing.selling_price_per_label || 0)
+  const subtotal     = Number(pricing.total_cost_inr || (qty * ratePerLabel) || 0)
+  const totalUsd     = Number(pricing.total_cost_usd || 0)
+
+  // ── Tax calculation ──
+  const cgstPct = (companySettings.cgst_pct != null && companySettings.cgst_pct !== '')
+    ? Number(companySettings.cgst_pct) : null
+  const sgstPct = (companySettings.sgst_pct != null && companySettings.sgst_pct !== '')
+    ? Number(companySettings.sgst_pct) : null
+  const hasTax = cgstPct !== null && sgstPct !== null && !isNaN(cgstPct) && !isNaN(sgstPct)
+
+  const cgstAmt  = hasTax ? subtotal * cgstPct / 100 : 0
+  const sgstAmt  = hasTax ? subtotal * sgstPct / 100 : 0
+  const totalInr = hasTax ? subtotal + cgstAmt + sgstAmt : subtotal
+
+  const subLine = [
+    inputs.substrate,
+    inputs.label_width_mm && inputs.label_height_mm
+      ? `${Number(inputs.label_width_mm).toFixed(1)} × ${Number(inputs.label_height_mm).toFixed(1)} mm`
+      : null,
+    cyl.teeth   ? `Cyl. ${cyl.teeth}T`                              : null,
+    cyl.across && cyl.around ? `Layout ${cyl.across}×${cyl.around}` : null,
+  ].filter(Boolean).join(' · ')
+
+  // ── Company info from settings ──
+  const coName    = companySettings.company_name || 'CHROMAPRINT'
   const coTagline = companySettings.tagline      || 'India Private Limited'
   const coPhone   = companySettings.phone        || '+91-422-2642738'
   const coEmail   = companySettings.email        || 'sales@chromaprintindia.com'
@@ -71,30 +98,7 @@ export function buildPDFHtml(
   const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
   const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
   if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
-
-  const cyl          = approved_cylinder
-  const qty          = Number(inputs.total_qty) || 0
-  const ratePerLabel = Number(pricing.selling_price_per_label || 0)
-  const subtotal     = Number(pricing.total_cost_inr || (qty * ratePerLabel) || 0)
-  const totalUsd     = Number(pricing.total_cost_usd || 0)
-
-  const cgstPct = (companySettings.cgst_pct != null && companySettings.cgst_pct !== '')
-    ? Number(companySettings.cgst_pct) : null
-  const sgstPct = (companySettings.sgst_pct != null && companySettings.sgst_pct !== '')
-    ? Number(companySettings.sgst_pct) : null
-  const hasTax   = cgstPct !== null && sgstPct !== null && !isNaN(cgstPct) && !isNaN(sgstPct)
-  const cgstAmt  = hasTax ? subtotal * cgstPct / 100 : 0
-  const sgstAmt  = hasTax ? subtotal * sgstPct / 100 : 0
-  const totalInr = hasTax ? subtotal + cgstAmt + sgstAmt : subtotal
-
-  const subLine = [
-    inputs.substrate,
-    inputs.label_width_mm && inputs.label_height_mm
-      ? `${Number(inputs.label_width_mm).toFixed(1)} \xd7 ${Number(inputs.label_height_mm).toFixed(1)} mm`
-      : null,
-    cyl.teeth                      ? `Cyl. ${cyl.teeth}T`              : null,
-    cyl.across && cyl.around       ? `Layout ${cyl.across}\xd7${cyl.around}` : null,
-  ].filter(Boolean).join(' \xb7 ')
+  const coLogo = companySettings.logo || ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -110,16 +114,68 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 .btn-print:hover{background:#14a093}
 .btn-close{background:#e2e8f0;color:#475569;border:none;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:Arial,sans-serif}
 .btn-close:hover{background:#cbd5e1}
-.invoice{width:760px;margin:28px auto;background:#fff;border-radius:6px;box-shadow:0 4px 30px rgba(0,0,0,0.14);overflow:hidden}
-.inv-header{display:flex;justify-content:space-between;align-items:flex-start;padding:32px 36px 26px;gap:20px}
-.co-name{font-size:24px;font-weight:900;color:#1abcab;letter-spacing:-0.02em;line-height:1}
-.co-sub{font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-top:3px}
-.co-meta{font-size:10px;color:#64748b;margin-top:10px;line-height:1.8}
-.hdr-right{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:0}
-.doc-type{font-size:30px;font-weight:900;color:#1e293b;letter-spacing:-0.03em;line-height:1}
-.doc-num{font-size:13px;font-weight:700;color:#1abcab;margin-top:6px}
-.doc-date{font-size:10px;color:#64748b;margin-top:3px}
-.doc-valid{font-size:10px;color:#64748b;margin-top:2px}
+
+/* ─── Invoice card ─── */
+.invoice{
+  width:760px;
+  margin:28px auto;
+  background:#fff;
+  border-radius:6px;
+  box-shadow:0 4px 30px rgba(0,0,0,0.14);
+  overflow:hidden;
+}
+
+/* ─── Header ─── */
+.inv-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  padding:32px 36px 26px;
+  gap:20px;
+}
+.co-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:10px;border:2px solid rgba(26,188,171,0.25)}
+.co-name{
+  font-size:24px;font-weight:900;
+  color:#1abcab;letter-spacing:-0.02em;line-height:1;
+}
+.co-sub{
+  font-size:9px;font-weight:700;
+  letter-spacing:0.12em;text-transform:uppercase;
+  color:#94a3b8;margin-top:3px;
+}
+.co-meta{
+  font-size:10px;color:#64748b;
+  margin-top:10px;line-height:1.8;
+}
+
+/* Right block — all right-aligned */
+.hdr-right{
+  text-align:right;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:0;
+}
+.doc-type{
+  font-size:30px;font-weight:900;
+  color:#1e293b;letter-spacing:-0.03em;
+  line-height:1;
+}
+.quote-num{
+  font-size:13px;font-weight:700;
+  color:#1abcab;
+  margin-top:6px;
+}
+.quote-date{
+  font-size:10px;color:#64748b;
+  margin-top:3px;
+}
+.quote-valid{
+  font-size:10px;color:#64748b;
+  margin-top:2px;
+}
+
+/* ─── Teal divider ─── */
 .divider{border:none;height:3px;background:#1abcab;margin:0 36px}
 .bill-section{padding:24px 36px 20px;border-bottom:1px solid #f1f5f9}
 .bill-label{font-size:8px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
@@ -165,6 +221,7 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
 <div class="invoice">
   <div class="inv-header">
     <div>
+      ${coLogo ? `<img src="${coLogo}" alt="${coName}" class="co-logo">` : ''}
       <div class="co-name">${coName}</div>
       ${coTagline ? `<div class="co-sub">${coTagline}</div>` : ''}
       <div class="co-meta">
@@ -296,6 +353,7 @@ export function generateQuotationPDF(
   const coPhone = companySettings.phone || '+91-422-2642738'
   const coEmail = companySettings.email || 'sales@chromaprintindia.com'
   const coGst   = companySettings.gst_number || ''
+  const coLogo  = companySettings.logo || ''
 
   const rows    = result.rows    || []
   const matched = result.matched || {}
@@ -464,6 +522,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 .btn-close:hover{background:#cbd5e1}
 .doc{width:820px;margin:28px auto;background:#fff;border-radius:6px;box-shadow:0 4px 30px rgba(0,0,0,.14);overflow:hidden}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding:30px 36px 24px;gap:20px}
+.co-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:10px;border:2px solid rgba(26,188,171,0.25)}
 .co-name{font-size:22px;font-weight:900;color:#1abcab;letter-spacing:-.02em;line-height:1}
 .co-sub{font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8;margin-top:3px}
 .co-meta{font-size:10px;color:#64748b;margin-top:8px;line-height:1.8}
@@ -567,6 +626,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
   <!-- Header -->
   <div class="hdr">
     <div>
+      ${coLogo ? `<img src="${coLogo}" alt="${coName}" class="co-logo">` : ''}
       <div class="co-name">${coName}</div>
       <div class="co-sub">Label Printing &amp; Packaging</div>
       <div class="co-meta">${coAddr}<br>${coPhone} &nbsp;|&nbsp; ${coEmail}</div>

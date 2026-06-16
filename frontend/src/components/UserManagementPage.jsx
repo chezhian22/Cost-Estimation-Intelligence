@@ -22,6 +22,18 @@ function RoleBadge({ role }) {
 
 const EMPTY_FORM = { username: '', email: '', password: '', role: 'user' }
 
+function generatePassword() {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghjkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const special = '@#!$'
+  const all = upper + lower + digits + special
+  const rand = (src) => src[Math.floor(Math.random() * src.length)]
+  const base = [rand(upper), rand(lower), rand(digits), rand(special),
+    ...Array.from({ length: 6 }, () => rand(all))]
+  return base.sort(() => Math.random() - 0.5).join('')
+}
+
 export default function UserManagementPage({ currentUser }) {
   const [users,   setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,9 +44,13 @@ export default function UserManagementPage({ currentUser }) {
   const [form,      setForm]      = useState(EMPTY_FORM)
   const [formError, setFormError] = useState(null)
   const [saving,    setSaving]    = useState(false)
+  const [copied,    setCopied]    = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting,     setDeleting]     = useState(false)
+
+  const [toggleTarget, setToggleTarget] = useState(null)
+  const [toggling,     setToggling]     = useState(false)
 
   useEffect(() => { fetchUsers() }, [])
 
@@ -46,7 +62,12 @@ export default function UserManagementPage({ currentUser }) {
   }
 
   function openCreate() {
-    setEditUser(null); setForm(EMPTY_FORM); setFormError(null); setShowForm(true)
+    const pw = generatePassword()
+    setEditUser(null)
+    setForm({ ...EMPTY_FORM, password: pw })
+    setFormError(null)
+    setCopied(false)
+    setShowForm(true)
   }
 
   function openEdit(u) {
@@ -81,11 +102,15 @@ export default function UserManagementPage({ currentUser }) {
     }
   }
 
-  async function handleToggleActive(u) {
+  async function handleToggleActive() {
+    if (!toggleTarget) return
+    setToggling(true)
     try {
-      await api.updateUser(u.id, { is_active: !u.is_active })
+      await api.updateUser(toggleTarget.id, { is_active: !toggleTarget.is_active })
+      setToggleTarget(null)
       await fetchUsers()
     } catch (e) { setError(e.message) }
+    finally { setToggling(false) }
   }
 
   async function handleDelete() {
@@ -183,11 +208,11 @@ export default function UserManagementPage({ currentUser }) {
                       {u.id !== currentUser?.id && (
                         <>
                           <button
-                            onClick={() => handleToggleActive(u)}
+                            onClick={() => setToggleTarget(u)}
                             title={u.is_active ? 'Deactivate' : 'Activate'}
-                            style={actionBtn()}
-                            onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover())}
-                            onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn())}
+                            style={actionBtn(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)')}
+                            onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.20)' : 'rgba(16,185,129,0.20)'))}
+                            onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)'))}
                           >
                             {u.is_active ? 'Deactivate' : 'Activate'}
                           </button>
@@ -231,8 +256,33 @@ export default function UserManagementPage({ currentUser }) {
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="john@example.com" />
               </div>
               <div className="field">
-                <label className="field-label">{editUser ? 'New Password (leave blank to keep)' : 'Password'}</label>
-                <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={editUser ? '••••••••' : 'min 4 characters'} />
+                <label className="field-label">
+                  {editUser ? 'New Password (leave blank to keep)' : 'Password'}
+                  <button
+                    type="button"
+                    onClick={() => { const pw = generatePassword(); setForm(f => ({ ...f, password: pw })); setCopied(false) }}
+                    style={{ marginLeft: 8, fontSize: '0.68rem', padding: '1px 7px', borderRadius: 100, border: '1px solid rgba(54,229,194,0.35)', background: 'rgba(54,229,194,0.08)', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+                  >
+                    Regenerate
+                  </button>
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={form.password}
+                    onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setCopied(false) }}
+                    style={{ flex: 1, fontFamily: 'monospace', letterSpacing: '0.05em' }}
+                    placeholder={editUser ? 'leave blank to keep current' : 'auto-generated password'}
+                  />
+                  <button
+                    type="button"
+                    disabled={!form.password}
+                    onClick={() => { navigator.clipboard.writeText(form.password).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }}
+                    style={{ padding: '0.4rem 0.9rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--teal)', background: copied ? 'rgba(54,229,194,0.25)' : 'rgba(54,229,194,0.10)', color: copied ? '#fff' : 'var(--teal)', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: form.password ? 'pointer' : 'default', opacity: form.password ? 1 : 0.4, whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+                  >
+                    {copied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <div className="field">
                 <label className="field-label">Role</label>
@@ -260,6 +310,34 @@ export default function UserManagementPage({ currentUser }) {
         document.body
       )}
 
+      {/* ── Toggle Active Confirm Modal ── */}
+      {toggleTarget && createPortal(
+        <div style={overlayStyle()} onClick={() => setToggleTarget(null)}>
+          <div style={modalStyle()} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-bright)', marginBottom: '0.8rem' }}>
+              {toggleTarget.is_active ? 'Deactivate User' : 'Activate User'}
+            </div>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '1.2rem' }}>
+              Are you sure you want to {toggleTarget.is_active ? 'deactivate' : 'activate'}{' '}
+              <strong style={{ color: 'var(--text-bright)' }}>{toggleTarget.username}</strong>?
+              {toggleTarget.is_active
+                ? ' They will be temporarily blocked from signing in.'
+                : ' They will be able to sign in again.'}
+            </p>
+            <div style={{ display: 'flex', gap: '0.7rem' }}>
+              <button type="button" onClick={() => setToggleTarget(null)} style={cancelBtnStyle()}>Cancel</button>
+              <button
+                onClick={handleToggleActive} disabled={toggling}
+                style={{ ...confirmBtnStyle(toggling), border: `1px solid ${toggleTarget.is_active ? '#f59e0b' : '#10b981'}`, background: toggleTarget.is_active ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)', color: toggleTarget.is_active ? '#f59e0b' : '#10b981' }}
+              >
+                {toggling ? '…' : toggleTarget.is_active ? 'Yes, Deactivate' : 'Yes, Activate'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* ── Delete Confirm Modal ── */}
       {deleteTarget && createPortal(
         <div style={overlayStyle()} onClick={() => setDeleteTarget(null)}>
@@ -274,7 +352,7 @@ export default function UserManagementPage({ currentUser }) {
                 onClick={handleDelete} disabled={deleting}
                 style={{ ...confirmBtnStyle(deleting), border: '1px solid #ef4444', background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {deleting ? 'Deleting…' : 'Yes, Delete'}
               </button>
             </div>
           </div>

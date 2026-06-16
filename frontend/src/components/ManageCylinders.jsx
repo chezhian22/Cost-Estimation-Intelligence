@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 
 function blockNonNumeric(e) {
@@ -31,12 +32,13 @@ function EditModal({ cylinder, onClose, onSaved }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="edit-modal-overlay" onClick={onClose}>
       <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
         <div className="edit-modal-header">
           <span className="edit-modal-header-icon">⚙</span>
           <span className="edit-modal-header-title">Edit Cylinder</span>
+          <button type="button" className="edit-modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <form onSubmit={handleSave}>
           <div className="edit-modal-body">
@@ -73,7 +75,8 @@ function EditModal({ cylinder, onClose, onSaved }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

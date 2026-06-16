@@ -4,7 +4,9 @@ from typing import List
 
 import os
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security
+import base64
+
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,7 +14,8 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
-from .auth import create_access_token, decode_token
+from .invoice_pdf import generate_invoice_pdf_bytes
+from .auth import create_access_token, decode_token, hash_password, verify_password
 from .database import Base, engine, get_db
 from .security import check_request_body
 
@@ -145,9 +148,25 @@ def _migrate():
                 ("updated_at", "DATETIME NULL"),
                 ("cgst_pct",   "FLOAT NULL"),
                 ("sgst_pct",   "FLOAT NULL"),
+                ("logo",           "MEDIUMTEXT NULL"),
+                ("smtp_host",      "VARCHAR(200) NULL"),
+                ("smtp_port",      "INT NULL DEFAULT 587"),
+                ("smtp_user",      "VARCHAR(200) NULL"),
+                ("smtp_password",  "VARCHAR(500) NULL"),
+                ("smtp_use_tls",   "BOOLEAN NULL DEFAULT TRUE"),
+                ("smtp_from_name", "VARCHAR(120) NULL"),
             ]:
                 if col not in cs_cols:
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
+
+            # Upgrade logo from TEXT → MEDIUMTEXT if it was created by an older deploy
+            if "logo" in cs_cols:
+                try:
+                    conn.execute(text(
+                        "ALTER TABLE company_settings MODIFY COLUMN logo MEDIUMTEXT NULL"
+                    ))
+                except Exception:
+                    pass  # SQLite or already MEDIUMTEXT — safe to ignore
 
 _migrate()
 
@@ -290,18 +309,22 @@ async def sql_injection_guard(request: Request, call_next):
       • Logs the client IP, path, and matched patterns for audit purposes.
     """
     if request.method in ("POST", "PUT", "PATCH"):
-        raw = await request.body()          # Starlette caches this; route handlers can still read it
-        client_ip = request.client.host if request.client else "unknown"
-        findings = check_request_body(raw, client_ip, request.url.path)
-        if findings:
-            patterns = list({p for _, p in findings})
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "Request rejected: input contains disallowed SQL patterns.",
-                    "patterns": patterns,
-                },
-            )
+        content_type = request.headers.get("content-type", "")
+        # Skip body scan for file uploads — multipart data is binary and reading
+        # the body here breaks Starlette's multipart parser in the route handler.
+        if "multipart/form-data" not in content_type:
+            raw = await request.body()
+            client_ip = request.client.host if request.client else "unknown"
+            findings = check_request_body(raw, client_ip, request.url.path)
+            if findings:
+                patterns = list({p for _, p in findings})
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "detail": "Request rejected: input contains disallowed SQL patterns.",
+                        "patterns": patterns,
+                    },
+                )
     return await call_next(request)
 
 
@@ -1024,6 +1047,19 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+@app.post("/api/auth/change-password", tags=["auth"])
+def change_password(body: schemas.ChangePasswordRequest, db: Session = Depends(get_db)):
+    """Allow a user to change their own password by verifying their current password first."""
+    user = crud.get_user_by_email(db, body.email.strip())
+    if not user or not verify_password(body.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid email or current password")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Account is inactive")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"status": "ok"}
+
+
 # ── User Management (admin only) ──────────────────────────────────────────────
 @app.get("/api/users", response_model=List[schemas.UserOut], tags=["users"])
 def list_users(_: models.User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -1104,3 +1140,118 @@ def update_company_settings(
 ):
     """Update company profile fields. Admin only. Partial updates supported."""
     return crud.upsert_company_settings(db, body)
+
+
+_LOGO_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+_LOGO_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/svg+xml", "image/webp", "image/gif"}
+
+
+@app.post(
+    "/api/settings/company/logo",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Upload company logo",
+)
+async def upload_company_logo(
+    file: UploadFile = File(...),
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Upload a company logo image. Max 2 MB. Admin only."""
+    content_type = file.content_type or ""
+    if content_type not in _LOGO_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{content_type}'. Allowed: PNG, JPEG, SVG, WebP, GIF.",
+        )
+    data = await file.read()
+    if len(data) > _LOGO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Logo file exceeds the 2 MB limit.")
+    b64 = base64.b64encode(data).decode("ascii")
+    data_url = f"data:{content_type};base64,{b64}"
+    return crud.update_company_logo(db, data_url)
+
+
+@app.delete(
+    "/api/settings/company/logo",
+    response_model=schemas.CompanySettingsOut,
+    tags=["settings"],
+    summary="Remove company logo",
+)
+def delete_company_logo(
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Remove the stored company logo. Admin only."""
+    return crud.update_company_logo(db, None)
+
+
+# ── Send Invoice Email ─────────────────────────────────────────────────────────
+@app.post("/api/send-invoice-email", tags=["email"], summary="Send invoice PDF by email")
+def send_invoice_email(
+    body: schemas.SendInvoiceEmailRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import smtplib, ssl
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+
+    cs = crud.get_company_settings(db)
+    if not cs.smtp_host or not cs.smtp_user or not cs.smtp_password:
+        raise HTTPException(
+            status_code=400,
+            detail="SMTP not configured. Go to Settings → Email to set up your mail server.",
+        )
+
+    calc = crud.get_calculation(db, body.calc_id)
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+
+    client = crud.get_client(db, calc.client_id) if calc.client_id else None
+    order  = crud.get_order(db, calc.order_id)   if calc.order_id  else None
+
+    # Generate PDF
+    try:
+        pdf_bytes = generate_invoice_pdf_bytes(calc, order, client, cs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+
+    inv_no    = f"INV-{__import__('datetime').datetime.utcnow().year}-{str(calc.id).zfill(4)}"
+    from_name = cs.smtp_from_name or cs.company_name or "ChromaPrint India"
+
+    msg = MIMEMultipart()
+    msg["From"]    = f"{from_name} <{cs.smtp_user}>"
+    msg["To"]      = body.to_email
+    msg["Subject"] = body.subject
+    msg.attach(MIMEText(body.body, "plain", "utf-8"))
+
+    attachment = MIMEApplication(pdf_bytes, _subtype="pdf")
+    attachment.add_header("Content-Disposition", "attachment", filename=f"{inv_no}.pdf")
+    msg.attach(attachment)
+
+    port     = cs.smtp_port or 587
+    use_tls  = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
+    ctx      = ssl.create_default_context()
+
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as server:
+                server.login(cs.smtp_user, cs.smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as server:
+                server.ehlo()
+                if use_tls:
+                    server.starttls(context=ctx)
+                server.login(cs.smtp_user, cs.smtp_password)
+                server.send_message(msg)
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=400, detail="SMTP authentication failed. Check your username and password (use an App Password for Gmail).")
+    except smtplib.SMTPException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Connection error: {e}")
+
+    return {"status": "sent", "to": body.to_email}

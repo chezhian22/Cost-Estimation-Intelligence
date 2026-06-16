@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
 import { toast } from '../utils/toast'
@@ -352,14 +353,46 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
               ) : approvedId != null ? (
                 <>
                   <span className="cop-detail-other-approved">Another calculation is already approved for this order.</span>
-                  <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
-                    ★ Approve this instead
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <button
+                      className="cop-pdf-btn"
+                      disabled={quotationLoading}
+                      onClick={async () => {
+                        setQuotationLoading(true)
+                        try {
+                          let cs = {}
+                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+                        } finally { setQuotationLoading(false) }
+                      }}
+                    >
+                      {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                    </button>
+                    <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
+                      ★ Approve this instead
+                    </button>
+                  </div>
                 </>
               ) : (
-                <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
-                  ★ Approve this Calculation
-                </button>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                  <button
+                    className="cop-pdf-btn"
+                    disabled={quotationLoading}
+                    onClick={async () => {
+                      setQuotationLoading(true)
+                      try {
+                        let cs = {}
+                        try { cs = await api.getCompanySettings() } catch (_) {}
+                        generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
+                      } finally { setQuotationLoading(false) }
+                    }}
+                  >
+                    {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                  </button>
+                  <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
+                    ★ Approve this Calculation
+                  </button>
+                </div>
               )}
             </div>
           </>
@@ -559,8 +592,221 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
   )
 }
 
+// ── Draft Email Modal ─────────────────────────────────────────────────────────
+function DraftEmailModal({ calc, clientEmail, clientName, orderName, onClose }) {
+  const [loading, setLoading]           = useState(true)
+  const [calcData, setCalcData]         = useState(null)
+  const [companySettings, setCompanySettings] = useState({})
+  const [subject, setSubject]           = useState('')
+  const [body, setBody]                 = useState('')
+  const [copied, setCopied]             = useState(false)
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
+  const [sending, setSending]           = useState(false)
+  const [sent, setSent]                 = useState(false)
+
+  const calcId = calc.calculation_id || calc.id  // versions use calculation_id; regular calcs use id
+
+  useEffect(() => {
+    async function init() {
+      try {
+        const [data, cs] = await Promise.all([
+          api.getCalculation(calcId),
+          api.getCompanySettings().catch(() => ({})),
+        ])
+        setCalcData(data)
+        setCompanySettings(cs)
+
+        const coName  = cs.company_name || 'ChromaPrint'
+        const coPhone = cs.phone || ''
+        const coEmail = cs.email || ''
+        const today   = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+        const invNo   = `INV-${new Date().getFullYear()}-${String(calcId).padStart(4, '0')}`
+        const qty     = Number(data.order_qty) || 0
+        const pricing = calc.pricing || data.result?.pricing || {}
+        const pricePerLabel = Number(pricing.price_inr_label || 0)
+        const amountDue = qty > 0 && pricePerLabel > 0
+          ? `₹ ${(qty * pricePerLabel).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : 'Please refer to the attached invoice'
+
+        setSubject(`Invoice ${invNo} — ${orderName || 'Your Order'}`)
+        setBody(
+`Dear ${clientName || 'Sir/Madam'},
+
+I hope you are doing well.
+
+Please find the attached invoice for the services provided. Kindly review the invoice and process the payment as per the payment terms mentioned in the document.
+
+Invoice Number: ${invNo}
+Invoice Date: ${today}
+Amount Due: ${amountDue}
+
+If you have any questions or require any additional information, please feel free to contact me.
+
+Thank you for your business and continued support.
+
+Best regards,
+${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
+      } catch (err) {
+        toast.error(err.message || 'Failed to load details')
+        onClose()
+      } finally {
+        setLoading(false)
+      }
+    }
+    init()
+  }, [])
+
+  async function handleDownloadInvoice() {
+    if (!calcData) return
+    setInvoiceLoading(true)
+    try {
+      generateInvoicePDF(buildInvoicePayload(calcData, clientName, orderName), companySettings)
+    } catch (err) {
+      toast.error(err.message || 'Failed to generate invoice')
+    } finally {
+      setInvoiceLoading(false)
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(body)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Copy failed — please select and copy manually')
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!clientEmail) return toast.error('No email address on file for this client')
+    setSending(true)
+    try {
+      await api.sendInvoiceEmail(calcId, clientEmail, subject, body)
+      setSent(true)
+      setTimeout(() => setSent(false), 4000)
+      toast.error('') // clear any previous error
+    } catch (err) {
+      toast.error(err.message || 'Failed to send email')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return createPortal(
+    <div className="cop-detail-overlay" onClick={onClose}>
+      <div
+        className="cop-detail-modal"
+        style={{ maxWidth: 640 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onClose}>← Close</button>
+          <span className="cop-detail-title">Draft Invoice Email</span>
+          <span className="cop-status-badge cop-status-confirmed">
+            <span className="cop-status-dot" /> Approved
+          </span>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', padding: '3rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+            <span className="cop-spinner" />
+            Preparing email…
+          </div>
+        ) : (
+          <div className="cop-detail-body" style={{ gap: '0.9rem' }}>
+            <div style={{
+              background: 'rgba(54,229,194,0.07)',
+              border: '1px solid rgba(54,229,194,0.2)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.65rem 0.9rem',
+              fontSize: '0.78rem',
+              color: 'var(--text-dim)',
+              lineHeight: 1.7,
+            }}>
+              <strong style={{ color: 'var(--teal)', display: 'block', marginBottom: '0.15rem' }}>
+                Invoice will be attached automatically.
+              </strong>
+              Edit the subject and body if needed, then click <strong style={{ color: 'var(--text)' }}>Send Email</strong>.
+              The invoice PDF will be generated and sent as an attachment via your configured SMTP server.
+              {' '}<span style={{ opacity: 0.7 }}>( Settings → Email / SMTP to configure )</span>
+            </div>
+            <div className="qh-email-field">
+              <label className="qh-email-label">To</label>
+              <div className="qh-email-to">
+                {clientEmail
+                  ? <a href={`mailto:${clientEmail}`} className="qh-email-addr">{clientEmail}</a>
+                  : <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>No email address on file for this client</span>
+                }
+              </div>
+            </div>
+            <div className="qh-email-field">
+              <label className="qh-email-label">Subject</label>
+              <input
+                className="qh-email-input"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+            </div>
+            <div className="qh-email-field">
+              <label className="qh-email-label">Body</label>
+              <textarea
+                className="qh-email-textarea"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={18}
+              />
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="cop-detail-footer" style={{ justifyContent: 'flex-end', gap: '0.6rem' }}>
+            <button className="qh-action-btn" onClick={handleCopy} style={{ minWidth: 110 }}>
+              {copied ? '✓ Copied!' : 'Copy Body'}
+            </button>
+            <button className="cop-pdf-btn" onClick={handleDownloadInvoice} disabled={invoiceLoading} title="Preview invoice PDF">
+              {invoiceLoading ? (
+                <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              )}
+              {invoiceLoading ? 'Generating…' : 'Preview PDF'}
+            </button>
+            <button
+              className="cop-pdf-btn"
+              onClick={handleSendEmail}
+              disabled={sending || !clientEmail}
+              title={clientEmail ? `Send to ${clientEmail} with PDF attached` : 'No email address on file for this client'}
+              style={sent ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.4)', color: '#4ade80' } : {}}
+            >
+              {sending ? (
+                <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
+              ) : sent ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+              )}
+              {sending ? 'Sending…' : sent ? 'Sent!' : 'Send Email'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── Calculation row ───────────────────────────────────────────────────────────
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, versionLabel, clientName, orderName }) {
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, onEmailDraft, versionLabel, clientName, orderName }) {
   const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
 
@@ -635,55 +881,71 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
 
       {/* approve action */}
       <div className="cop-calc-actions" onClick={(e) => e.stopPropagation()}>
-        {isApproved ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          {isApproved && (
             <span className="cop-approved-chip">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
               Approved
             </span>
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
-              {quotationLoading ? (
-                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
-              ) : (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                </svg>
-              )}
-              Quotation
-            </button>
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Download client invoice">
-              {pdfLoading ? (
-                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
-              ) : (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-              )}
-              Invoice
-            </button>
-          </div>
-        ) : (
-          <button
-            className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
-            onClick={() => onApproveRequest(calc)}
-            title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
-          >
-            Approve
+          )}
+          <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
+            {quotationLoading ? (
+              <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            )}
+            Quotation
           </button>
-        )}
+          {isApproved ? (
+            <>
+              <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Download client invoice">
+                {pdfLoading ? (
+                  <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                )}
+                Invoice
+              </button>
+              <button
+                className="cop-pdf-btn cop-pdf-btn--sm"
+                onClick={(e) => { e.stopPropagation(); onEmailDraft?.(calc) }}
+                title="Draft invoice email to client"
+                style={{ background: 'rgba(99,102,241,0.10)', borderColor: 'rgba(99,102,241,0.30)', color: '#818cf8' }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                Email
+              </button>
+            </>
+          ) : (
+            <button
+              className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
+              onClick={() => onApproveRequest(calc)}
+              title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
+            >
+              Approve
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
 // ── Order panel ───────────────────────────────────────────────────────────────
-function OrderPanel({ order, hideHeader, clientName }) {
+function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
   const [calcs, setCalcs]         = useState(null)
   const [loading, setLoading]     = useState(false)
   const [approvedId, setApprovedId] = useState(null)
@@ -701,6 +963,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
   const [approveConfirm, setApproveConfirm]   = useState(null) // calc object
   const [conflict, setConflict]               = useState(null) // { pendingCalc, approvedCalc }
   const [swapConfirm, setSwapConfirm]         = useState(null) // { pendingCalc, approvedCalc }
+  const [emailDraftCalc, setEmailDraftCalc]   = useState(null) // calc object for email draft
 
   useEffect(() => {
     setLoading(true)
@@ -846,6 +1109,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                 hasOtherApproved={false}
                 onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
                 onApproveRequest={handleApproveRequest}
+                onEmailDraft={setEmailDraftCalc}
                 clientName={clientName}
                 orderName={order.name}
                 companySettings={companySettings}
@@ -860,6 +1124,7 @@ function OrderPanel({ order, hideHeader, clientName }) {
                 versionLabel={`V${v.version_number}`}
                 onViewDetail={() => setVersionDetailModal(v)}
                 onApproveRequest={() => {}}
+                onEmailDraft={setEmailDraftCalc}
                 clientName={clientName}
                 orderName={order.name}
                 companySettings={companySettings}
@@ -915,6 +1180,16 @@ function OrderPanel({ order, hideHeader, clientName }) {
           approvedCalc={swapConfirm.approvedCalc}
           onConfirm={handleConfirmSwap}
           onCancel={() => setSwapConfirm(null)}
+        />
+      )}
+
+      {emailDraftCalc && (
+        <DraftEmailModal
+          calc={emailDraftCalc}
+          clientEmail={clientEmail}
+          clientName={clientName}
+          orderName={order.name}
+          onClose={() => setEmailDraftCalc(null)}
         />
       )}
     </div>
@@ -1109,7 +1384,7 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
                           </button>
                           {isActive && (
                             <div className="cop-order-item-body">
-                              <OrderPanel order={o} hideHeader clientName={client.name} />
+                              <OrderPanel order={o} hideHeader clientName={client.name} clientEmail={client.email || ''} />
                             </div>
                           )}
                         </div>

@@ -95,4 +95,36 @@ export const api = {
   getCompanySettings: () => request('/api/settings/company'),
   updateCompanySettings: (data) =>
     request('/api/settings/company', { method: 'PATCH', body: JSON.stringify(data) }),
+
+  uploadCompanyLogo: async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(`${BASE}/api/settings/company/logo`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}))
+      const msg = Array.isArray(detail.detail)
+        ? detail.detail.map(e => e.msg).join(', ')
+        : detail.detail || `Request failed: ${res.status}`
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
+  deleteCompanyLogo: () => request('/api/settings/company/logo', { method: 'DELETE' }),
+
+  sendInvoiceEmail: (calcId, toEmail, subject, body) =>
+    request('/api/send-invoice-email', {
+      method: 'POST',
+      body: JSON.stringify({ calc_id: calcId, to_email: toEmail, subject, body }),
+    }),
+
+  changePassword: (email, oldPassword, newPassword) =>
+    request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, old_password: oldPassword, new_password: newPassword }),
+    }),
 }

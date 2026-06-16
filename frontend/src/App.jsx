@@ -50,8 +50,12 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null, s
 
 const NAV_SECTIONS = [
   {
-    section: null,
-    icon: null,
+    section: 'Main',
+    icon: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    ),
     links: [
       {
         id: 'dashboard', label: 'Dashboard',
@@ -548,7 +552,7 @@ export default function App() {
           {NAV_SECTIONS.map(({ section, icon, links }) => (
             <div key={section || '__top'}>
               {section && (
-                <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+                <div className="nav-section-label" style={{ marginTop: '0.9rem' }}>
                   {icon && <span className="nav-section-icon">{icon}</span>}
                   {section}
                 </div>
@@ -586,7 +590,7 @@ export default function App() {
 
           {isAdmin && (
             <div>
-              <div className="nav-section-label" style={{ marginTop: '1.1rem' }}>
+              <div className="nav-section-label" style={{ marginTop: '0.9rem' }}>
                 <span className="nav-section-icon">{ADMIN_SECTION.icon}</span>
                 {ADMIN_SECTION.section}
               </div>
