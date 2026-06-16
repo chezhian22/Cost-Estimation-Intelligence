@@ -459,11 +459,12 @@ class CompanySettingsOut(BaseModel):
     sgst_pct:     Optional[float]  = None
     logo:           Optional[str]    = None
     updated_at:     Optional[datetime] = None
-    smtp_host:      Optional[str]    = None
-    smtp_port:      Optional[int]    = 587
-    smtp_user:      Optional[str]    = None
-    smtp_use_tls:   Optional[bool]   = True
-    smtp_from_name: Optional[str]    = None
+    smtp_host:         Optional[str]    = None
+    smtp_port:         Optional[int]    = 587
+    smtp_user:         Optional[str]    = None
+    smtp_use_tls:      Optional[bool]   = True
+    smtp_from_name:    Optional[str]    = None
+    smtp_password_set: bool             = False
 
 
 class CompanySettingsUpdate(BaseModel):
@@ -493,6 +494,26 @@ class SendInvoiceEmailRequest(BaseModel):
     to_email:  str
     subject:   str
     body:      str
+
+
+class EmailLogUpdate(BaseModel):
+    status:  str            = Field(..., pattern="^(sent|failed)$")
+    remarks: Optional[str] = None
+
+
+class EmailLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:           int
+    calc_id:      Optional[int]      = None
+    sent_by_name: Optional[str]      = None
+    to_email:     str
+    client_name:  Optional[str]      = None
+    order_name:   Optional[str]      = None
+    subject:      Optional[str]      = None
+    status:       str
+    remarks:      Optional[str]      = None
+    sent_at:      datetime
 
 
 class ChangePasswordRequest(BaseModel):

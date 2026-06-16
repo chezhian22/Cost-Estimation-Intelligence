@@ -10,6 +10,7 @@ import QuoteHistory from './components/QuoteHistory'
 import ManageCylinders from './components/ManageCylinders'
 import ManageSubstrates from './components/ManageSubstrates'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
+import MailManagementPage from './components/MailManagementPage'
 import LoginPage from './components/LoginPage'
 import UserManagementPage from './components/UserManagementPage'
 import SettingsPage from './components/SettingsPage'
@@ -90,7 +91,8 @@ const NAV_SECTIONS = [
       </svg>
     ),
     links: [
-      { id: 'client-orders', label: 'Client & Orders' },
+      { id: 'client-orders',    label: 'Client & Orders'  },
+      { id: 'mail-management',  label: 'Mail Management'  },
     ],
   },
   {
@@ -753,6 +755,7 @@ export default function App() {
           {activeView === 'cylinders'       && <ManageCylinders isAdmin={isAdmin} />}
           {activeView === 'substrates'      && <ManageSubstrates isAdmin={isAdmin} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}
+          {activeView === 'mail-management' && <MailManagementPage />}
           {activeView === 'user-management' && isAdmin && <UserManagementPage currentUser={currentUser} />}
           {activeView === 'settings'        && isAdmin && <SettingsPage />}
         </div>

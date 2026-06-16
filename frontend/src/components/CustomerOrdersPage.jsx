@@ -685,7 +685,6 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
       await api.sendInvoiceEmail(calcId, clientEmail, subject, body)
       setSent(true)
       setTimeout(() => setSent(false), 4000)
-      toast.error('') // clear any previous error
     } catch (err) {
       toast.error(err.message || 'Failed to send email')
     } finally {
@@ -739,6 +738,19 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
                   : <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>No email address on file for this client</span>
                 }
               </div>
+              {clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim()) && (
+                <div style={{
+                  marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.35)',
+                  borderRadius: 6, padding: '0.45rem 0.7rem',
+                  fontSize: '0.78rem', color: '#f87171',
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  Invalid email address — please edit the client profile to fix it before sending.
+                </div>
+              )}
             </div>
             <div className="qh-email-field">
               <label className="qh-email-label">Subject</label>

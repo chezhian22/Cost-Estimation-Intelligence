@@ -136,6 +136,25 @@ class CompanySettings(Base):
     smtp_from_name = Column(String(120), nullable=True)
 
 
+class EmailLog(Base):
+    """Log of every invoice email send attempt."""
+
+    __tablename__ = "email_logs"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    calc_id     = Column(Integer, ForeignKey("calculations.id"), nullable=True)
+    sent_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    to_email    = Column(String(200), nullable=False)
+    client_name = Column(String(120), nullable=True)
+    order_name  = Column(String(200), nullable=True)
+    subject     = Column(String(500), nullable=True)
+    status      = Column(String(20), nullable=False)  # 'sent' | 'failed'
+    remarks     = Column(Text, nullable=True)
+    sent_at     = Column(DateTime, default=datetime.utcnow)
+
+    sent_by = relationship("User", foreign_keys=[sent_by_id])
+
+
 class CalculationVersion(Base):
     """An edited revision of a saved calculation."""
 

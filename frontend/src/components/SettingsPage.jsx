@@ -93,7 +93,7 @@ const FIELDS = [
       { key: 'smtp_host',      label: 'SMTP Host',       placeholder: 'smtp.gmail.com', maxLength: 200 },
       { key: 'smtp_port',      label: 'SMTP Port',       placeholder: '587', type: 'number', min: 1, max: 65535 },
       { key: 'smtp_user',      label: 'SMTP Username',   placeholder: 'you@gmail.com', type: 'email', maxLength: 200 },
-      { key: 'smtp_password',  label: 'App Password',    placeholder: 'Gmail App Password (not your login password)', type: 'password', maxLength: 500 },
+      { key: 'smtp_password',  label: 'App Password',    placeholder: 'Enter new App Password', type: 'password', maxLength: 500, noAutofill: true },
       { key: 'smtp_from_name', label: 'From Name',       placeholder: 'Chromaprint India', maxLength: 120 },
     ],
     hint: 'For Gmail: use smtp.gmail.com, port 587, your Gmail address, and an App Password (myaccount.google.com → Security → App passwords).',
@@ -162,8 +162,12 @@ export default function SettingsPage() {
     setError(null)
     setSaved(false)
     try {
-      const updated = await api.updateCompanySettings(form)
-      setForm(updated)
+      const typedPassword = form.smtp_password || null
+      // Don't overwrite the stored password if the user left the field blank
+      const payload = { ...form }
+      if (!payload.smtp_password) delete payload.smtp_password
+      const updated = await api.updateCompanySettings(payload)
+      setForm({ ...updated, smtp_password: typedPassword })
       setSaved(true)
       setTimeout(() => setSaved(false), 3500)
     } catch (err) {
@@ -290,23 +294,35 @@ export default function SettingsPage() {
               {section}
             </div>
             <div className="sp-grid">
-              {rows.map(({ key, label, placeholder, required, type, wide, min, max, step, maxLength, restrict }) => {
+              {rows.map(({ key, label, placeholder, required, type, wide, min, max, step, maxLength, restrict, noAutofill }) => {
                 const r = restrict ? RESTRICT[restrict] : null
+                const isPasswordSaved = key === 'smtp_password' && form.smtp_password_set && !form.smtp_password
                 return (
                 <div key={key} className={`sp-field${wide ? ' sp-field--wide' : ''}`}>
                   <label className="sp-label">
                     {label}
                     {required && <span className="field-required"> *</span>}
+                    {isPasswordSaved && (
+                      <span style={{
+                        marginLeft: '0.5rem', fontSize: '0.7rem', fontWeight: 600,
+                        color: '#4ade80', background: 'rgba(34,197,94,0.12)',
+                        border: '1px solid rgba(34,197,94,0.3)',
+                        borderRadius: 4, padding: '0.1rem 0.4rem',
+                      }}>
+                        ✓ saved
+                      </span>
+                    )}
                   </label>
                   <input
                     className="sp-input"
                     type={type || 'text'}
                     value={form[key] ?? ''}
-                    placeholder={placeholder}
+                    placeholder={isPasswordSaved ? '••••••••••••••••  (leave blank to keep current)' : placeholder}
                     min={min}
                     max={max}
                     step={step}
                     maxLength={maxLength}
+                    autoComplete={noAutofill ? 'new-password' : undefined}
                     onKeyDown={r?.key}
                     onPaste={r?.paste}
                     onChange={e => {

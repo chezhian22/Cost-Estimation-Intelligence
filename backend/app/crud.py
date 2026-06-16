@@ -437,6 +437,56 @@ def upsert_company_settings(db: Session, data: schemas.CompanySettingsUpdate) ->
     return obj
 
 
+def create_email_log(
+    db: Session,
+    calc_id: Optional[int],
+    sent_by_id: Optional[int],
+    to_email: str,
+    client_name: Optional[str],
+    order_name: Optional[str],
+    subject: Optional[str],
+    status: str,
+    remarks: Optional[str] = None,
+) -> models.EmailLog:
+    obj = models.EmailLog(
+        calc_id=calc_id,
+        sent_by_id=sent_by_id,
+        to_email=to_email,
+        client_name=client_name,
+        order_name=order_name,
+        subject=subject,
+        status=status,
+        remarks=remarks,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def list_email_logs(db: Session, limit: int = 200) -> List[models.EmailLog]:
+    return (
+        db.query(models.EmailLog)
+        .order_by(models.EmailLog.sent_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def update_email_log_status(
+    db: Session, log_id: int, status: str, remarks: Optional[str] = None
+) -> Optional[models.EmailLog]:
+    obj = db.query(models.EmailLog).filter(models.EmailLog.id == log_id).first()
+    if not obj:
+        return None
+    obj.status = status
+    if remarks is not None:
+        obj.remarks = remarks
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def update_calculation_status(
     db: Session, calc_id: int, status: str, user_id: int = None
 ) -> Optional[models.Calculation]:

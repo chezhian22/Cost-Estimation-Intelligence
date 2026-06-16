@@ -122,6 +122,13 @@ export const api = {
       body: JSON.stringify({ calc_id: calcId, to_email: toEmail, subject, body }),
     }),
 
+  getEmailLogs: () => request('/api/email-logs'),
+  updateEmailLog: (id, status, remarks) =>
+    request(`/api/email-logs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, remarks }),
+    }),
+
   changePassword: (email, oldPassword, newPassword) =>
     request('/api/auth/change-password', {
       method: 'POST',

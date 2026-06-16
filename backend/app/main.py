@@ -14,6 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
+from .bounce_monitor import bounce_monitor_loop
 from .invoice_pdf import generate_invoice_pdf_bytes
 from .auth import create_access_token, decode_token, hash_password, verify_password
 from .database import Base, engine, get_db
@@ -288,6 +289,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Startup: background tasks ─────────────────────────────────────────────────
+@app.on_event("startup")
+async def _start_background_tasks():
+    import asyncio
+    asyncio.create_task(bounce_monitor_loop())
 
 
 # ── SQL injection guard ───────────────────────────────────────────────────────
@@ -1098,7 +1106,10 @@ def get_company_settings(
     db: Session = Depends(get_db),
 ):
     """Returns the current company profile. Admin only."""
-    return crud.get_company_settings(db)
+    obj = crud.get_company_settings(db)
+    out = schemas.CompanySettingsOut.model_validate(obj)
+    out.smtp_password_set = bool(obj.smtp_password)
+    return out
 
 
 @app.patch(
@@ -1113,7 +1124,10 @@ def update_company_settings(
     db: Session = Depends(get_db),
 ):
     """Update company profile fields. Admin only. Partial updates supported."""
-    return crud.upsert_company_settings(db, body)
+    obj = crud.upsert_company_settings(db, body)
+    out = schemas.CompanySettingsOut.model_validate(obj)
+    out.smtp_password_set = bool(obj.smtp_password)
+    return out
 
 
 _LOGO_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -1186,6 +1200,9 @@ def send_invoice_email(
     client = crud.get_client(db, calc.client_id) if calc.client_id else None
     order  = crud.get_order(db, calc.order_id)   if calc.order_id  else None
 
+    client_name = client.name if client else None
+    order_name  = order.name  if order  else None
+
     # Generate PDF
     try:
         pdf_bytes = generate_invoice_pdf_bytes(calc, order, client, cs)
@@ -1195,37 +1212,112 @@ def send_invoice_email(
     inv_no    = f"INV-{__import__('datetime').datetime.utcnow().year}-{str(calc.id).zfill(4)}"
     from_name = cs.smtp_from_name or cs.company_name or "ChromaPrint India"
 
-    msg = MIMEMultipart()
-    msg["From"]    = f"{from_name} <{cs.smtp_user}>"
-    msg["To"]      = body.to_email
-    msg["Subject"] = body.subject
-    msg.attach(MIMEText(body.body, "plain", "utf-8"))
+    email_msg = MIMEMultipart()
+    email_msg["From"]    = f"{from_name} <{cs.smtp_user}>"
+    email_msg["To"]      = body.to_email
+    email_msg["Subject"] = body.subject
+    email_msg.attach(MIMEText(body.body, "plain", "utf-8"))
 
     attachment = MIMEApplication(pdf_bytes, _subtype="pdf")
     attachment.add_header("Content-Disposition", "attachment", filename=f"{inv_no}.pdf")
-    msg.attach(attachment)
+    email_msg.attach(attachment)
 
-    port     = cs.smtp_port or 587
-    use_tls  = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
-    ctx      = ssl.create_default_context()
+    port    = cs.smtp_port or 587
+    use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
+    ctx     = ssl.create_default_context()
+
+    _log_status  = "sent"
+    _log_remarks = None
 
     try:
         if port == 465:
             with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as server:
                 server.login(cs.smtp_user, cs.smtp_password)
-                server.send_message(msg)
+                server.send_message(email_msg)
         else:
             with smtplib.SMTP(cs.smtp_host, port, timeout=15) as server:
                 server.ehlo()
                 if use_tls:
                     server.starttls(context=ctx)
                 server.login(cs.smtp_user, cs.smtp_password)
-                server.send_message(msg)
+                server.send_message(email_msg)
+    except smtplib.SMTPRecipientsRefused as e:
+        refused = e.recipients or {}
+        detail_parts = []
+        for addr, (code, smtp_msg) in refused.items():
+            msg_str = smtp_msg.decode() if isinstance(smtp_msg, bytes) else str(smtp_msg)
+            detail_parts.append(f"{addr}: {msg_str.strip()} (code {code})")
+        detail = "Email address rejected by the mail server — " + ("; ".join(detail_parts) or "recipient does not exist or mailbox is unavailable.")
+        _log_status = "failed"; _log_remarks = detail
+        raise HTTPException(status_code=400, detail=detail)
     except smtplib.SMTPAuthenticationError:
-        raise HTTPException(status_code=400, detail="SMTP authentication failed. Check your username and password (use an App Password for Gmail).")
+        _log_status = "failed"
+        _log_remarks = (
+            "SMTP authentication failed — the mail server rejected your credentials. "
+            "If you are using Gmail: (1) enable 2-Step Verification on your Google Account, "
+            "(2) go to Google Account → Security → App Passwords and generate a 16-character App Password, "
+            "(3) paste that App Password (not your regular Gmail password) into Settings → SMTP Password."
+        )
+        raise HTTPException(status_code=400, detail=_log_remarks)
     except smtplib.SMTPException as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
+        _log_status = "failed"; _log_remarks = f"Failed to send email: {e}"
+        raise HTTPException(status_code=400, detail=_log_remarks)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Connection error: {e}")
+        _log_status = "failed"; _log_remarks = f"Connection error: {e}"
+        raise HTTPException(status_code=500, detail=_log_remarks)
+    finally:
+        try:
+            crud.create_email_log(
+                db,
+                calc_id=body.calc_id,
+                sent_by_id=current_user.id,
+                to_email=body.to_email,
+                client_name=client_name,
+                order_name=order_name,
+                subject=body.subject,
+                status=_log_status,
+                remarks=_log_remarks,
+            )
+        except Exception:
+            pass
 
     return {"status": "sent", "to": body.to_email}
+
+
+# ── Email Logs ────────────────────────────────────────────────────────────────
+@app.get("/api/email-logs", tags=["email"], summary="List all email send history")
+def get_email_logs(
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns the 200 most recent email send attempts, newest first."""
+    logs = crud.list_email_logs(db)
+    return [
+        {
+            "id":           log.id,
+            "calc_id":      log.calc_id,
+            "sent_by_name": log.sent_by.username if log.sent_by else None,
+            "to_email":     log.to_email,
+            "client_name":  log.client_name,
+            "order_name":   log.order_name,
+            "subject":      log.subject,
+            "status":       log.status,
+            "remarks":      log.remarks,
+            "sent_at":      log.sent_at,
+        }
+        for log in logs
+    ]
+
+
+@app.patch("/api/email-logs/{log_id}", tags=["email"], summary="Update email log status")
+def update_email_log(
+    log_id: int,
+    body: schemas.EmailLogUpdate,
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually mark a sent email as failed (e.g. after receiving a Gmail bounce)."""
+    obj = crud.update_email_log_status(db, log_id, body.status, body.remarks)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Email log not found")
+    return {"id": obj.id, "status": obj.status, "remarks": obj.remarks}

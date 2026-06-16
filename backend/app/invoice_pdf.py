@@ -171,6 +171,7 @@ def generate_invoice_pdf_bytes(calc, order, client, cs) -> bytes:
         pdf.cell(0, 5, term, ln=True)
 
     # ── Footer ────────────────────────────────────────────────────────────────
+    pdf.set_auto_page_break(auto=False)
     pdf.set_y(-20)
     pdf.set_draw_color(26, 188, 171)
     pdf.set_line_width(0.4)
@@ -178,7 +179,7 @@ def generate_invoice_pdf_bytes(calc, order, client, cs) -> bytes:
     pdf.ln(4)
     pdf.set_font("Helvetica", "", 7)
     pdf.set_text_color(120, 130, 128)
-    pdf.cell(0, 4, f"{co_name}  |  {today}  |  {inv_no}", align="C", ln=True)
+    pdf.cell(0, 4, f"{co_name}  |  {today}  |  {inv_no}", align="C")
 
     return bytes(pdf.output())
 
