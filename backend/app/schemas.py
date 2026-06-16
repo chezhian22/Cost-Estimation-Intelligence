@@ -373,6 +373,7 @@ class CalculationHistoryOut(BaseModel):
     order_name: Optional[str]  = Field(None, description="Order name (denormalised for display).")
     status: str                = Field("pending", description="Quote status: `pending`, `confirmed`, or `rejected`.")
     pricing: Optional[dict]    = Field(None, description="Pricing summary from the saved result JSON.")
+    confirmed_version_number: Optional[int] = Field(None, description="Version number of the confirmed edit, if any version (not the base calc) is approved.")
     created_by_name: Optional[str] = Field(None, description="Username of who created this calculation.")
     updated_by_name: Optional[str] = Field(None, description="Username of who last updated this calculation.")
     updated_at: Optional[datetime]  = Field(None, description="When this calculation was last updated.")
@@ -396,6 +397,7 @@ class CalculationVersionOut(BaseModel):
     custom_cost:    float
     selected_teeth: Optional[int]  = None
     exchange_rate:  float
+    order_qty:      Optional[int]  = None
     status:         str
     created_by_name: Optional[str] = None
     created_at:     datetime

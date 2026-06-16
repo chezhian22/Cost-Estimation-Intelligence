@@ -184,23 +184,97 @@ export default function App() {
     }
   }
 
-  const handleEditCalc = (calc) => {
-    const matchingSub = calc.substrate_name
-      ? substrates.find((s) => s.name === calc.substrate_name)
+  const handleEditCalc = async (calc) => {
+    // Fetch versions so the form prefills from the LATEST saved state, not V1.
+    // client_id / order_id / order_qty live on the parent calc (versions don't store them).
+    let source = calc
+    try {
+      const versions = await api.getVersions(calc.id)
+      if (versions && versions.length > 0) {
+        const latest = versions.reduce((best, v) =>
+          v.version_number > best.version_number ? v : best
+        )
+        source = {
+          // inherit client/order/qty from the parent calc — versions don't carry these
+          client_id:      calc.client_id,
+          client_name:    calc.client_name,
+          order_id:       calc.order_id,
+          order_name:     calc.order_name,
+          order_qty:      latest.order_qty ?? calc.order_qty,
+          // overwrite all editable numeric fields from the latest version
+          width:          latest.width,
+          height:         latest.height,
+          yield_pct:      latest.yield_pct,
+          substrate_name: latest.substrate_name,
+          substrate_price: latest.substrate_price,
+          foil_cost:      latest.foil_cost,
+          custom_cost:    latest.custom_cost,
+          exchange_rate:  latest.exchange_rate,
+        }
+      }
+    } catch (_) {
+      // versions fetch failed — fall back to original calc fields silently
+    }
+
+    const matchingSub = source.substrate_name
+      ? substrates.find((s) => s.name === source.substrate_name)
       : null
     setInputs({
-      width:           calc.width           ?? DEFAULTS.width,
-      height:          calc.height          ?? DEFAULTS.height,
-      yield_pct:       calc.yield_pct       ?? DEFAULTS.yield_pct,
-      order_qty:       calc.order_qty ? String(calc.order_qty) : '',
+      width:           source.width           ?? DEFAULTS.width,
+      height:          source.height          ?? DEFAULTS.height,
+      yield_pct:       source.yield_pct       ?? DEFAULTS.yield_pct,
+      order_qty:       source.order_qty ? String(source.order_qty) : '',
       substrateId:     matchingSub ? String(matchingSub.id) : 'custom',
-      substrate_name:  calc.substrate_name  ?? null,
-      substrate_price: calc.substrate_price ?? DEFAULTS.substrate_price,
-      foil_cost:       calc.foil_cost       ?? 0,
-      custom_cost:     calc.custom_cost     ?? 0,
-      exchange_rate:   calc.exchange_rate   ?? DEFAULTS.exchange_rate,
+      substrate_name:  source.substrate_name  ?? null,
+      substrate_price: source.substrate_price ?? DEFAULTS.substrate_price,
+      foil_cost:       source.foil_cost       ?? 0,
+      custom_cost:     source.custom_cost     ?? 0,
+      exchange_rate:   source.exchange_rate   ?? DEFAULTS.exchange_rate,
     })
-    setEditingCalc({ id: calc.id, client_name: calc.client_name, order_name: calc.order_name })
+    // client/order always come from the parent calc (versions don't store them)
+    setClientId(calc.client_id ?? null)
+    setClientName(calc.client_name ?? null)
+    setOrderId(calc.order_id ?? null)
+    setOrderName(calc.order_name ?? null)
+    setEditingCalc({
+      id: calc.id,
+      client_id: calc.client_id ?? null,
+      order_id: calc.order_id ?? null,
+      client_name: calc.client_name,
+      order_name: calc.order_name,
+    })
+    setActiveView('calculator')
+    setFormOpen(true)
+  }
+
+  const handleEditVersion = (version, parentCalc) => {
+    // Prefill from a specific version; client/order always come from the parent calc.
+    const matchingSub = version.substrate_name
+      ? substrates.find((s) => s.name === version.substrate_name)
+      : null
+    setInputs({
+      width:           version.width           ?? DEFAULTS.width,
+      height:          version.height          ?? DEFAULTS.height,
+      yield_pct:       version.yield_pct       ?? DEFAULTS.yield_pct,
+      order_qty:       version.order_qty ? String(version.order_qty) : (parentCalc.order_qty ? String(parentCalc.order_qty) : ''),
+      substrateId:     matchingSub ? String(matchingSub.id) : 'custom',
+      substrate_name:  version.substrate_name  ?? null,
+      substrate_price: version.substrate_price ?? DEFAULTS.substrate_price,
+      foil_cost:       version.foil_cost       ?? 0,
+      custom_cost:     version.custom_cost     ?? 0,
+      exchange_rate:   version.exchange_rate   ?? DEFAULTS.exchange_rate,
+    })
+    setClientId(parentCalc.client_id ?? null)
+    setClientName(parentCalc.client_name ?? null)
+    setOrderId(parentCalc.order_id ?? null)
+    setOrderName(parentCalc.order_name ?? null)
+    setEditingCalc({
+      id: parentCalc.id,
+      client_id: parentCalc.client_id ?? null,
+      order_id: parentCalc.order_id ?? null,
+      client_name: parentCalc.client_name,
+      order_name: parentCalc.order_name,
+    })
     setActiveView('calculator')
     setFormOpen(true)
   }
@@ -542,6 +616,7 @@ export default function App() {
         {activeView === 'calculator' && formOpen && (
           <aside className="sidebar">
             <InputPanel
+              key={editingCalc?.id ?? 'new'}
               inputs={inputs}
               substrates={substrates}
               onChange={handleChange}
@@ -563,6 +638,8 @@ export default function App() {
                 setOrderId(id); setOrderName(name)
                 setFieldErrors((prev) => { const n = { ...prev }; delete n.order; return n })
               }}
+              initialClientId={editingCalc?.client_id ?? null}
+              initialOrderId={editingCalc?.order_id ?? null}
             />
           </aside>
         )}
@@ -751,7 +828,7 @@ export default function App() {
           {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
           {activeView === 'pdf-preview'     && <PDFPreview />}
           {activeView === 'comparison'      && <ComparisonPage />}
-          {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} />}
+          {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} onEditVersion={handleEditVersion} />}
           {activeView === 'cylinders'       && <ManageCylinders isAdmin={isAdmin} />}
           {activeView === 'substrates'      && <ManageSubstrates isAdmin={isAdmin} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}

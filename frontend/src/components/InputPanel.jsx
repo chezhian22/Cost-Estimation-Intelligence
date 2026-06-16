@@ -18,6 +18,7 @@ function pasteNumbersOnly(e) {
 export default function InputPanel({
   inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading,
   onClientChange, onOrderChange, fieldErrors = {},
+  initialClientId = null, initialOrderId = null,
 }) {
   return (
     <div className="sidebar-form">
@@ -25,6 +26,8 @@ export default function InputPanel({
         onClientChange={onClientChange}
         onOrderChange={onOrderChange}
         fieldErrors={fieldErrors}
+        initialClientId={initialClientId}
+        initialOrderId={initialOrderId}
       />
 
       <div className="sidebar-title">

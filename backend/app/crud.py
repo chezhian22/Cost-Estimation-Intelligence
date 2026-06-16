@@ -341,6 +341,7 @@ def create_version(
         custom_cost=req.custom_cost,
         selected_teeth=req.selected_teeth,
         exchange_rate=req.exchange_rate,
+        order_qty=req.order_qty,
         result=result,
         created_by_id=user_id,
     )
@@ -393,7 +394,7 @@ def update_version_status(
         if parent and parent.order_id:
             _unconfirm_order(db, parent.order_id, except_version_id=version_id)
         else:
-            # No order context — at least unconfirm sibling versions
+            # No order context — unconfirm sibling versions only
             db.query(models.CalculationVersion).filter(
                 models.CalculationVersion.calculation_id == obj.calculation_id,
                 models.CalculationVersion.id != version_id,
