@@ -1427,6 +1427,34 @@ def delete_user(
 
 # ── Company Settings (admin only) ─────────────────────────────────────────────
 @app.get(
+    "/api/settings/public",
+    tags=["settings"],
+    summary="Get public company display settings (any authenticated user)",
+)
+def get_public_company_settings(
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns display-only company profile fields. No SMTP data. Available to all authenticated users."""
+    obj = crud.get_company_settings(db)
+    return {
+        "company_name": obj.company_name or "Chromaprint India",
+        "tagline":      obj.tagline,
+        "address":      obj.address,
+        "location":     obj.location,
+        "state":        obj.state,
+        "country":      obj.country or "India",
+        "email":        obj.email,
+        "phone":        obj.phone,
+        "website":      obj.website,
+        "gst_number":   obj.gst_number,
+        "cgst_pct":     obj.cgst_pct,
+        "sgst_pct":     obj.sgst_pct,
+        "logo":         obj.logo,
+    }
+
+
+@app.get(
     "/api/settings/company",
     response_model=schemas.CompanySettingsOut,
     tags=["settings"],

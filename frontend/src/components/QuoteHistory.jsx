@@ -219,7 +219,7 @@ function VersionDetailModal({ version, onClose, clientName, orderName }) {
 		try {
 			let cs = {};
 			try {
-				cs = await api.getCompanySettings();
+				cs = await api.getPublicSettings();
 			} catch (_) {}
 			generateQuotationPDF(
 				{
@@ -399,7 +399,7 @@ function VersionsSection({
 		try {
 			let cs = {};
 			try {
-				cs = await api.getCompanySettings();
+				cs = await api.getPublicSettings();
 			} catch (_) {}
 			generateQuotationPDF(
 				{
@@ -656,50 +656,43 @@ function VersionsSection({
 							</div>
 
 							{/* ── Col 7: Actions ── */}
-							<div
-								style={{
-									display: "flex",
-									gap: "0.3rem",
-									alignItems: "flex-start",
-									justifyContent: "center",
-								}}
-							>
+							<div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "stretch", width: 72, margin: "0 auto" }}>
 								{onEditVersion && parentCalc && (
 									<button
 										className="qh-action-btn qh-action-btn--edit"
 										onClick={() => onEditVersion(v, parentCalc)}
 										title={`Edit ${v.ref_code || `V${v.version_number}`} — creates next version`}
+										style={{ justifyContent: "center" }}
 									>
+										<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+											<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+										</svg>
 										Edit
 									</button>
 								)}
 								<button
 									className="qh-action-btn qh-action-btn--view"
 									onClick={() => setDetailVersion(v)}
+									title="View version details"
+									style={{ justifyContent: "center" }}
 								>
+									<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+										<circle cx="12" cy="12" r="3" />
+									</svg>
 									View
 								</button>
 								<button
 									className="qh-action-btn"
 									onClick={(e) => handleVersionQuotationPDF(e, v)}
 									disabled={pdfLoadingIds.has(v.id)}
-									title="Download internal quotation"
+									title="Download quotation PDF"
+									style={{ justifyContent: "center" }}
 								>
 									{pdfLoadingIds.has(v.id) ?
-										<span
-											className="cop-spinner"
-											style={{ width: 10, height: 10, borderWidth: 2 }}
-										/>
-									:	<svg
-											width="11"
-											height="11"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											strokeWidth="2.2"
-											strokeLinecap="round"
-											strokeLinejoin="round"
-										>
+										<span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+									:	<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
 											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
 											<polyline points="14 2 14 8 20 8" />
 											<line x1="16" y1="13" x2="8" y2="13" />
@@ -1009,7 +1002,7 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 			const data = await api.getCalculation(q.id);
 			let cs = {};
 			try {
-				cs = await api.getCompanySettings();
+				cs = await api.getPublicSettings();
 			} catch (_) {}
 			generateQuotationPDF(
 				{
@@ -1169,7 +1162,7 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 		<section className="card">
 			<div className="card-header">
 				<div className="card-icon-wrap">🕘</div>
-				<span className="card-title">Quote History</span>
+				<span className="card-title">Quote Management</span>
 				<span className="card-number">SYS-05</span>
 			</div>
 
@@ -1291,7 +1284,7 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 									<th style={{ textAlign: "center" }}>Created by</th>
 									<th style={{ textAlign: "center" }}>CP Status</th>
 									<th style={{ textAlign: "center" }}>Remarks</th>
-									<th style={{ textAlign: "center" }}>Actions</th>
+									<th style={{ textAlign: "center", width: 80 }}>Actions</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -1559,31 +1552,16 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 												</td>
 												<td
 													onClick={(e) => e.stopPropagation()}
-													style={{ whiteSpace: "nowrap" }}
 												>
-													<div
-														style={{
-															display: "flex",
-															gap: "0.25rem",
-															justifyContent: "center",
-														}}
-													>
+													<div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "stretch", width: 72, margin: "0 auto" }}>
 														{onEditCalc && (
 															<button
 																className="qh-action-btn qh-action-btn--edit"
 																onClick={() => onEditCalc(q)}
 																title="Edit this calculation"
+																style={{ justifyContent: "center" }}
 															>
-																<svg
-																	width="11"
-																	height="11"
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	strokeWidth="2.2"
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																>
+																<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
 																	<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
 																	<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
 																</svg>
@@ -1594,17 +1572,9 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 															className="qh-action-btn qh-action-btn--view"
 															onClick={() => setDetailCalcId(q.id)}
 															title="View full details"
+															style={{ justifyContent: "center" }}
 														>
-															<svg
-																width="11"
-																height="11"
-																viewBox="0 0 24 24"
-																fill="none"
-																stroke="currentColor"
-																strokeWidth="2.2"
-																strokeLinecap="round"
-																strokeLinejoin="round"
-															>
+															<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
 																<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 																<circle cx="12" cy="12" r="3" />
 															</svg>
@@ -1614,27 +1584,12 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 															className="qh-action-btn"
 															onClick={(e) => handleQuotationPDF(e, q)}
 															disabled={pdfLoadingIds.has(q.id)}
-															title="Download internal quotation"
+															title="Download quotation PDF"
+															style={{ justifyContent: "center" }}
 														>
 															{pdfLoadingIds.has(q.id) ?
-																<span
-																	className="cop-spinner"
-																	style={{
-																		width: 10,
-																		height: 10,
-																		borderWidth: 2,
-																	}}
-																/>
-															:	<svg
-																	width="11"
-																	height="11"
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	strokeWidth="2.2"
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																>
+																<span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+															:	<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
 																	<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
 																	<polyline points="14 2 14 8 20 8" />
 																	<line x1="16" y1="13" x2="8" y2="13" />

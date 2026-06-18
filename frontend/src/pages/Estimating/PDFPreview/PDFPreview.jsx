@@ -38,7 +38,7 @@ export default function PDFPreview() {
   const iframeRef = useRef(null)
 
   useEffect(() => {
-    api.getCompanySettings().then(setCompanySettings).catch(() => {})
+    api.getPublicSettings().then(setCompanySettings).catch(() => {})
   }, [])
 
   useEffect(() => {

@@ -324,7 +324,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                         setQuotationLoading(true)
                         try {
                           let cs = {}
-                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          try { cs = await api.getPublicSettings() } catch (_) {}
                           generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
                         } finally { setQuotationLoading(false) }
                       }}
@@ -348,7 +348,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                         setPdfLoading(true)
                         try {
                           let cs = {}
-                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          try { cs = await api.getPublicSettings() } catch (_) {}
                           generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
                         } finally { setPdfLoading(false) }
                       }}
@@ -379,7 +379,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                         setQuotationLoading(true)
                         try {
                           let cs = {}
-                          try { cs = await api.getCompanySettings() } catch (_) {}
+                          try { cs = await api.getPublicSettings() } catch (_) {}
                           generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
                         } finally { setQuotationLoading(false) }
                       }}
@@ -400,7 +400,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                       setQuotationLoading(true)
                       try {
                         let cs = {}
-                        try { cs = await api.getCompanySettings() } catch (_) {}
+                        try { cs = await api.getPublicSettings() } catch (_) {}
                         generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
                       } finally { setQuotationLoading(false) }
                     }}
@@ -498,7 +498,7 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
     setPdfLoading(true)
     try {
       let cs = {}
-      try { cs = await api.getCompanySettings() } catch (_) {}
+      try { cs = await api.getPublicSettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(
         { ...version, result: version.result },
         clientName, orderName,
@@ -510,7 +510,7 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
     setQuotationLoading(true)
     try {
       let cs = {}
-      try { cs = await api.getCompanySettings() } catch (_) {}
+      try { cs = await api.getPublicSettings() } catch (_) {}
       generateQuotationPDF(buildQuotationPayload(
         { ...version, result: version.result },
         clientName, orderName,
@@ -624,7 +624,7 @@ function DraftEmailModal({ calc, clientEmail, clientName, orderName, onClose }) 
       try {
         const [data, cs] = await Promise.all([
           api.getCalculation(calcId),
-          api.getCompanySettings().catch(() => ({})),
+          api.getPublicSettings().catch(() => ({})),
         ])
         setCalcData(data)
         setCompanySettings(cs)
@@ -697,6 +697,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
     try {
       await api.sendInvoiceEmail(calcId, clientEmail, subject, body)
       setSent(true)
+      toast.success(`Invoice emailed successfully to ${clientEmail}`)
       setTimeout(() => setSent(false), 4000)
     } catch (err) {
       toast.error(err.message || 'Failed to send email')
@@ -935,7 +936,7 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
     try {
       const data = calc.result ? calc : await api.getCalculation(calc.id)
       let cs = {}
-      try { cs = await api.getCompanySettings() } catch (_) {}
+      try { cs = await api.getPublicSettings() } catch (_) {}
       generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
     } catch (err) {
       toast.error(err.message || 'PDF generation failed')
@@ -950,7 +951,7 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
     try {
       const data = calc.result ? calc : await api.getCalculation(calc.id)
       let cs = {}
-      try { cs = await api.getCompanySettings() } catch (_) {}
+      try { cs = await api.getPublicSettings() } catch (_) {}
       generateQuotationPDF(buildQuotationPayload(data, clientName, orderName), cs)
     } catch (err) {
       console.error(err)
@@ -1210,7 +1211,7 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
   const [companySettings, setCompanySettings] = useState({})
 
   useEffect(() => {
-    api.getCompanySettings().then(setCompanySettings).catch(() => {})
+    api.getPublicSettings().then(setCompanySettings).catch(() => {})
   }, [])
 
   // Modal states — only one shows at a time, except detailModal can layer over conflict

@@ -102,7 +102,8 @@ export const api = {
       body: JSON.stringify({ selected_teeth: selectedTeeth }),
     }),
 
-  // Company settings (admin only)
+  // Company settings — public (any user) vs admin (SMTP included)
+  getPublicSettings:  () => request('/api/settings/public'),
   getCompanySettings: () => request('/api/settings/company'),
   updateCompanySettings: (data) =>
     request('/api/settings/company', { method: 'PATCH', body: JSON.stringify(data) }),

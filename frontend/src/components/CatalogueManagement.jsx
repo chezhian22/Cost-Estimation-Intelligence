@@ -34,8 +34,8 @@ export default function CatalogueManagement({ isAdmin }) {
       {/* Page header */}
       <div className="ctlg-header">
         <div className="ctlg-header-left">
-          <div className="ctlg-title">Catalogue Management</div>
-          <div className="ctlg-sub">Manage cylinders and substrates used in estimates</div>
+          <div className="ctlg-title">{isAdmin ? 'Catalogue Management' : 'Catalogue'}</div>
+          <div className="ctlg-sub">{isAdmin ? 'Manage cylinders and substrates used in estimates' : 'Browse available cylinders and substrates'}</div>
         </div>
 
         {/* Pill tab switcher */}

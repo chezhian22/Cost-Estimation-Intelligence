@@ -59,6 +59,7 @@ const ROUTE_MAP = {
   'pdf-preview':     '/pdf-preview',
   'client-orders':   '/clients',
   'mail-management': '/mail',
+  'catalogue-view':            '/catalogue',
   'catalogue':                '/admin/catalogue',
   'notification-management':  '/admin/notifications',
   'user-management':          '/admin/users',
@@ -96,7 +97,7 @@ const NAV_SECTIONS = [
     links: [
       { id: 'calculator',   label: 'New Estimate'   },
       { id: 'comparison',   label: 'Compare Quotes' },
-      { id: 'history',      label: 'Quote History'  },
+      { id: 'history',      label: 'Quote Management'  },
       { id: 'pdf-preview',  label: 'Invoice Preview'  },
     ],
   },
@@ -129,8 +130,22 @@ const ADMIN_SECTION = {
   ],
 }
 
+const USER_CATALOGUE_SECTION = {
+  section: 'Materials',
+  icon: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3"/>
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+    </svg>
+  ),
+  links: [
+    { id: 'catalogue-view', label: 'Catalogue' },
+  ],
+}
+
 function getBreadcrumb(viewId) {
-  const allSections = [...NAV_SECTIONS, ADMIN_SECTION]
+  const allSections = [...NAV_SECTIONS, ADMIN_SECTION, USER_CATALOGUE_SECTION]
   for (const { section, links } of allSections) {
     for (const link of links) {
       if (link.id === viewId) return { section, label: link.label }
@@ -389,7 +404,7 @@ export default function App() {
   const handleDownloadQuotation = async () => {
     if (!result) return
     let companySettings = {}
-    try { companySettings = await api.getCompanySettings() } catch (_) {}
+    try { companySettings = await api.getPublicSettings() } catch (_) {}
     generateQuotationPDF({
       client: { name: clientName || '', location: '', email: '', phone: '' },
       order:  {
@@ -443,7 +458,7 @@ export default function App() {
     const totalUsd      = qty > 0 ? qty * (effectiveP.price_usd_label || 0) : 0
 
     let companySettings = {}
-    try { companySettings = await api.getCompanySettings() } catch (_) {}
+    try { companySettings = await api.getPublicSettings() } catch (_) {}
 
     generateInvoicePDF({
       client: { name: clientName || '', location: '', email: '', phone: '' },
@@ -638,6 +653,27 @@ export default function App() {
               </div>
               <div className="nav-link-group">
                 {ADMIN_SECTION.links.map(link => (
+                  <button
+                    key={link.id}
+                    className={`nav-link nav-link--sub${activeView === link.id ? ' active' : ''}`}
+                    onClick={() => setActiveView(link.id)}
+                  >
+                    <span className="nav-link-dot" />
+                    <span className="nav-link-text">{link.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!isAdmin && (
+            <div>
+              <div className="nav-section-label" style={{ marginTop: '0.9rem' }}>
+                <span className="nav-section-icon">{USER_CATALOGUE_SECTION.icon}</span>
+                {USER_CATALOGUE_SECTION.section}
+              </div>
+              <div className="nav-link-group">
+                {USER_CATALOGUE_SECTION.links.map(link => (
                   <button
                     key={link.id}
                     className={`nav-link nav-link--sub${activeView === link.id ? ' active' : ''}`}
@@ -882,6 +918,7 @@ export default function App() {
           {activeView === 'pdf-preview'     && <PDFPreview />}
           {activeView === 'comparison'      && <ComparisonPage />}
           {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} onEditVersion={handleEditVersion} />}
+          {activeView === 'catalogue-view'           && !isAdmin && <CatalogueManagement isAdmin={false} />}
           {activeView === 'catalogue'               && isAdmin && <CatalogueManagement isAdmin={isAdmin} />}
           {activeView === 'notification-management' && isAdmin && <NotificationManagementPage currentUser={currentUser} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}
