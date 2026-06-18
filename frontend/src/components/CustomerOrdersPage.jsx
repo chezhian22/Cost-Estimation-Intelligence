@@ -1837,7 +1837,10 @@ export default function CustomerOrdersPage() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
   const [search, setSearch]           = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [searchOpen, setSearchOpen]   = useState(false)
   const [showDrawer, setShowDrawer]   = useState(false)
+  const searchRef                     = useRef(null)
 
   const loadClients = useCallback(async () => {
     const cs = await api.getClients().catch(() => [])
@@ -1857,6 +1860,15 @@ export default function CustomerOrdersPage() {
       .finally(() => setLoading(false))
   }, [loadClients])
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target))
+        setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   function handleCustomerCreated(newClient) {
     setClients((prev) => [newClient, ...prev])
     setShowDrawer(false)
@@ -1867,7 +1879,7 @@ export default function CustomerOrdersPage() {
   }
 
   const filtered = clients.filter((c) =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase())
+    !appliedSearch || c.name.toLowerCase().includes(appliedSearch.toLowerCase())
   )
 
   return (
@@ -1903,12 +1915,47 @@ export default function CustomerOrdersPage() {
       {/* ── Search bar ── */}
       {!loading && clients.length > 0 && (
         <div className="cop-toolbar">
-          <input
-            className="cop-search" type="text"
-            placeholder="Search customers…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <div className="cop-search-wrap" ref={searchRef}>
+            <svg className="cop-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              className="cop-search"
+              type="text"
+              placeholder="Search customers…"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setSearchOpen(true) }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { setAppliedSearch(search); setSearchOpen(false) } }}
+              autoComplete="off"
+            />
+            {search && (
+              <button className="cop-search-clear" onMouseDown={() => { setSearch(''); setAppliedSearch(''); setSearchOpen(false) }} title="Clear">✕</button>
+            )}
+            {searchOpen && (
+              <div className="combobox-dropdown">
+                {clients.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase())).length > 0
+                  ? clients
+                      .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()))
+                      .map((c) => (
+                        <button key={c.id} className="combobox-option" onMouseDown={() => { setSearch(c.name); setAppliedSearch(c.name); setSearchOpen(false) }}>
+                          <span className="option-icon">◉</span> {c.name}
+                        </button>
+                      ))
+                  : <div className="combobox-option" style={{ cursor: 'default', color: 'var(--text-dim)', fontStyle: 'italic' }}>No customers found</div>
+                }
+              </div>
+            )}
+          </div>
+          {appliedSearch && (
+            <button
+              className="combobox-clear"
+              onClick={() => { setSearch(''); setAppliedSearch(''); setSearchOpen(false) }}
+              style={{ color: '#f87171', borderColor: 'rgba(248,113,113,0.4)', background: 'rgba(248,113,113,0.08)' }}
+            >
+              ✕ Clear Filter
+            </button>
+          )}
           <span className="cop-count">
             {filtered.length} of {clients.length} customer{clients.length !== 1 ? 's' : ''}
           </span>

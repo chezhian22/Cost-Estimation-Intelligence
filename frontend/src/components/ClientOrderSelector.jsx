@@ -19,7 +19,10 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
   const [orders, setOrders]                 = useState([])
   const [completedOrderIds, setCompletedOrderIds] = useState(new Set())
   const [selectedOrder, setSelectedOrder]   = useState(null)
-  const wrapRef = useRef(null)
+  const wrapRef      = useRef(null)
+  const orderWrapRef = useRef(null)
+  const [orderQuery, setOrderQuery]           = useState('')
+  const [orderDropdownOpen, setOrderDropdownOpen] = useState(false)
 
   // create client inline
   const [showNewClient, setShowNewClient] = useState(false)
@@ -45,7 +48,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
   }, [])
 
   useEffect(() => {
-    if (!selectedClient) { setOrders([]); setCompletedOrderIds(new Set()); return }
+    if (!selectedClient) { setOrders([]); setCompletedOrderIds(new Set()); setOrderQuery(''); return }
     api.getOrders(selectedClient.id).then(async (os) => {
       setOrders(os)
       const calcsPerOrder = await Promise.all(
@@ -65,6 +68,8 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
     const handler = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target))
         setDropdownOpen(false)
+      if (orderWrapRef.current && !orderWrapRef.current.contains(e.target))
+        setOrderDropdownOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -86,6 +91,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
     const order = orders.find(o => o.id === initialOrderId)
     if (!order) return
     setSelectedOrder(order)
+    setOrderQuery(order.name)
     onOrderChange(order.id, order.name)
   }, [orders, initialOrderId])
 
@@ -117,6 +123,8 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
 
   function pickOrder(order) {
     setSelectedOrder(order)
+    setOrderQuery(order.name)
+    setOrderDropdownOpen(false)
     onOrderChange(order.id, order.name)
   }
 
@@ -353,22 +361,46 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
                     All orders for this client are fully approved and completed.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                    <select
-                      style={{ flex: 1 }}
-                      className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
-                      value={selectedOrder?.id ?? ''}
-                      onChange={(e) => {
-                        const id = parseInt(e.target.value, 10)
-                        const o = openOrders.find((x) => x.id === id)
-                        if (o) pickOrder(o)
-                      }}
-                    >
-                      <option value="">— Select an order —</option>
-                      {openOrders.map((o) => (
-                        <option key={o.id} value={o.id}>{o.name}</option>
-                      ))}
-                    </select>
+                  <div ref={orderWrapRef} style={{ position: 'relative', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <input
+                        className={`combobox-input${fieldErrors.order && !selectedOrder ? ' input-error' : ''}`}
+                        type="text"
+                        placeholder="Search orders…"
+                        value={orderQuery}
+                        onChange={(e) => {
+                          setOrderQuery(e.target.value)
+                          setOrderDropdownOpen(true)
+                          if (selectedOrder) {
+                            setSelectedOrder(null)
+                            onOrderChange(null, null)
+                          }
+                        }}
+                        onFocus={() => setOrderDropdownOpen(true)}
+                        autoComplete="off"
+                      />
+                      {orderDropdownOpen && (() => {
+                        const filtered = openOrders.filter((o) =>
+                          o.name.toLowerCase().includes(orderQuery.toLowerCase())
+                        )
+                        if (filtered.length === 0) return (
+                          <div className="combobox-dropdown">
+                            <div className="combobox-option" style={{ cursor: 'default', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                              No orders found
+                            </div>
+                          </div>
+                        )
+                        return (
+                          <div className="combobox-dropdown">
+                            {filtered.map((o) => (
+                              <button key={o.id} className="combobox-option" onMouseDown={() => pickOrder(o)}>
+                                <span className="option-icon">◈</span> {o.name}
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
                     {selectedOrder && (
                       <button
                         type="button"

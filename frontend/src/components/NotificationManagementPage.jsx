@@ -33,10 +33,31 @@ function RefreshIcon() {
   )
 }
 
+const UNIT_OPTIONS = [
+  { label: 'min',    seconds: 60 },
+  { label: 'hr',     seconds: 3600 },
+  { label: 'day',    seconds: 86400 },
+  { label: 'week',   seconds: 604800 },
+  { label: 'month',  seconds: 2592000 },
+  { label: 'year',   seconds: 31536000 },
+]
+
+function secondsToUnit(total) {
+  const units = [...UNIT_OPTIONS].reverse()
+  for (const u of units) {
+    if (total >= u.seconds && total % u.seconds === 0)
+      return { value: total / u.seconds, unit: u.seconds }
+  }
+  return { value: Math.max(1, Math.round(total / 60)), unit: 60 }
+}
+
 export default function NotificationManagementPage({ currentUser }) {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading]             = useState(false)
   const [marking, setMarking]             = useState(null)
+  const [intervalNum, setIntervalNum]     = useState(1)
+  const [intervalUnit, setIntervalUnit]   = useState(60)
+  const [savingInterval, setSavingInterval] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -47,6 +68,21 @@ export default function NotificationManagementPage({ currentUser }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    api.getMonitorInterval().then(d => {
+      const { value, unit } = secondsToUnit(d.interval_seconds)
+      setIntervalNum(value)
+      setIntervalUnit(unit)
+    }).catch(() => {})
+  }, [])
+
+  async function saveInterval(num, unit) {
+    const seconds = Math.max(30, Number(num) * Number(unit))
+    setSavingInterval(true)
+    try { await api.setMonitorInterval(seconds) } catch (_) {}
+    setSavingInterval(false)
+  }
 
   async function handleMarkRead(id) {
     setMarking(id)
@@ -64,6 +100,14 @@ export default function NotificationManagementPage({ currentUser }) {
   }
 
   const unreadCount = notifications.filter(n => !n.is_read).length
+  const readCount   = notifications.filter(n => n.is_read).length
+
+  const [filter, setFilter] = useState('all')
+  const filtered = notifications.filter(n => {
+    if (filter === 'unread') return !n.is_read
+    if (filter === 'read')   return n.is_read
+    return true
+  })
 
   return (
     <div className="nm-page">
@@ -76,6 +120,76 @@ export default function NotificationManagementPage({ currentUser }) {
           {unreadCount > 0 && (
             <span className="nm-badge">{unreadCount} unread</span>
           )}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            background: 'var(--bg-raised)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '0.3rem 0.65rem',
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', whiteSpace: 'nowrap', fontWeight: 500 }}>
+              Check interval
+            </span>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              border: '1px solid rgba(54,229,194,0.3)', borderRadius: 6, overflow: 'hidden',
+              background: 'var(--bg-input)',
+            }}>
+              <input
+                type="number"
+                min="1"
+                value={intervalNum}
+                onChange={e => setIntervalNum(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveInterval(intervalNum, intervalUnit)}
+                disabled={savingInterval}
+                style={{
+                  width: 44, border: 'none', background: 'transparent',
+                  color: 'var(--text-bright)', fontSize: '0.8rem', fontWeight: 600,
+                  padding: '0.25rem 0.4rem', outline: 'none', textAlign: 'center',
+                }}
+              />
+              <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(54,229,194,0.25)' }} />
+              <select
+                value={intervalUnit}
+                onChange={e => setIntervalUnit(e.target.value)}
+                disabled={savingInterval}
+                style={{
+                  border: 'none', background: 'transparent', color: 'var(--text)',
+                  fontSize: '0.78rem', padding: '0.25rem 0.35rem',
+                  cursor: 'pointer', outline: 'none', fontWeight: 500,
+                }}
+              >
+                {UNIT_OPTIONS.map(o => (
+                  <option key={o.seconds} value={o.seconds}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => saveInterval(intervalNum, intervalUnit)}
+              disabled={savingInterval}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit',
+                color: 'var(--teal)', background: 'rgba(54,229,194,0.1)',
+                border: '1px solid rgba(54,229,194,0.35)', borderRadius: 5,
+                padding: '0.22rem 0.6rem', cursor: 'pointer', transition: 'all 0.13s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {savingInterval
+                ? <><span className="nm-spinner nm-spinner--sm" /> Saving…</>
+                : <>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                      <polyline points="17 21 17 13 7 13 7 21"/>
+                      <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    Save
+                  </>
+              }
+            </button>
+          </div>
           <button className="nm-refresh-btn" onClick={load} disabled={loading} title="Refresh">
             <RefreshIcon />
             Refresh
@@ -83,26 +197,76 @@ export default function NotificationManagementPage({ currentUser }) {
         </div>
       </div>
 
+      {notifications.length > 0 && (
+        <div className="nm-stats-bar">
+          <div className="nm-stat-item">
+            <span className="nm-stat-val">{notifications.length}</span>
+            <span className="nm-stat-label">Total</span>
+          </div>
+          <div className="nm-stat-divider" />
+          <div className="nm-stat-item">
+            <span className="nm-stat-val" style={{ color: '#ef4444' }}>{unreadCount}</span>
+            <span className="nm-stat-label">Unread</span>
+          </div>
+          <div className="nm-stat-divider" />
+          <div className="nm-stat-item">
+            <span className="nm-stat-val" style={{ color: 'var(--teal)' }}>{readCount}</span>
+            <span className="nm-stat-label">Acknowledged</span>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.35rem' }}>
+            {[
+              { key: 'all',    label: `All (${notifications.length})` },
+              { key: 'unread', label: `Unread (${unreadCount})` },
+              { key: 'read',   label: `Acknowledged (${readCount})` },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`nm-filter-tab${filter === key ? ' nm-filter-tab--active' : ''}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading && notifications.length === 0 && (
         <div className="nm-empty">
           <div className="nm-spinner" />
-          <span>Loading…</span>
+          <span>Loading notifications…</span>
         </div>
       )}
 
       {!loading && notifications.length === 0 && (
         <div className="nm-empty">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.35 }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
-          <span>No notifications yet</span>
+          <div className="nm-empty-title">All clear</div>
+          <div className="nm-empty-sub">No unconfirmed quote alerts at this time.</div>
         </div>
       )}
 
-      {notifications.length > 0 && (
+      {notifications.length > 0 && filtered.length === 0 && (
+        <div className="nm-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <div className="nm-empty-title">
+            {filter === 'unread' ? 'No unread notifications' : 'No acknowledged notifications'}
+          </div>
+          <div className="nm-empty-sub">
+            {filter === 'unread' ? 'All notifications have been acknowledged.' : 'No notifications have been acknowledged yet.'}
+          </div>
+        </div>
+      )}
+
+      {notifications.length > 0 && filtered.length > 0 && (
         <div className="nm-list">
-          {notifications.map(n => (
+          {filtered.map(n => (
             <div key={n.id} className={`nm-card${n.is_read ? ' nm-card--read' : ''}`}>
               <div className="nm-card-top">
                 <div className="nm-card-icon">
@@ -113,7 +277,7 @@ export default function NotificationManagementPage({ currentUser }) {
                   </svg>
                 </div>
                 <div className="nm-card-title">{n.title}</div>
-                {!n.is_read && <span className="nm-unread-dot" />}
+                {!n.is_read && <span className="nm-unread-dot" role="img" aria-label="Unread" title="Unread" />}
                 <div className="nm-card-date">{fmtDate(n.updated_at)}</div>
               </div>
 
@@ -144,11 +308,15 @@ export default function NotificationManagementPage({ currentUser }) {
                   {n.is_read ? (
                     <span className="nm-reader-chip">
                       <CheckIcon />
-                      Read by {n.read_by_name}
+                      Acknowledged by {n.read_by_name}
                     </span>
                   ) : (
-                    <span className="nm-not-read">Not read yet</span>
+                    <span className="nm-not-read">Pending acknowledgement</span>
                   )}
+                  <span className="nm-card-timestamps">
+                    Alerted {fmtDateTime(n.updated_at)}
+                    {n.is_read && n.read_at && ` · Read ${fmtDateTime(n.read_at)}`}
+                  </span>
                 </div>
 
                 {!n.is_read && (
@@ -159,15 +327,10 @@ export default function NotificationManagementPage({ currentUser }) {
                   >
                     {marking === n.id
                       ? <><span className="nm-spinner nm-spinner--sm" /> Marking…</>
-                      : <><CheckIcon /> Mark as Read</>
+                      : <><CheckIcon /> Acknowledge</>
                     }
                   </button>
                 )}
-              </div>
-
-              <div className="nm-card-note">
-                Alerted {fmtDateTime(n.updated_at)}
-                {n.is_read && n.read_at && ` · Read ${fmtDateTime(n.read_at)}`}
               </div>
             </div>
           ))}

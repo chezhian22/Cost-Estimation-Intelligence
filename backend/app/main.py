@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from . import calculator, crud, models, schemas
 from .bounce_monitor import bounce_monitor_loop
 from .notification_monitor import notification_monitor_loop
+from . import notification_monitor as _notif_monitor
 from .invoice_pdf import generate_invoice_pdf_bytes
 from .auth import create_access_token, decode_token, hash_password, verify_password
 from .database import Base, engine, get_db
@@ -1651,10 +1652,16 @@ def get_email_logs(
 ):
     """Returns the 200 most recent email send attempts, newest first."""
     logs = crud.list_email_logs(db)
+    calc_ids = [log.calc_id for log in logs if log.calc_id]
+    calc_map = {
+        c.id: c.ref_code
+        for c in db.query(models.Calculation).filter(models.Calculation.id.in_(calc_ids)).all()
+    } if calc_ids else {}
     return [
         {
             "id":           log.id,
             "calc_id":      log.calc_id,
+            "quote_ref":    calc_map.get(log.calc_id),
             "sent_by_name": log.sent_by.username if log.sent_by else None,
             "to_email":     log.to_email,
             "client_name":  log.client_name,
@@ -1746,6 +1753,23 @@ def admin_list_notifications(
         }
         for n in notifs
     ]
+
+
+@app.get("/api/admin/notifications/monitor-interval", tags=["notifications"], summary="Get notification monitor interval")
+def get_monitor_interval(_: models.User = Depends(require_admin)):
+    return {"interval_seconds": _notif_monitor._INTERVAL_SECONDS}
+
+
+@app.patch("/api/admin/notifications/monitor-interval", tags=["notifications"], summary="Set notification monitor interval")
+def set_monitor_interval(
+    body: dict,
+    _: models.User = Depends(require_admin),
+):
+    seconds = int(body.get("interval_seconds", 60))
+    if seconds < 30:
+        raise HTTPException(status_code=400, detail="Minimum interval is 30 seconds")
+    _notif_monitor._INTERVAL_SECONDS = seconds
+    return {"interval_seconds": _notif_monitor._INTERVAL_SECONDS}
 
 
 @app.patch("/api/email-logs/{log_id}", tags=["email"], summary="Update email log status")

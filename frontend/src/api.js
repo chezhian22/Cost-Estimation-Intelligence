@@ -153,4 +153,6 @@ export const api = {
   markNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
   markAllNotificationsRead: () => request('/api/notifications/read-all', { method: 'PATCH' }),
   getAdminNotifications: () => request('/api/admin/notifications'),
+  getMonitorInterval: () => request('/api/admin/notifications/monitor-interval'),
+  setMonitorInterval: (seconds) => request('/api/admin/notifications/monitor-interval', { method: 'PATCH', body: JSON.stringify({ interval_seconds: seconds }) }),
 }

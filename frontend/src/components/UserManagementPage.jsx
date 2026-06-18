@@ -198,7 +198,7 @@ export default function UserManagementPage({ currentUser }) {
         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading…</div>
       ) : (
         <div className="table-wrapper">
-          <table>
+          <table className="um-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -207,7 +207,7 @@ export default function UserManagementPage({ currentUser }) {
                 <th>Role</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th style={{ textAlign: 'center' }}>Actions</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -236,13 +236,13 @@ export default function UserManagementPage({ currentUser }) {
                     {new Date(u.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                    <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
                       <button
                         onClick={() => openEdit(u)}
                         title="Edit user"
-                        style={actionBtn()}
-                        onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover())}
-                        onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn())}
+                        style={{ ...actionBtn(), minWidth: 52, justifyContent: 'center' }}
+                        onMouseEnter={e => Object.assign(e.currentTarget.style, { ...actionBtnHover(), minWidth: 52, justifyContent: 'center' })}
+                        onMouseLeave={e => Object.assign(e.currentTarget.style, { ...actionBtn(), minWidth: 52, justifyContent: 'center' })}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -253,36 +253,12 @@ export default function UserManagementPage({ currentUser }) {
                       <button
                         onClick={() => setResetTarget(u)}
                         title="Reset password"
-                        style={actionBtn('#a78bfa', 'rgba(167,139,250,0.10)')}
-                        onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover('#a78bfa', 'rgba(167,139,250,0.20)'))}
-                        onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn('#a78bfa', 'rgba(167,139,250,0.10)'))}
+                        style={{ ...actionBtn('#a78bfa', 'rgba(167,139,250,0.10)'), minWidth: 72, justifyContent: 'center' }}
+                        onMouseEnter={e => Object.assign(e.currentTarget.style, { ...actionBtnHover('#a78bfa', 'rgba(167,139,250,0.20)'), minWidth: 72, justifyContent: 'center' })}
+                        onMouseLeave={e => Object.assign(e.currentTarget.style, { ...actionBtn('#a78bfa', 'rgba(167,139,250,0.10)'), minWidth: 72, justifyContent: 'center' })}
                       >
                         Reset Pwd
                       </button>
-                      {u.id !== currentUser?.id && (
-                        <>
-                          <button
-                            onClick={() => setToggleTarget(u)}
-                            title={u.is_active ? 'Deactivate' : 'Activate'}
-                            style={actionBtn(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)')}
-                            onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.20)' : 'rgba(16,185,129,0.20)'))}
-                            onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn(u.is_active ? '#f59e0b' : '#10b981', u.is_active ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)'))}
-                          >
-                            {u.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(u)}
-                            title="Delete user"
-                            style={actionBtn('#ef4444', 'rgba(239,68,68,0.12)')}
-                            onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover('#ef4444', 'rgba(239,68,68,0.22)'))}
-                            onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn('#ef4444', 'rgba(239,68,68,0.12)'))}
-                          >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                            </svg>
-                          </button>
-                        </>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -325,6 +301,21 @@ export default function UserManagementPage({ currentUser }) {
               {formError && (
                 <div style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.9rem', fontSize: '0.82rem', color: '#f87171' }}>
                   {formError}
+                </div>
+              )}
+
+              {editUser && editUser.id !== currentUser?.id && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.8rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowForm(false); setToggleTarget(editUser) }}
+                    style={{
+                      ...actionBtn(editUser.is_active ? '#f59e0b' : '#10b981', editUser.is_active ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)'),
+                      width: '100%', justifyContent: 'center', padding: '0.4rem',
+                    }}
+                  >
+                    {editUser.is_active ? 'Deactivate User' : 'Activate User'}
+                  </button>
                 </div>
               )}
 
