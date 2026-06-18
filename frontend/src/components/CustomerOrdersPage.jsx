@@ -697,7 +697,10 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
     try {
       await api.sendInvoiceEmail(calcId, clientEmail, subject, body)
       setSent(true)
-      toast.success(`Invoice emailed successfully to ${clientEmail}`)
+      toast.success(
+        `Invoice sent to ${clientEmail}. Visit Communications to monitor delivery status and any bounce alerts.`,
+        7000
+      )
       setTimeout(() => setSent(false), 4000)
     } catch (err) {
       toast.error(err.message || 'Failed to send email')

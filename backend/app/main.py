@@ -14,7 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
-from .bounce_monitor import bounce_monitor_loop
+from .bounce_monitor import bounce_monitor_loop, check_bounces_debug
 from .notification_monitor import notification_monitor_loop
 from . import notification_monitor as _notif_monitor
 from .invoice_pdf import generate_invoice_pdf_bytes
@@ -1698,6 +1698,22 @@ def get_email_logs(
         }
         for log in logs
     ]
+
+
+# ── Bounce-monitor debug ──────────────────────────────────────────────────────
+@app.get("/api/admin/bounce-check-debug", tags=["email"], summary="Debug: run bounce check and return full diagnosis")
+def bounce_check_debug(
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Read-only diagnostic run of the bounce monitor.
+    Connects to Gmail IMAP, searches for NDR messages, parses each one, and
+    reports exactly what was found at every step — without writing anything to
+    the database.  Use this to diagnose why the automatic bounce detection is
+    not working.
+    """
+    return check_bounces_debug(db)
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────
