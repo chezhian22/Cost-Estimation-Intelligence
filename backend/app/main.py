@@ -22,7 +22,33 @@ from .auth import create_access_token, decode_token, hash_password, verify_passw
 from .database import Base, engine, get_db
 from .security import check_request_body
 
+import smtplib
+import socket
+import ssl as _ssl_mod
+
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class _SMTP_IPv4(smtplib.SMTP):
+    """SMTP that resolves the host to IPv4 before connecting.
+
+    On AWS EC2, DNS may return AAAA (IPv6) records first. EC2 instances have no
+    IPv6 interface by default, so the OS cannot assign a local source address and
+    raises [Errno 99] Cannot assign requested address. Forcing AF_INET avoids this.
+    """
+    def _get_socket(self, host, port, timeout):
+        infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        _, _, _, _, sa = infos[0]
+        return socket.create_connection(sa, timeout, self.source_address)
+
+
+class _SMTP_SSL_IPv4(smtplib.SMTP_SSL):
+    """SMTP_SSL that resolves the host to IPv4 before connecting (see _SMTP_IPv4)."""
+    def _get_socket(self, host, port, timeout):
+        infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        _, _, _, _, sa = infos[0]
+        sock = socket.create_connection(sa, timeout, self.source_address)
+        return self.context.wrap_socket(sock, server_hostname=self._host)
 
 
 def _extract_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str | None:
@@ -1235,7 +1261,7 @@ def change_password(body: schemas.ChangePasswordRequest, db: Session = Depends(g
 # ── Welcome email helper ──────────────────────────────────────────────────────
 def _send_welcome_email(cs, to_email: str, username: str, plain_password: str, app_url: str = "", role: str = "user") -> bool:
     """Send login credentials to a newly created user. Best-effort — never raises."""
-    import smtplib, ssl, logging
+    import logging
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     _logger = logging.getLogger(__name__)
@@ -1267,14 +1293,14 @@ def _send_welcome_email(cs, to_email: str, username: str, plain_password: str, a
 
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
-    ctx     = ssl.create_default_context()
+    ctx     = _ssl_mod.create_default_context()
     try:
         if port == 465:
-            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as srv:
+            with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as srv:
                 srv.login(cs.smtp_user, cs.smtp_password)
                 srv.send_message(msg)
         else:
-            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as srv:
+            with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as srv:
                 srv.ehlo()
                 if use_tls:
                     srv.starttls(context=ctx)
@@ -1289,7 +1315,7 @@ def _send_welcome_email(cs, to_email: str, username: str, plain_password: str, a
 
 def _send_password_changed_email(cs, to_email: str, username: str, new_password: str) -> bool:
     """Notify a user that their password was reset by an admin. Best-effort — never raises."""
-    import smtplib, ssl, logging
+    import logging
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     _logger = logging.getLogger(__name__)
@@ -1314,14 +1340,14 @@ def _send_password_changed_email(cs, to_email: str, username: str, new_password:
 
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
-    ctx     = ssl.create_default_context()
+    ctx     = _ssl_mod.create_default_context()
     try:
         if port == 465:
-            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as srv:
+            with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as srv:
                 srv.login(cs.smtp_user, cs.smtp_password)
                 srv.send_message(msg)
         else:
-            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as srv:
+            with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as srv:
                 srv.ehlo()
                 if use_tls:
                     srv.starttls(context=ctx)
@@ -1541,7 +1567,6 @@ def send_invoice_email(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    import smtplib, ssl
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     from email.mime.application import MIMEApplication
@@ -1584,18 +1609,18 @@ def send_invoice_email(
 
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
-    ctx     = ssl.create_default_context()
+    ctx     = _ssl_mod.create_default_context()
 
     _log_status  = "sent"
     _log_remarks = None
 
     try:
         if port == 465:
-            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as server:
+            with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as server:
                 server.login(cs.smtp_user, cs.smtp_password)
                 server.send_message(email_msg)
         else:
-            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as server:
+            with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as server:
                 server.ehlo()
                 if use_tls:
                     server.starttls(context=ctx)
