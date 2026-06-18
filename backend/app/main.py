@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from . import calculator, crud, models, schemas
 from .bounce_monitor import bounce_monitor_loop
+from .notification_monitor import notification_monitor_loop
 from .invoice_pdf import generate_invoice_pdf_bytes
 from .auth import create_access_token, decode_token, hash_password, verify_password
 from .database import Base, engine, get_db
@@ -108,6 +109,59 @@ def _migrate():
                 conn.execute(text("ALTER TABLE calculations ADD COLUMN updated_at DATETIME NULL"))
             if "order_qty" not in existing:
                 conn.execute(text("ALTER TABLE calculations ADD COLUMN order_qty INTEGER NULL"))
+            if "status_changed_by_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN status_changed_by_id INTEGER NULL"))
+            if "status_changed_at" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN status_changed_at DATETIME NULL"))
+            if "status_remarks" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN status_remarks TEXT NULL"))
+            if "client_status" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN client_status VARCHAR(20) NULL"))
+            if "client_status_changed_by_id" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN client_status_changed_by_id INTEGER NULL"))
+            if "client_status_changed_at" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN client_status_changed_at DATETIME NULL"))
+            if "ref_code" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN ref_code VARCHAR(30) NULL"))
+                # Backfill ref_code for existing rows that have an order_id
+                # Load all clients with their global sequence number (sorted by id)
+                all_clients = conn.execute(text(
+                    "SELECT id, name FROM clients ORDER BY id ASC"
+                )).fetchall()
+                client_seq_map = {row[0]: (i + 1) for i, row in enumerate(all_clients)}
+                client_name_map = {row[0]: row[1] for row in all_clients}
+
+                # Load all orders with per-client sequence numbers
+                all_orders = conn.execute(text(
+                    "SELECT id, client_id, name FROM orders ORDER BY client_id, id ASC"
+                )).fetchall()
+                client_order_counter = {}
+                order_seq_map = {}
+                order_name_map = {}
+                for o_row in all_orders:
+                    cid = o_row[1]
+                    client_order_counter[cid] = client_order_counter.get(cid, 0) + 1
+                    order_seq_map[o_row[0]]  = client_order_counter[cid]
+                    order_name_map[o_row[0]] = o_row[2]
+
+                rows = conn.execute(text(
+                    "SELECT c.id, c.order_id, c.client_id "
+                    "FROM calculations c "
+                    "WHERE c.order_id IS NOT NULL "
+                    "ORDER BY c.order_id, c.id ASC"
+                )).fetchall()
+                quote_seq = {}
+                for row in rows:
+                    cid = row[2]
+                    oid = row[1]
+                    quote_seq[oid] = quote_seq.get(oid, 0) + 1
+                    cname   = (client_name_map.get(cid) or 'XX').replace(' ', '')[:2].upper()
+                    c_seq   = str(client_seq_map.get(cid, 0)).zfill(2)
+                    oname   = (order_name_map.get(oid) or 'ORD').replace(' ', '')[:3].upper()
+                    o_seq   = str(order_seq_map.get(oid, 1)).zfill(3)
+                    ref     = f"{cname}{c_seq}-{oname}{o_seq}-Q{quote_seq[oid]}"
+                    conn.execute(text("UPDATE calculations SET ref_code = :ref WHERE id = :id"),
+                                 {"ref": ref, "id": row[0]})
 
         # orders table — order_date
         if "orders" in tables:
@@ -131,11 +185,44 @@ def _migrate():
                     "ALTER TABLE teeth_data ADD COLUMN available INTEGER NOT NULL DEFAULT 1"
                 ))
 
-        # calculation_versions — order_qty added after initial release
+        # calculation_versions — columns added after initial release
         if "calculation_versions" in tables:
             ver_cols = {c["name"] for c in insp.get_columns("calculation_versions")}
             if "order_qty" not in ver_cols:
                 conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN order_qty INTEGER NULL"))
+            if "status_changed_by_id" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN status_changed_by_id INTEGER NULL"))
+            if "status_changed_at" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN status_changed_at DATETIME NULL"))
+            if "status_remarks" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN status_remarks TEXT NULL"))
+            if "client_status" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN client_status VARCHAR(20) NULL"))
+            if "client_status_changed_by_id" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN client_status_changed_by_id INTEGER NULL"))
+            if "client_status_changed_at" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN client_status_changed_at DATETIME NULL"))
+            if "ref_code" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN ref_code VARCHAR(30) NULL"))
+                # Backfill: derive ref_code from parent calculation's ref_code + version_number
+                ver_rows = conn.execute(text(
+                    "SELECT v.id, v.version_number, c.ref_code "
+                    "FROM calculation_versions v "
+                    "JOIN calculations c ON c.id = v.calculation_id "
+                    "WHERE c.ref_code IS NOT NULL"
+                )).fetchall()
+                for row in ver_rows:
+                    ref = f"{row[2]}-V{row[1]}"
+                    conn.execute(text("UPDATE calculation_versions SET ref_code = :ref WHERE id = :id"),
+                                 {"ref": ref, "id": row[0]})
+
+        # notifications — read_by_id / read_at added for first-reader tracking
+        if "notifications" in tables:
+            notif_cols = {c["name"] for c in insp.get_columns("notifications")}
+            if "read_by_id" not in notif_cols:
+                conn.execute(text("ALTER TABLE notifications ADD COLUMN read_by_id INTEGER NULL"))
+            if "read_at" not in notif_cols:
+                conn.execute(text("ALTER TABLE notifications ADD COLUMN read_at DATETIME NULL"))
 
         # company_settings — add missing columns if table was created before this migration
         if "company_settings" in tables:
@@ -302,6 +389,7 @@ app.add_middleware(
 async def _start_background_tasks():
     import asyncio
     asyncio.create_task(bounce_monitor_loop())
+    asyncio.create_task(notification_monitor_loop())
 
 
 # ── SQL injection guard ───────────────────────────────────────────────────────
@@ -479,6 +567,7 @@ def get_order_calculations(order_id: int, db: Session = Depends(get_db)):
     return [
         {
             "id": c.id,
+            "ref_code": c.ref_code,
             "width": c.width,
             "height": c.height,
             "yield_pct": c.yield_pct,
@@ -488,6 +577,7 @@ def get_order_calculations(order_id: int, db: Session = Depends(get_db)):
             "exchange_rate": c.exchange_rate,
             "created_at": c.created_at,
             "status": c.status or "pending",
+            "client_status": c.client_status,
             "pricing": c.result.get("pricing") if c.result else None,
         }
         for c in calcs
@@ -796,10 +886,13 @@ def get_calculations(db: Session = Depends(get_db)):
         if c.order_id:
             order = crud.get_order(db, c.order_id)
             order_name = order.name if order else None
-        created_by_name = c.created_by.username if c.created_by else None
-        updated_by_name = c.updated_by.username if c.updated_by else None
+        created_by_name                = c.created_by.username                if c.created_by                else None
+        updated_by_name                = c.updated_by.username                if c.updated_by                else None
+        status_changed_by_name         = c.status_changed_by.username         if c.status_changed_by         else None
+        client_status_changed_by_name  = c.client_status_changed_by.username  if c.client_status_changed_by  else None
         out.append(schemas.CalculationHistoryOut(
             id=c.id,
+            ref_code=c.ref_code,
             width=c.width,
             height=c.height,
             yield_pct=c.yield_pct,
@@ -820,6 +913,12 @@ def get_calculations(db: Session = Depends(get_db)):
             created_by_name=created_by_name,
             updated_by_name=updated_by_name,
             updated_at=c.updated_at,
+            status_changed_by_name=status_changed_by_name,
+            status_changed_at=c.status_changed_at,
+            status_remarks=c.status_remarks,
+            client_status=c.client_status,
+            client_status_changed_by_name=client_status_changed_by_name,
+            client_status_changed_at=c.client_status_changed_at,
             confirmed_version_number=confirmed_ver_map.get(c.id),
         ))
     return out
@@ -873,10 +972,40 @@ def update_status(
             detail=f"Invalid status '{body.status}'. Must be one of: {', '.join(sorted(valid))}",
         )
     uid = current_user.id if current_user else None
-    obj = crud.update_calculation_status(db, calc_id, body.status, user_id=uid)
+    obj = crud.update_calculation_status(db, calc_id, body.status, user_id=uid, remarks=body.remarks)
     if obj is None:
         raise HTTPException(status_code=404, detail="Calculation not found")
-    return {"id": obj.id, "status": obj.status}
+    if body.status == "confirmed" and obj.order_id:
+        crud.resolve_order_notifications(db, obj.order_id)
+    return {
+        "id": obj.id,
+        "status": obj.status,
+        "status_changed_by_name": obj.status_changed_by.username if obj.status_changed_by else None,
+        "status_changed_at": obj.status_changed_at.isoformat() if obj.status_changed_at else None,
+    }
+
+
+@app.patch(
+    "/api/calculations/{calc_id}/client-status",
+    tags=["history"],
+    summary="Update client approval status",
+)
+def update_client_status(
+    calc_id: int,
+    body: schemas.StatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    valid = {"pending", "approved", "rejected"}
+    if body.status not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid client status '{body.status}'. Must be one of: {', '.join(sorted(valid))}",
+        )
+    obj = crud.update_client_status(db, calc_id, body.status, user_id=current_user.id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    return {"id": obj.id, "client_status": obj.client_status}
 
 
 @app.get(
@@ -916,6 +1045,7 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "client_email":    client.email    if client else None,
         "client_phone":    client.phone    if client else None,
         "order_name":  order.name  if order  else None,
+        "ref_code": obj.ref_code,
         "status": obj.status or "pending",
         "result": obj.result,
     }
@@ -935,6 +1065,7 @@ def list_versions(calc_id: int, db: Session = Depends(get_db)):
     return [
         {
             "id": v.id,
+            "ref_code": v.ref_code,
             "calculation_id": v.calculation_id,
             "version_number": v.version_number,
             "width": v.width,
@@ -948,6 +1079,12 @@ def list_versions(calc_id: int, db: Session = Depends(get_db)):
             "exchange_rate": v.exchange_rate,
             "status": v.status,
             "created_by_name": v.created_by.username if v.created_by else None,
+            "status_changed_by_name": v.status_changed_by.username if v.status_changed_by else None,
+            "status_changed_at": v.status_changed_at,
+            "status_remarks": v.status_remarks,
+            "client_status": v.client_status,
+            "client_status_changed_by_name": v.client_status_changed_by.username if v.client_status_changed_by else None,
+            "client_status_changed_at": v.client_status_changed_at,
             "created_at": v.created_at,
             "result": v.result,
         }
@@ -1000,16 +1137,42 @@ def update_version_status(
     version_id: int,
     body: schemas.StatusUpdate,
     db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
 ):
-    version = crud.update_version_status(db, version_id, body.status)
+    uid = current_user.id if current_user else None
+    version = crud.update_version_status(db, version_id, body.status, user_id=uid, remarks=body.remarks)
     if version is None:
         raise HTTPException(status_code=404, detail="Version not found")
+    if body.status == "confirmed":
+        parent = crud.get_calculation(db, version.calculation_id)
+        if parent and parent.order_id:
+            crud.resolve_order_notifications(db, parent.order_id)
     return {
         "id": version.id,
         "calculation_id": version.calculation_id,
         "version_number": version.version_number,
         "status": version.status,
+        "status_changed_by_name": version.status_changed_by.username if version.status_changed_by else None,
+        "status_changed_at": version.status_changed_at.isoformat() if version.status_changed_at else None,
     }
+
+
+@app.patch(
+    "/api/calculations/versions/{version_id}/client-status",
+    tags=["history"],
+    summary="Update client approval status of a calculation version",
+)
+def update_version_client_status(
+    version_id: int,
+    body: schemas.StatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
+    uid = current_user.id if current_user else None
+    version = crud.update_version_client_status(db, version_id, body.status, user_id=uid)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return {"id": version.id, "client_status": version.client_status}
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -1068,6 +1231,108 @@ def change_password(body: schemas.ChangePasswordRequest, db: Session = Depends(g
     return {"status": "ok"}
 
 
+# ── Welcome email helper ──────────────────────────────────────────────────────
+def _send_welcome_email(cs, to_email: str, username: str, plain_password: str, app_url: str = "", role: str = "user") -> bool:
+    """Send login credentials to a newly created user. Best-effort — never raises."""
+    import smtplib, ssl, logging
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    _logger = logging.getLogger(__name__)
+
+    if not (cs and cs.smtp_host and cs.smtp_user and cs.smtp_password):
+        _logger.warning("Welcome email not sent to %s: SMTP not configured", to_email)
+        return False
+
+    from_name = cs.smtp_from_name or cs.company_name or "Chroma Print India"
+    login_url = app_url or "(ask your administrator for the app URL)"
+
+    text_body = (
+        f"Welcome to {from_name}!\n\n"
+        f"Your account has been created. Use the details below to sign in:\n\n"
+        f"  Login URL  :  {login_url}\n"
+        f"  Username   :  {username}\n"
+        f"  Email      :  {to_email}\n"
+        f"  Password   :  {plain_password}\n"
+        f"  Role       :  {role.capitalize()}\n\n"
+        f"Please change your password after your first login.\n\n"
+        f"— {from_name} Team\n"
+    )
+
+    msg = MIMEMultipart()
+    msg["From"]    = f"{from_name} <{cs.smtp_user}>"
+    msg["To"]      = to_email
+    msg["Subject"] = f"Your {from_name} account is ready"
+    msg.attach(MIMEText(text_body, "plain", "utf-8"))
+
+    port    = cs.smtp_port or 587
+    use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
+    ctx     = ssl.create_default_context()
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as srv:
+                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.send_message(msg)
+        else:
+            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as srv:
+                srv.ehlo()
+                if use_tls:
+                    srv.starttls(context=ctx)
+                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.send_message(msg)
+        _logger.info("Welcome email sent to %s", to_email)
+        return True
+    except Exception as exc:
+        _logger.warning("Welcome email failed for %s: %s", to_email, exc)
+        return False
+
+
+def _send_password_changed_email(cs, to_email: str, username: str, new_password: str) -> bool:
+    """Notify a user that their password was reset by an admin. Best-effort — never raises."""
+    import smtplib, ssl, logging
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    _logger = logging.getLogger(__name__)
+
+    if not (cs and cs.smtp_host and cs.smtp_user and cs.smtp_password):
+        _logger.warning("Password-changed email not sent to %s: SMTP not configured", to_email)
+        return False
+
+    from_name = cs.smtp_from_name or cs.company_name or "Chroma Print India"
+    text_body = (
+        f"Hello {username},\n\n"
+        f"Your password for {from_name} has been reset by an administrator.\n\n"
+        f"  New Password : {new_password}\n\n"
+        f"Please sign in and change your password as soon as possible.\n\n"
+        f"— {from_name} Team\n"
+    )
+    msg = MIMEMultipart()
+    msg["From"]    = f"{from_name} <{cs.smtp_user}>"
+    msg["To"]      = to_email
+    msg["Subject"] = f"Your {from_name} password has been reset"
+    msg.attach(MIMEText(text_body, "plain", "utf-8"))
+
+    port    = cs.smtp_port or 587
+    use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
+    ctx     = ssl.create_default_context()
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(cs.smtp_host, port, context=ctx) as srv:
+                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.send_message(msg)
+        else:
+            with smtplib.SMTP(cs.smtp_host, port, timeout=15) as srv:
+                srv.ehlo()
+                if use_tls:
+                    srv.starttls(context=ctx)
+                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.send_message(msg)
+        _logger.info("Password-changed email sent to %s", to_email)
+        return True
+    except Exception as exc:
+        _logger.warning("Password-changed email failed for %s: %s", to_email, exc)
+        return False
+
+
 # ── User Management (admin only) ──────────────────────────────────────────────
 @app.get("/api/users", response_model=List[schemas.UserOut], tags=["users"])
 def list_users(_: models.User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -1075,18 +1340,37 @@ def list_users(_: models.User = Depends(require_admin), db: Session = Depends(ge
     return crud.list_users(db)
 
 
-@app.post("/api/users", response_model=schemas.UserOut, status_code=201, tags=["users"])
+@app.post("/api/users", status_code=201, tags=["users"])
 def create_user(
     data: schemas.UserCreate,
     _: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Create a new user. Admin only."""
+    """Create a new user and email them their credentials. Admin only."""
     if crud.get_user_by_email(db, data.email.strip().lower()):
         raise HTTPException(status_code=409, detail="Email already in use")
-    if crud.get_user_by_username(db, data.username.strip()):
-        raise HTTPException(status_code=409, detail="Username already in use")
-    return crud.create_user(db, data)
+
+    import secrets, string as _string
+    if data.password:
+        plain_password = data.password
+    else:
+        _chars = _string.ascii_letters + _string.digits + "@#!$"
+        plain_password = ''.join(secrets.choice(_chars) for _ in range(12))
+        data = data.model_copy(update={"password": plain_password})
+    user = crud.create_user(db, data)
+
+    cs = crud.get_company_settings(db)
+    email_sent = _send_welcome_email(cs, user.email, user.username, plain_password, data.app_url or "", user.role)
+
+    return {
+        "id":         user.id,
+        "username":   user.username,
+        "email":      user.email,
+        "role":       user.role,
+        "is_active":  user.is_active,
+        "created_at": user.created_at.isoformat(),
+        "email_sent": email_sent,
+    }
 
 
 @app.patch("/api/users/{user_id}", response_model=schemas.UserOut, tags=["users"])
@@ -1105,6 +1389,27 @@ def update_user(
     if obj is None:
         raise HTTPException(status_code=404, detail="User not found")
     return obj
+
+
+@app.post("/api/users/{user_id}/reset-password", tags=["users"])
+def reset_user_password(
+    user_id: int,
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Generate a new password, update the user, and email it to them. Admin only."""
+    import secrets, string as _string
+    obj = crud.get_user(db, user_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    _chars = _string.ascii_letters + _string.digits + "@#!$"
+    new_password = ''.join(secrets.choice(_chars) for _ in range(12))
+    from .auth import hash_password as _hash
+    obj.password_hash = _hash(new_password)
+    db.commit()
+    cs = crud.get_company_settings(db)
+    email_sent = _send_password_changed_email(cs, obj.email, obj.username, new_password)
+    return {"email_sent": email_sent}
 
 
 @app.delete("/api/users/{user_id}", status_code=204, tags=["users"])
@@ -1332,6 +1637,86 @@ def get_email_logs(
             "sent_at":      log.sent_at,
         }
         for log in logs
+    ]
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+@app.get("/api/notifications", tags=["notifications"], summary="List notifications")
+def list_notifications(
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notifs = crud.list_notifications(db)
+    return [
+        {
+            "id":                n.id,
+            "title":             n.title,
+            "message":           n.message,
+            "client_id":         n.client_id,
+            "order_id":          n.order_id,
+            "notification_type": n.notification_type,
+            "is_read":           n.is_read,
+            "created_at":        n.created_at,
+            "updated_at":        n.updated_at,
+            "client_name":       n.client.name  if n.client   else None,
+            "order_name":        n.order.name   if n.order    else None,
+        }
+        for n in notifs
+    ]
+
+
+@app.get("/api/notifications/unread-count", tags=["notifications"], summary="Unread notification count")
+def get_unread_count(
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return {"count": crud.get_unread_count(db)}
+
+
+@app.patch("/api/notifications/read-all", tags=["notifications"], summary="Mark all notifications read")
+def mark_all_read(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    crud.mark_all_notifications_read(db, current_user.id)
+    return {"status": "ok"}
+
+
+@app.patch("/api/notifications/{notif_id}/read", tags=["notifications"], summary="Mark a notification read")
+def mark_notification_read(
+    notif_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    obj = crud.mark_notification_read(db, notif_id, current_user.id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"id": obj.id, "is_read": obj.is_read}
+
+
+@app.get("/api/admin/notifications", tags=["notifications"], summary="Admin: all notifications with read-by info")
+def admin_list_notifications(
+    _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    notifs = crud.list_notifications_admin(db)
+    return [
+        {
+            "id":                n.id,
+            "title":             n.title,
+            "message":           n.message,
+            "client_id":         n.client_id,
+            "order_id":          n.order_id,
+            "notification_type": n.notification_type,
+            "is_read":           n.is_read,
+            "read_by_name":      n.read_by.username if n.read_by else None,
+            "read_at":           n.read_at,
+            "created_at":        n.created_at,
+            "updated_at":        n.updated_at,
+            "client_name":       n.client.name if n.client else None,
+            "order_name":        n.order.name  if n.order  else None,
+        }
+        for n in notifs
     ]
 
 

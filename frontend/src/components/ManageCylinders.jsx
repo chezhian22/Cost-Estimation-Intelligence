@@ -9,11 +9,83 @@ function blockNonNumeric(e) {
   e.preventDefault()
 }
 
+function AddModal({ onClose, onAdded }) {
+  const [teeth,   setTeeth]   = useState('')
+  const [paper,   setPaper]   = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState(null)
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    const t = parseInt(teeth, 10)
+    const p = parseInt(paper, 10)
+    if (!t || !p) { setError('Both fields are required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const created = await api.createTooth(t, p)
+      onAdded(created)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="edit-modal-header">
+          <span className="edit-modal-header-icon">⚙</span>
+          <span className="edit-modal-header-title">Add Cylinder</span>
+          <button type="button" className="edit-modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <form onSubmit={handleAdd}>
+          <div className="edit-modal-body">
+            <div className="field">
+              <label className="field-label">Teeth Count</label>
+              <input
+                type="number" min="1" step="1"
+                placeholder="e.g. 64"
+                value={teeth}
+                onChange={(e) => setTeeth(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                autoFocus
+                required
+              />
+            </div>
+            <div className="field">
+              <label className="field-label">Paper Size <span className="unit">(mm)</span></label>
+              <input
+                type="number" min="1" step="1"
+                placeholder="e.g. 520"
+                value={paper}
+                onChange={(e) => setPaper(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                required
+              />
+            </div>
+            {error && <div className="selector-error">⚠ {error}</div>}
+          </div>
+          <div className="edit-modal-footer">
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
+              {saving ? 'Adding…' : 'Add Cylinder'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function EditModal({ cylinder, onClose, onSaved }) {
-  const [teeth, setTeeth]   = useState(String(cylinder.teeth))
-  const [paper, setPaper]   = useState(String(cylinder.paper_size))
-  const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState(null)
+  const [teeth,     setTeeth]     = useState(String(cylinder.teeth))
+  const [paper,     setPaper]     = useState(String(cylinder.paper_size))
+  const [available, setAvailable] = useState(cylinder.available !== false)
+  const [saving,    setSaving]    = useState(false)
+  const [error,     setError]     = useState(null)
 
   async function handleSave(e) {
     e.preventDefault()
@@ -23,7 +95,11 @@ function EditModal({ cylinder, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const updated = await api.updateTooth(cylinder.id, t, p)
+      let updated = await api.updateTooth(cylinder.id, t, p)
+      if (available !== (cylinder.available !== false)) {
+        const withAvail = await api.setCylinderAvailability(cylinder.id, available)
+        updated = { ...updated, available: withAvail.available }
+      }
       onSaved(updated)
     } catch (err) {
       setError(err.message)
@@ -49,8 +125,7 @@ function EditModal({ cylinder, onClose, onSaved }) {
                 value={teeth}
                 onChange={(e) => setTeeth(e.target.value)}
                 onKeyDown={blockNonNumeric}
-                autoFocus
-                required
+                autoFocus required
               />
             </div>
             <div className="field">
@@ -63,12 +138,27 @@ function EditModal({ cylinder, onClose, onSaved }) {
                 required
               />
             </div>
+            <div className="field">
+              <label className="field-label">Availability</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <select
+                  value={available ? 'yes' : 'no'}
+                  onChange={(e) => setAvailable(e.target.value === 'yes')}
+                  style={{ flex: 1 }}
+                >
+                  <option value="yes">Available</option>
+                  <option value="no">Unavailable</option>
+                </select>
+                <span className={`avail-badge ${available ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default', flexShrink: 0 }}>
+                  <span className="avail-dot" />
+                  {available ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
             {error && <div className="selector-error">⚠ {error}</div>}
           </div>
           <div className="edit-modal-footer">
-            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -81,16 +171,10 @@ function EditModal({ cylinder, onClose, onSaved }) {
 }
 
 export default function ManageCylinders({ isAdmin = false }) {
-  const [cylinders, setCylinders] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(null)
-
-  const [newTeeth, setNewTeeth]     = useState('')
-  const [newPaper, setNewPaper]     = useState('')
-  const [adding, setAdding]         = useState(false)
-  const [addError, setAddError]     = useState(null)
-  const [deletingId, setDeletingId] = useState(null)
-  const [togglingId, setTogglingId] = useState(null)
+  const [cylinders,  setCylinders]  = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
+  const [showAdd,    setShowAdd]    = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
   useEffect(() => {
@@ -100,47 +184,9 @@ export default function ManageCylinders({ isAdmin = false }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function handleAdd(e) {
-    e.preventDefault()
-    const teeth      = parseInt(newTeeth, 10)
-    const paper_size = parseInt(newPaper, 10)
-    if (!teeth || !paper_size) return
-    setAdding(true)
-    setAddError(null)
-    try {
-      const created = await api.createTooth(teeth, paper_size)
-      setCylinders((prev) => [...prev, created].sort((a, b) => a.teeth - b.teeth))
-      setNewTeeth('')
-      setNewPaper('')
-    } catch (e) {
-      setAddError(e.message)
-    } finally {
-      setAdding(false)
-    }
-  }
-
-  async function handleDelete(id) {
-    setDeletingId(id)
-    try {
-      await api.deleteTooth(id)
-      setCylinders((prev) => prev.filter((c) => c.id !== id))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  async function handleToggleAvailability(c) {
-    setTogglingId(c.id)
-    try {
-      const updated = await api.setCylinderAvailability(c.id, !c.available)
-      setCylinders((prev) => prev.map((x) => x.id === updated.id ? updated : x))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setTogglingId(null)
-    }
+  function handleAdded(created) {
+    setCylinders((prev) => [...prev, created].sort((a, b) => a.teeth - b.teeth))
+    setShowAdd(false)
   }
 
   function handleSaved(updated) {
@@ -150,53 +196,44 @@ export default function ManageCylinders({ isAdmin = false }) {
     setEditTarget(null)
   }
 
+  const totalCount     = cylinders.length
+  const availableCount = cylinders.filter((c) => c.available !== false).length
+  const unavailCount   = totalCount - availableCount
+
   return (
     <section className="card">
       <div className="card-header">
         <div className="card-icon-wrap">⚙</div>
-        <span className="card-title">Manage Cylinders</span>
-        <span className="card-number">SYS-06</span>
+        <span className="card-title">Cylinders</span>
+        <div className="card-header-right">
+          <span className="card-number">SYS-06</span>
+          {isAdmin && (
+            <button className="section-add-btn" onClick={() => setShowAdd(true)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Cylinder
+            </button>
+          )}
+        </div>
       </div>
 
-      {isAdmin ? (
-        <div className="cyl-add-form">
-          <div className="cyl-add-title">Add New Cylinder</div>
-          <form className="cyl-form-row" onSubmit={handleAdd}>
-            <div className="cyl-field">
-              <label className="field-label">Teeth Count</label>
-              <input
-                type="number" min="1" step="1"
-                placeholder="e.g. 64"
-                value={newTeeth}
-                onChange={(e) => setNewTeeth(e.target.value)}
-                onKeyDown={blockNonNumeric}
-                required
-              />
-            </div>
-            <div className="cyl-field">
-              <label className="field-label">Paper Size <span className="unit">(mm)</span></label>
-              <input
-                type="number" min="1" step="1"
-                placeholder="e.g. 520"
-                value={newPaper}
-                onChange={(e) => setNewPaper(e.target.value)}
-                onKeyDown={blockNonNumeric}
-                required
-              />
-            </div>
-            <button type="submit" className="cyl-add-btn" disabled={adding || !newTeeth || !newPaper}>
-              {adding ? 'Adding…' : '＋ Add'}
-            </button>
-          </form>
-          {addError && <div className="selector-error" style={{ marginTop: '0.5rem' }}>{addError}</div>}
-        </div>
-      ) : (
-        <div className="admin-only-notice">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Only admins can add or edit cylinders.
+      {!loading && !error && (
+        <div className="manage-stats-bar">
+          <div className="manage-stat">
+            <span className="manage-stat-value">{totalCount}</span>
+            <span className="manage-stat-label">Total</span>
+          </div>
+          <div className="manage-stat-divider" />
+          <div className="manage-stat">
+            <span className="manage-stat-value manage-stat-value--avail">{availableCount}</span>
+            <span className="manage-stat-label">Available</span>
+          </div>
+          <div className="manage-stat-divider" />
+          <div className="manage-stat">
+            <span className="manage-stat-value manage-stat-value--unavail">{unavailCount}</span>
+            <span className="manage-stat-label">Unavailable</span>
+          </div>
         </div>
       )}
 
@@ -215,20 +252,26 @@ export default function ManageCylinders({ isAdmin = false }) {
           <table>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left' }}>#</th>
+                <th style={{ textAlign: 'left', width: 40 }}>#</th>
                 <th>Teeth</th>
                 <th>Circumference <span className="th-unit">mm</span></th>
                 <th>Paper Size <span className="th-unit">mm</span></th>
                 <th>Paper +20% <span className="th-unit">mm</span></th>
-                <th>Availability</th>
-                {isAdmin && <th></th>}
+                <th>Status</th>
+                {isAdmin && <th style={{ width: 72 }}></th>}
               </tr>
             </thead>
             <tbody>
               {cylinders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>
-                    No cylinders yet.
+                  <td colSpan={7} className="manage-empty-cell">
+                    <div className="manage-empty-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.35 }}>
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      <span>No cylinders added yet.</span>
+                      {isAdmin && <button className="section-add-btn" onClick={() => setShowAdd(true)}>Add your first cylinder</button>}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -238,28 +281,16 @@ export default function ManageCylinders({ isAdmin = false }) {
                   const avail  = c.available !== false
                   return (
                     <tr key={c.id} className={!avail ? 'row-unavailable' : ''}>
-                      <td style={{ textAlign: 'left' }}>{i + 1}</td>
-                      <td>{c.teeth}</td>
+                      <td style={{ textAlign: 'left', color: 'var(--text-dim)', fontSize: '0.78rem' }}>{i + 1}</td>
+                      <td><strong>{c.teeth}</strong></td>
                       <td>{circ}</td>
                       <td>{c.paper_size}</td>
                       <td>{plus20}</td>
                       <td>
-                        {isAdmin ? (
-                          <button
-                            className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`}
-                            onClick={() => handleToggleAvailability(c)}
-                            disabled={togglingId === c.id}
-                            title="Click to toggle availability"
-                          >
-                            <span className="avail-dot" />
-                            {togglingId === c.id ? '…' : avail ? 'Available' : 'Unavailable'}
-                          </button>
-                        ) : (
-                          <span className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default' }}>
-                            <span className="avail-dot" />
-                            {avail ? 'Available' : 'Unavailable'}
-                          </span>
-                        )}
+                        <span className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default' }}>
+                          <span className="avail-dot" />
+                          {avail ? 'Available' : 'Unavailable'}
+                        </span>
                       </td>
                       {isAdmin && (
                         <td style={{ textAlign: 'right', paddingRight: '1rem' }}>
@@ -275,12 +306,9 @@ export default function ManageCylinders({ isAdmin = false }) {
         </div>
       )}
 
+      {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={handleAdded} />}
       {editTarget && (
-        <EditModal
-          cylinder={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={handleSaved}
-        />
+        <EditModal cylinder={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />
       )}
     </section>
   )

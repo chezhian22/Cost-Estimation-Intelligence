@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 
 const ROLE_COLORS = {
-  admin: { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.40)', color: '#f59e0b' },
-  user:  { bg: 'rgba(54,229,194,0.10)', border: 'rgba(54,229,194,0.35)', color: 'var(--teal)' },
+  admin: { bg: 'var(--role-admin-bg)', border: 'var(--role-admin-border)', color: 'var(--role-admin-text)' },
+  user:  { bg: 'var(--teal-dim)',       border: 'var(--teal-mid)',           color: 'var(--teal-light)'     },
 }
 
 function RoleBadge({ role }) {
@@ -34,6 +34,33 @@ function generatePassword() {
   return base.sort(() => Math.random() - 0.5).join('')
 }
 
+function CredRow({ label, value, mono = false, highlight = false }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+      <span style={{ width: 80, fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
+        {label}
+      </span>
+      <span style={{
+        flex: 1, fontSize: mono ? '0.82rem' : '0.85rem',
+        fontFamily: mono ? 'monospace' : 'inherit',
+        fontWeight: highlight ? 700 : 500,
+        color: highlight ? 'var(--teal)' : 'var(--text-bright)',
+        letterSpacing: mono ? '0.04em' : 0,
+        wordBreak: 'break-all',
+      }}>
+        {value}
+      </span>
+      <button
+        onClick={() => navigator.clipboard.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })}
+        style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4, border: '1px solid var(--teal)', background: copied ? 'rgba(54,229,194,0.25)' : 'rgba(54,229,194,0.08)', color: 'var(--teal)', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', flexShrink: 0 }}
+      >
+        {copied ? '✓' : 'Copy'}
+      </button>
+    </div>
+  )
+}
+
 export default function UserManagementPage({ currentUser }) {
   const [users,   setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -45,12 +72,17 @@ export default function UserManagementPage({ currentUser }) {
   const [formError, setFormError] = useState(null)
   const [saving,    setSaving]    = useState(false)
   const [copied,    setCopied]    = useState(false)
+  const [createdCreds, setCreatedCreds] = useState(null) // { email, username, password, emailSent }
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting,     setDeleting]     = useState(false)
 
   const [toggleTarget, setToggleTarget] = useState(null)
   const [toggling,     setToggling]     = useState(false)
+
+  const [resetTarget,  setResetTarget]  = useState(null)
+  const [resetting,    setResetting]    = useState(false)
+  const [resetResult,  setResetResult]  = useState(null) // { username, email, emailSent }
 
   useEffect(() => { fetchUsers() }, [])
 
@@ -62,11 +94,9 @@ export default function UserManagementPage({ currentUser }) {
   }
 
   function openCreate() {
-    const pw = generatePassword()
     setEditUser(null)
-    setForm({ ...EMPTY_FORM, password: pw })
+    setForm(EMPTY_FORM)
     setFormError(null)
-    setCopied(false)
     setShowForm(true)
   }
 
@@ -81,20 +111,24 @@ export default function UserManagementPage({ currentUser }) {
     if (!form.username.trim() || !form.email.trim()) {
       setFormError('Username and email are required'); return
     }
-    if (!editUser && !form.password) {
-      setFormError('Password is required for new users'); return
-    }
     setSaving(true); setFormError(null)
     try {
       if (editUser) {
         const payload = { username: form.username, email: form.email, role: form.role }
         if (form.password) payload.password = form.password
         await api.updateUser(editUser.id, payload)
+        setShowForm(false)
+        await fetchUsers()
       } else {
-        await api.createUser(form)
+        const result = await api.createUser({ username: form.username, email: form.email, role: form.role })
+        setCreatedCreds({
+          email:     form.email,
+          username:  form.username,
+          emailSent: result?.email_sent ?? false,
+        })
+        setShowForm(false)
+        await fetchUsers()
       }
-      setShowForm(false)
-      await fetchUsers()
     } catch (err) {
       setFormError(err.message)
     } finally {
@@ -111,6 +145,17 @@ export default function UserManagementPage({ currentUser }) {
       await fetchUsers()
     } catch (e) { setError(e.message) }
     finally { setToggling(false) }
+  }
+
+  async function handleResetPassword() {
+    if (!resetTarget) return
+    setResetting(true)
+    try {
+      const result = await api.resetUserPassword(resetTarget.id)
+      setResetTarget(null)
+      setResetResult({ username: resetTarget.username, email: resetTarget.email, emailSent: result?.email_sent ?? false })
+    } catch (e) { setError(e.message) }
+    finally { setResetting(false) }
   }
 
   async function handleDelete() {
@@ -205,6 +250,15 @@ export default function UserManagementPage({ currentUser }) {
                         </svg>
                         Edit
                       </button>
+                      <button
+                        onClick={() => setResetTarget(u)}
+                        title="Reset password"
+                        style={actionBtn('#a78bfa', 'rgba(167,139,250,0.10)')}
+                        onMouseEnter={e => Object.assign(e.currentTarget.style, actionBtnHover('#a78bfa', 'rgba(167,139,250,0.20)'))}
+                        onMouseLeave={e => Object.assign(e.currentTarget.style, actionBtn('#a78bfa', 'rgba(167,139,250,0.10)'))}
+                      >
+                        Reset Pwd
+                      </button>
                       {u.id !== currentUser?.id && (
                         <>
                           <button
@@ -255,35 +309,11 @@ export default function UserManagementPage({ currentUser }) {
                 <label className="field-label">Email</label>
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="john@example.com" />
               </div>
-              <div className="field">
-                <label className="field-label">
-                  {editUser ? 'New Password (leave blank to keep)' : 'Password'}
-                  <button
-                    type="button"
-                    onClick={() => { const pw = generatePassword(); setForm(f => ({ ...f, password: pw })); setCopied(false) }}
-                    style={{ marginLeft: 8, fontSize: '0.68rem', padding: '1px 7px', borderRadius: 100, border: '1px solid rgba(54,229,194,0.35)', background: 'rgba(54,229,194,0.08)', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
-                  >
-                    Regenerate
-                  </button>
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
-                    type="text"
-                    value={form.password}
-                    onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setCopied(false) }}
-                    style={{ flex: 1, fontFamily: 'monospace', letterSpacing: '0.05em' }}
-                    placeholder={editUser ? 'leave blank to keep current' : 'auto-generated password'}
-                  />
-                  <button
-                    type="button"
-                    disabled={!form.password}
-                    onClick={() => { navigator.clipboard.writeText(form.password).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }}
-                    style={{ padding: '0.4rem 0.9rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--teal)', background: copied ? 'rgba(54,229,194,0.25)' : 'rgba(54,229,194,0.10)', color: copied ? '#fff' : 'var(--teal)', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: form.password ? 'pointer' : 'default', opacity: form.password ? 1 : 0.4, whiteSpace: 'nowrap', transition: 'all 0.15s' }}
-                  >
-                    {copied ? '✓ Copied' : 'Copy'}
-                  </button>
+              {!editUser && (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', background: 'rgba(54,229,194,0.06)', border: '1px solid rgba(54,229,194,0.18)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.9rem' }}>
+                  A secure password will be auto-generated and emailed to the user.
                 </div>
-              </div>
+              )}
               <div className="field">
                 <label className="field-label">Role</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%' }}>
@@ -333,6 +363,98 @@ export default function UserManagementPage({ currentUser }) {
                 {toggling ? '…' : toggleTarget.is_active ? 'Yes, Deactivate' : 'Yes, Activate'}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Created Credentials Modal ── */}
+      {createdCreds && createPortal(
+        <div style={overlayStyle()} onClick={() => setCreatedCreds(null)}>
+          <div style={{ ...modalStyle(), width: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.4rem' }}>
+              <span style={{ fontSize: '1.1rem', lineHeight: 1, marginTop: 2 }}>✓</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.97rem', color: 'var(--text-bright)' }}>
+                  User Created
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginTop: 3 }}>
+                  <strong style={{ color: 'var(--text-bright)' }}>{createdCreds.username}</strong>
+                  {' · '}
+                  {createdCreds.emailSent
+                    ? `Login credentials emailed to ${createdCreds.email}`
+                    : `SMTP not configured — share credentials manually with ${createdCreds.email}`}
+                </div>
+              </div>
+            </div>
+
+            {!createdCreds.emailSent && (
+              <div style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.9rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.2rem' }}>
+                <CredRow label="Username" value={createdCreds.username} />
+                <CredRow label="Login URL" value={window.location.origin} mono />
+              </div>
+            )}
+
+            <button
+              onClick={() => setCreatedCreds(null)}
+              style={{ ...confirmBtnStyle(false), flex: 'none', width: '100%' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Reset Password Confirm Modal ── */}
+      {resetTarget && createPortal(
+        <div style={overlayStyle()} onClick={() => setResetTarget(null)}>
+          <div style={modalStyle()} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-bright)', marginBottom: '0.8rem' }}>
+              Reset Password
+            </div>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.2rem' }}>
+              A new password will be automatically generated and sent to{' '}
+              <strong style={{ color: 'var(--text-bright)' }}>{resetTarget.username}</strong>'s email address{' '}
+              (<span style={{ color: 'var(--teal)' }}>{resetTarget.email}</span>).
+              <br />Do you want to proceed?
+            </p>
+            <div style={{ display: 'flex', gap: '0.7rem' }}>
+              <button type="button" onClick={() => setResetTarget(null)} style={cancelBtnStyle()}>Cancel</button>
+              <button
+                onClick={handleResetPassword} disabled={resetting}
+                style={{ ...confirmBtnStyle(resetting), border: '1px solid #a78bfa', background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}
+              >
+                {resetting ? 'Sending…' : 'Yes, Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Reset Password Success Modal ── */}
+      {resetResult && createPortal(
+        <div style={overlayStyle()} onClick={() => setResetResult(null)}>
+          <div style={{ ...modalStyle(), width: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+              <span style={{ fontSize: '1.3rem' }}>{resetResult.emailSent ? '✓' : '⚠'}</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-bright)' }}>Password Reset</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>
+                  {resetResult.emailSent
+                    ? `New password sent to ${resetResult.email}`
+                    : 'Password updated but email could not be sent — SMTP not configured'}
+                </div>
+              </div>
+              {resetResult.emailSent
+                ? <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 700, color: 'var(--success-text)', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 4, padding: '2px 8px', whiteSpace: 'nowrap' }}>Email Sent ✓</span>
+                : <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 700, color: '#dc2626', background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 4, padding: '2px 8px', whiteSpace: 'nowrap' }}>Email Failed</span>
+              }
+            </div>
+            <button onClick={() => setResetResult(null)} style={{ ...confirmBtnStyle(false), width: '100%' }}>
+              Done
+            </button>
           </div>
         </div>,
         document.body

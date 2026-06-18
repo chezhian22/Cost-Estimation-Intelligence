@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 
 const fmt  = (v, d = 2) => Number(v).toFixed(d)
 
-function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference, isApproved, onApprove, approvingCyl, hasSavedCalc }) {
+function CylinderDotDiagram({ around, across, color, label, teeth, labelW, labelH, paperSize, circumference }) {
   // Scale proportionally: bigger circumference = wider, bigger paperSize = taller
   const REF_CIRC = 400
   const BODY_W   = Math.round(Math.min(240, Math.max(120, (240 * circumference) / REF_CIRC)))
@@ -121,40 +121,6 @@ function CylinderDotDiagram({ around, across, color, label, teeth, labelW, label
         </text>
       </svg>
 
-      <div style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        {isApproved ? (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px',
-            borderRadius: 100,
-            background: 'rgba(54,229,194,0.15)', border: '1px solid var(--teal)',
-            color: 'var(--teal)',
-          }}>
-            ✓ Approved
-          </span>
-        ) : (
-          <button
-            onClick={onApprove}
-            disabled={approvingCyl}
-            title={hasSavedCalc ? 'Approve this cylinder' : 'Run calculation with a client & order first to save'}
-            style={{
-              padding: '4px 14px', fontSize: '0.74rem', fontWeight: 600,
-              borderRadius: 100,
-              border: `1px solid ${color}66`,
-              background: color + '14',
-              color: color,
-              cursor: approvingCyl ? 'wait' : 'pointer',
-              fontFamily: 'Inter, sans-serif',
-              opacity: approvingCyl ? 0.5 : 1,
-              transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = color + '28'; e.currentTarget.style.borderColor = color }}
-            onMouseLeave={e => { e.currentTarget.style.background = color + '14'; e.currentTarget.style.borderColor = color + '66' }}
-          >
-            Approve
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -225,15 +191,15 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
         </div>
 
         {selIdx !== matchedIdx && selectedRow && (
-          <div className="best-match-badge" style={{ margin: 0, background: 'rgba(99,102,241,0.10)', borderColor: 'rgba(99,102,241,0.40)' }}>
-            <span className="badge-dot" style={{ background: '#818cf8', boxShadow: '0 0 7px #818cf8' }} />
-            <span className="badge-label" style={{ color: '#818cf8' }}>Selected</span>
+          <div className="best-match-badge" style={{ margin: 0, background: 'rgba(99,102,241,0.12)', borderColor: 'rgba(99,102,241,0.45)' }}>
+            <span className="badge-dot" style={{ background: '#6366f1', boxShadow: '0 0 7px rgba(99,102,241,0.60)' }} />
+            <span className="badge-label" style={{ color: 'var(--text-muted)' }}>Selected</span>
             <span className="badge-sep">·</span>
-            <span className="badge-value" style={{ color: '#a5b4fc' }}>
+            <span className="badge-value" style={{ color: '#4f46e5' }}>
               {fmt(selectedRow.label_width)} × {fmt(selectedRow.label_height)} mm
             </span>
             <span className="badge-sep">·</span>
-            <span className="badge-label" style={{ color: '#818cf8' }}>Teeth {selectedRow.teeth}</span>
+            <span className="badge-label" style={{ color: 'var(--text-muted)' }}>Teeth {selectedRow.teeth}</span>
           </div>
         )}
       </div>
@@ -247,7 +213,7 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
 
         <div className="ceff-grid">
           {/* Best Match */}
-          <div className="ceff-block ceff-match">
+          <div className="ceff-block ceff-match" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="ceff-block-head">
               <span className="ceff-block-title">Best Match</span>
               <span className="ceff-block-teeth">{eff.mRow.teeth} teeth</span>
@@ -285,12 +251,46 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
                 </div>
               </>
             )}
+            <div style={{ marginTop: 'auto', padding: '12px 10px 6px', display: 'flex', justifyContent: 'flex-end' }}>
+              {selIdx === matchedIdx ? (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px',
+                  borderRadius: 100,
+                  background: 'rgba(54,229,194,0.15)', border: '1px solid var(--teal)',
+                  color: 'var(--teal)',
+                }}>
+                  ✓ Approved
+                </span>
+              ) : (
+                <button
+                  onClick={() => setPendingIdx(matchedIdx)}
+                  disabled={approvingCyl}
+                  title={hasSavedCalc ? 'Approve this cylinder' : 'Run calculation with a client & order first to save'}
+                  style={{
+                    padding: '6px 16px', fontSize: '0.74rem', fontWeight: 600,
+                    borderRadius: 100,
+                    border: '1px solid #f9731666',
+                    background: '#f9731614',
+                    color: '#f97316',
+                    cursor: approvingCyl ? 'wait' : 'pointer',
+                    fontFamily: 'Inter, sans-serif',
+                    opacity: approvingCyl ? 0.5 : 1,
+                    transition: 'background 0.15s, border-color 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f9731628'; e.currentTarget.style.borderColor = '#f97316' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#f9731614'; e.currentTarget.style.borderColor = '#f9731666' }}
+                >
+                  Approve
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="ceff-vs">VS</div>
 
           {/* Best Yield */}
-          <div className="ceff-block ceff-paper">
+          <div className="ceff-block ceff-paper" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="ceff-block-head">
               <span className="ceff-block-title">Best Yield ★</span>
               <span className="ceff-block-teeth">{eff.bRow.teeth} teeth</span>
@@ -328,6 +328,40 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
                 </div>
               </>
             )}
+            <div style={{ marginTop: 'auto', padding: '12px 10px 6px', display: 'flex', justifyContent: 'flex-end' }}>
+              {selIdx === bestPaperIdx ? (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: '0.72rem', fontWeight: 700, padding: '4px 10px',
+                  borderRadius: 100,
+                  background: 'rgba(54,229,194,0.15)', border: '1px solid var(--teal)',
+                  color: 'var(--teal)',
+                }}>
+                  ✓ Approved
+                </span>
+              ) : (
+                <button
+                  onClick={() => setPendingIdx(bestPaperIdx)}
+                  disabled={approvingCyl}
+                  title={hasSavedCalc ? 'Approve this cylinder' : 'Run calculation with a client & order first to save'}
+                  style={{
+                    padding: '6px 16px', fontSize: '0.74rem', fontWeight: 600,
+                    borderRadius: 100,
+                    border: '1px solid #38bdf866',
+                    background: '#38bdf814',
+                    color: '#38bdf8',
+                    cursor: approvingCyl ? 'wait' : 'pointer',
+                    fontFamily: 'Inter, sans-serif',
+                    opacity: approvingCyl ? 0.5 : 1,
+                    transition: 'background 0.15s, border-color 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#38bdf828'; e.currentTarget.style.borderColor = '#38bdf8' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#38bdf814'; e.currentTarget.style.borderColor = '#38bdf866' }}
+                >
+                  Approve
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -360,10 +394,6 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
             labelH={eff.mRow.label_height}
             paperSize={eff.mRow.paper_size}
             circumference={eff.mRow.circumference}
-            isApproved={selIdx === matchedIdx}
-            onApprove={() => setPendingIdx(matchedIdx)}
-            approvingCyl={approvingCyl}
-            hasSavedCalc={hasSavedCalc}
           />
           <CylinderDotDiagram
             around={eff.bRow.around}
@@ -375,10 +405,6 @@ export default function CylinderTable({ result, orderQty, selectedIdx, onApprove
             labelH={eff.bRow.label_height}
             paperSize={eff.bRow.paper_size}
             circumference={eff.bRow.circumference}
-            isApproved={selIdx === bestPaperIdx}
-            onApprove={() => setPendingIdx(bestPaperIdx)}
-            approvingCyl={approvingCyl}
-            hasSavedCalc={hasSavedCalc}
           />
         </div>
       </div>

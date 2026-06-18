@@ -107,7 +107,7 @@ export function buildPDFHtml(
 <title>${invNo}</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;background:#f0f2f5;
+body{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1e293b;background:#f0f2f5;
   -webkit-print-color-adjust:exact;print-color-adjust:exact}
 .print-bar{position:fixed;top:14px;right:18px;display:flex;gap:8px;z-index:99}
 .btn-print{background:#1abcab;color:#fff;border:none;border-radius:6px;padding:9px 22px;font-size:13px;font-weight:700;cursor:pointer;font-family:Arial,sans-serif}
@@ -135,17 +135,18 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 }
 .co-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:10px;border:2px solid rgba(26,188,171,0.25)}
 .co-name{
-  font-size:24px;font-weight:900;
+  font-size:28px;font-weight:900;
   color:#1abcab;letter-spacing:-0.02em;line-height:1;
 }
 .co-sub{
-  font-size:9px;font-weight:700;
-  letter-spacing:0.12em;text-transform:uppercase;
-  color:#94a3b8;margin-top:3px;
+  font-size:11px;font-weight:700;
+  letter-spacing:0.10em;text-transform:uppercase;
+  color:#64748b;margin-top:5px;
 }
 .co-meta{
-  font-size:10px;color:#64748b;
-  margin-top:10px;line-height:1.8;
+  font-size:12px;color:#2d3748;
+  margin-top:10px;line-height:2;
+  font-weight:500;
 }
 
 /* Right block — all right-aligned */
@@ -157,59 +158,59 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
   gap:0;
 }
 .doc-type{
-  font-size:30px;font-weight:900;
+  font-size:36px;font-weight:900;
   color:#1e293b;letter-spacing:-0.03em;
   line-height:1;
 }
-.quote-num{
-  font-size:13px;font-weight:700;
+.doc-num{
+  font-size:15px;font-weight:700;
   color:#1abcab;
-  margin-top:6px;
+  margin-top:8px;
 }
-.quote-date{
-  font-size:10px;color:#64748b;
+.doc-date{
+  font-size:12px;color:#2d3748;font-weight:500;
+  margin-top:4px;
+}
+.doc-valid{
+  font-size:12px;color:#2d3748;font-weight:500;
   margin-top:3px;
-}
-.quote-valid{
-  font-size:10px;color:#64748b;
-  margin-top:2px;
 }
 
 /* ─── Teal divider ─── */
 .divider{border:none;height:3px;background:#1abcab;margin:0 36px}
 .bill-section{padding:24px 36px 20px;border-bottom:1px solid #f1f5f9}
-.bill-label{font-size:8px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
-.bill-name{font-size:24px;font-weight:900;color:#1e293b;line-height:1;margin-bottom:4px}
-.bill-detail{font-size:10.5px;color:#64748b;line-height:1.8}
-.order-ref{margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;font-size:10px;color:#64748b;line-height:1.8}
+.bill-label{font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#64748b;margin-bottom:8px}
+.bill-name{font-size:26px;font-weight:900;color:#1e293b;line-height:1;margin-bottom:6px}
+.bill-detail{font-size:13px;color:#2d3748;font-weight:500;line-height:1.9}
+.order-ref{margin-top:12px;padding-top:12px;border-top:1px dashed #e2e8f0;font-size:12px;color:#2d3748;font-weight:600;line-height:1.9}
 .items-wrap{padding:0 36px}
 table.items{width:100%;border-collapse:collapse;margin:20px 0 0}
 table.items thead tr{background:#1e293b}
-table.items thead th{padding:11px 14px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#fff;text-align:left}
+table.items thead th{padding:13px 14px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#fff;text-align:left}
 table.items thead th:not(:first-child){text-align:right}
 table.items tbody tr:nth-child(even){background:#f8fafc}
-table.items tbody td{padding:14px 14px;font-size:11px;vertical-align:top;border-bottom:1px solid #f1f5f9}
-table.items tbody td:not(:first-child){text-align:right;font-weight:600}
-.item-main{font-weight:700;color:#1e293b;font-size:12px;margin-bottom:4px}
-.item-sub{font-size:10px;color:#94a3b8;line-height:1.5}
+table.items tbody td{padding:16px 14px;font-size:13px;vertical-align:top;border-bottom:1px solid #f1f5f9;color:#1e293b}
+table.items tbody td:not(:first-child){text-align:right;font-weight:700}
+.item-main{font-weight:800;color:#1e293b;font-size:15px;margin-bottom:5px}
+.item-sub{font-size:11px;color:#50607a;font-weight:500;line-height:1.6}
 .totals-wrap{display:flex;justify-content:flex-end;padding:16px 36px 0}
-.totals-table{width:300px}
-.tot-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:11.5px}
+.totals-table{width:320px}
+.tot-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
 .tot-row:last-child{border-bottom:none}
-.tot-lbl{color:#64748b}
-.tot-val{font-weight:700;color:#1e293b}
-.tot-final{background:#1e293b;border-radius:8px;padding:14px 16px !important;margin-top:10px;border:none !important}
-.tot-final .tot-lbl{color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:0.04em}
-.tot-final .tot-val{color:#fff;font-size:16px;font-weight:900;font-family:Arial,sans-serif}
-.tot-usd{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 16px !important;margin-top:8px;border-bottom:1px solid #bfdbfe !important}
-.tot-usd .tot-lbl{color:#2563eb;font-weight:700}
-.tot-usd .tot-val{color:#1d4ed8;font-size:14px;font-weight:900}
-.gst-note{font-size:9px;color:#94a3b8;margin-top:6px;text-align:right}
-.inv-footer{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:18px 36px 22px;margin-top:24px;background:#f8fafc;border-top:1px solid #e2e8f0}
-.footer-terms{font-size:9.5px;color:#64748b;line-height:1.8}
-.footer-terms strong{color:#475569}
-.footer-contact{text-align:right;font-size:9.5px;color:#64748b;line-height:1.8}
-.footer-contact strong{color:#1abcab;display:block;font-size:10px;margin-bottom:2px}
+.tot-lbl{color:#50607a;font-weight:600}
+.tot-val{font-weight:700;color:#1e293b;font-size:13px}
+.tot-final{background:#1e293b;border-radius:8px;padding:16px 18px !important;margin-top:12px;border:none !important}
+.tot-final .tot-lbl{color:#cbd5e1;font-size:12px;font-weight:700;letter-spacing:0.04em}
+.tot-final .tot-val{color:#fff;font-size:18px;font-weight:900;font-family:Arial,sans-serif}
+.tot-usd{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 18px !important;margin-top:10px;border-bottom:1px solid #bfdbfe !important}
+.tot-usd .tot-lbl{color:#2563eb;font-weight:700;font-size:13px}
+.tot-usd .tot-val{color:#1d4ed8;font-size:16px;font-weight:900}
+.gst-note{font-size:11px;color:#50607a;font-weight:500;margin-top:8px;text-align:right}
+.inv-footer{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:20px 36px 24px;margin-top:24px;background:#f8fafc;border-top:1px solid #e2e8f0}
+.footer-terms{font-size:11px;color:#2d3748;font-weight:500;line-height:2}
+.footer-terms strong{color:#1e293b;font-size:12px}
+.footer-contact{text-align:right;font-size:11px;color:#2d3748;font-weight:500;line-height:2}
+.footer-contact strong{color:#1abcab;display:block;font-size:13px;font-weight:800;margin-bottom:3px}
 @media print{body{background:#fff}.invoice{margin:0;box-shadow:none;border-radius:0}.print-bar{display:none}}
 </style>
 </head>
@@ -286,7 +287,7 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:600}
       ` : `
       <div class="tot-row">
         <span class="tot-lbl">GST</span>
-        <span class="tot-val" style="color:#94a3b8;font-weight:500">As applicable</span>
+        <span class="tot-val" style="color:#50607a;font-weight:600">As applicable</span>
       </div>
       `}
       <div class="tot-row tot-final">
@@ -342,7 +343,7 @@ export function generateQuotationPDF(
 ) {
   const today     = new Date()
   const year      = today.getFullYear()
-  const quoteNo   = `QT-${year}-${Math.floor(1000 + Math.random() * 9000)}`
+  const quoteNo   = order.ref || `QT-${year}-${Math.floor(1000 + Math.random() * 9000)}`
   const dateStr   = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   const validDate = new Date(today.getTime() + 30 * 24 * 3600 * 1000)
     .toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })

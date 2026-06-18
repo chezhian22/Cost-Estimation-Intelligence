@@ -305,8 +305,8 @@ export default function SettingsPage() {
                     {isPasswordSaved && (
                       <span style={{
                         marginLeft: '0.5rem', fontSize: '0.7rem', fontWeight: 600,
-                        color: '#4ade80', background: 'rgba(34,197,94,0.12)',
-                        border: '1px solid rgba(34,197,94,0.3)',
+                        color: 'var(--success-text)', background: 'var(--success-bg)',
+                        border: '1px solid var(--success-border)',
                         borderRadius: 4, padding: '0.1rem 0.4rem',
                       }}>
                         ✓ saved

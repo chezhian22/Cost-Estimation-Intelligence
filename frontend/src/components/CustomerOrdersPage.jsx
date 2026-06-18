@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
@@ -7,6 +7,12 @@ import CylinderTable from './CylinderTable'
 import PricingPanel from './PricingPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function buildRef(clientName, orderName, num) {
+  const c = (clientName || 'UNK').replace(/\s+/g, '').slice(0, 3).toUpperCase()
+  const o = (orderName  || 'ORD').replace(/\s+/g, '').slice(0, 3).toUpperCase()
+  return `${c}-${o}-${String(num).padStart(3, '0')}`
+}
+
 function blockNonPhone(e) {
   const allowed = ['Backspace','Delete','Tab','Enter','Escape',
                    'ArrowLeft','ArrowRight','Home','End']
@@ -419,16 +425,16 @@ function ApproveConfirmModal({ onConfirm, onCancel }) {
   return (
     <div className="cop-modal-overlay">
       <div className="cop-modal">
-        <div className="cop-modal-icon">✦</div>
-        <div className="cop-modal-title">Approve Calculation?</div>
-        <div className="cop-modal-body">
-          <p>Mark this as the approved quote for this order? This can be undone later.</p>
+        <div className="cop-modal-header">
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>Approve Calculation?</span>
+          <button className="cop-modal-close" onClick={onCancel}>✕</button>
         </div>
-        <div className="cop-modal-actions">
-          <button className="cop-modal-btn cop-modal-btn--primary" onClick={onConfirm}>
-            Yes, Approve
-          </button>
+        <div className="cop-modal-body" style={{ padding: '1rem 1.4rem', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+          Mark this as the approved quote for this order? This can be undone later.
+        </div>
+        <div className="cop-modal-footer">
           <button className="cop-modal-btn" onClick={onCancel}>Cancel</button>
+          <button className="cop-modal-btn cop-modal-btn--primary" onClick={onConfirm}>Yes, Approve</button>
         </div>
       </div>
     </div>
@@ -440,24 +446,20 @@ function ConflictModal({ approvedCalc, onViewApproved, onSwap, onCancel }) {
   return (
     <div className="cop-modal-overlay">
       <div className="cop-modal">
-        <div className="cop-modal-icon" style={{ color: '#f59e0b' }}>⚠</div>
-        <div className="cop-modal-title">Already Approved</div>
-        <div className="cop-modal-body">
-          <p>
-            <strong>{fmt(approvedCalc.width, 1)} × {fmt(approvedCalc.height, 1)} mm
-            {approvedCalc.substrate_name ? ` · ${approvedCalc.substrate_name}` : ''}</strong>
-            {' '}is currently the approved quote for this order.
-          </p>
-          <p>What would you like to do?</p>
+        <div className="cop-modal-header">
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>Already Approved</span>
+          <button className="cop-modal-close" onClick={onCancel}>✕</button>
         </div>
-        <div className="cop-modal-actions">
-          <button className="cop-modal-btn" onClick={onViewApproved}>
-            👁 View approved calculation
-          </button>
-          <button className="cop-modal-btn cop-modal-btn--primary" onClick={onSwap}>
-            ↔ Approve this one instead
-          </button>
-          <button className="cop-modal-btn" onClick={onCancel}>Cancel</button>
+        <div className="cop-modal-body" style={{ padding: '1rem 1.4rem', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+          <strong style={{ color: 'var(--text-main)' }}>
+            {fmt(approvedCalc.width, 1)} × {fmt(approvedCalc.height, 1)} mm
+            {approvedCalc.substrate_name ? ` · ${approvedCalc.substrate_name}` : ''}
+          </strong>{' '}is currently the approved quote for this order. What would you like to do?
+        </div>
+        <div className="cop-modal-footer" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          <button className="cop-modal-btn" style={{ width: '100%' }} onClick={onViewApproved}>View approved calculation</button>
+          <button className="cop-modal-btn cop-modal-btn--primary" style={{ width: '100%' }} onClick={onSwap}>Approve this one instead</button>
+          <button className="cop-modal-btn" style={{ width: '100%', opacity: 0.65 }} onClick={onCancel}>Cancel</button>
         </div>
       </div>
     </div>
@@ -469,19 +471,18 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
   return (
     <div className="cop-modal-overlay">
       <div className="cop-modal">
-        <div className="cop-modal-icon">↔</div>
-        <div className="cop-modal-title">Replace Approval?</div>
-        <div className="cop-modal-body">
-          <p>
-            <strong>{fmt(approvedCalc.width, 1)} × {fmt(approvedCalc.height, 1)} mm</strong>
-            {' '}will move back to Draft and the new calculation will become Approved.
-          </p>
+        <div className="cop-modal-header">
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>Replace Approval?</span>
+          <button className="cop-modal-close" onClick={onCancel}>✕</button>
         </div>
-        <div className="cop-modal-actions">
-          <button className="cop-modal-btn cop-modal-btn--primary" onClick={onConfirm}>
-            Yes, swap approval
-          </button>
+        <div className="cop-modal-body" style={{ padding: '1rem 1.4rem', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+          <strong style={{ color: 'var(--text-main)' }}>
+            {fmt(approvedCalc.width, 1)} × {fmt(approvedCalc.height, 1)} mm
+          </strong>{' '}will move back to Draft and the new calculation will become Approved.
+        </div>
+        <div className="cop-modal-footer">
           <button className="cop-modal-btn" onClick={onCancel}>Cancel</button>
+          <button className="cop-modal-btn cop-modal-btn--primary" onClick={onConfirm}>Yes, Swap</button>
         </div>
       </div>
     </div>
@@ -805,7 +806,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
               onClick={handleSendEmail}
               disabled={sending || !clientEmail}
               title={clientEmail ? `Send to ${clientEmail} with PDF attached` : 'No email address on file for this client'}
-              style={sent ? { background: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.4)', color: '#4ade80' } : {}}
+              style={sent ? { background: 'var(--success-bg)', borderColor: 'var(--success-border)', color: 'var(--success-text)' } : {}}
             >
               {sending ? (
                 <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
@@ -829,10 +830,104 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
   )
 }
 
+const CLIENT_STATUS_CFG = {
+  pending:  { label: 'Pending',  color: 'var(--status-neutral-text)', bg: 'var(--status-neutral-bg)', border: 'var(--status-neutral-border)' },
+  approved: { label: 'Approved', color: 'var(--teal)',                bg: 'var(--teal-dim)',           border: 'var(--teal-mid)'             },
+  rejected: { label: 'Rejected', color: '#dc2626',                   bg: 'rgba(239,68,68,0.10)',      border: 'rgba(239,68,68,0.35)'        },
+}
+
+const CP_STATUS_CFG = {
+  pending:   { label: 'Pending',   color: 'var(--status-neutral-text)', bg: 'var(--status-neutral-bg)', border: 'var(--status-neutral-border)' },
+  confirmed: { label: 'Confirmed', color: 'var(--teal)',                bg: 'var(--teal-dim)',           border: 'var(--teal-mid)'              },
+  rejected:  { label: 'Rejected',  color: '#dc2626',                   bg: 'rgba(239,68,68,0.10)',      border: 'rgba(239,68,68,0.35)'         },
+}
+
 // ── Calculation row ───────────────────────────────────────────────────────────
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, onEmailDraft, versionLabel, clientName, orderName }) {
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, onEmailDraft, versionLabel, clientName, orderName, refCode, onCPStatusChange, onClientStatusUpdate }) {
   const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+  const [cpDropdownPos, setCpDropdownPos]       = useState(null)
+  const [clientDropdownPos, setClientDropdownPos] = useState(null)
+  const [cpConfirm, setCpConfirm]               = useState(null) // { next, label }
+  const [clientConfirm, setClientConfirm]       = useState(null) // { next, label }
+  const [saving, setSaving]                     = useState(false)
+  const cpBtnRef         = useRef(null)
+  const clientBtnRef     = useRef(null)
+  const cpDropdownRef    = useRef(null)
+  const clientDropdownRef = useRef(null)
+
+  useEffect(() => {
+    if (!cpDropdownPos && !clientDropdownPos) return
+    function close(e) {
+      if (cpDropdownRef.current?.contains(e.target)) return
+      if (clientDropdownRef.current?.contains(e.target)) return
+      if (cpBtnRef.current?.contains(e.target)) return
+      if (clientBtnRef.current?.contains(e.target)) return
+      setCpDropdownPos(null)
+      setClientDropdownPos(null)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [cpDropdownPos, clientDropdownPos])
+
+  const cpCurrent     = calc.status       || 'pending'
+  const clientCurrent = calc.client_status ?? 'pending'
+
+  function openCPDropdown(e) {
+    e.stopPropagation()
+    if (!onCPStatusChange) return
+    if (cpDropdownPos) { setCpDropdownPos(null); return }
+    const rect = cpBtnRef.current.getBoundingClientRect()
+    setCpDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+  }
+
+  function openClientDropdown(e) {
+    e.stopPropagation()
+    if (!onClientStatusUpdate) return
+    if (clientDropdownPos) { setClientDropdownPos(null); return }
+    const rect = clientBtnRef.current.getBoundingClientRect()
+    setClientDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+  }
+
+  function selectCP(e, next) {
+    e.stopPropagation()
+    setCpDropdownPos(null)
+    if (next === cpCurrent) return
+    setCpConfirm({ next, label: CP_STATUS_CFG[next]?.label ?? next })
+  }
+
+  function selectClient(e, next) {
+    e.stopPropagation()
+    setClientDropdownPos(null)
+    if (next === clientCurrent) return
+    setClientConfirm({ next, label: CLIENT_STATUS_CFG[next]?.label ?? next })
+  }
+
+  async function confirmCPChange() {
+    if (!cpConfirm || saving) return
+    setSaving(true)
+    try {
+      await onCPStatusChange(calc.id, cpConfirm.next)
+      setCpConfirm(null)
+    } catch (e) {
+      toast.error(e.message || 'Failed to update status')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmClientChange() {
+    if (!clientConfirm || saving) return
+    setSaving(true)
+    try {
+      await onClientStatusUpdate?.(calc.id, clientConfirm.next)
+      setClientConfirm(null)
+    } catch (e) {
+      toast.error(e.message || 'Failed to update client status')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function handleInvoicePDF(e) {
     e.stopPropagation()
@@ -864,106 +959,243 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
     }
   }
 
-  return (
-    <div
-      className={`cop-calc-row${isApproved ? ' cop-calc-row--approved' : ''}`}
-      onClick={onViewDetail}
-    >
-      {/* left accent bar */}
-      <div className="cop-calc-accent" />
+  const statusBadgeStyle = (cfg) => ({
+    fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.03em',
+    padding: '2px 9px', borderRadius: 10, whiteSpace: 'nowrap',
+    color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3,
+  })
 
-      {/* main info */}
-      <div className="cop-calc-main">
-        <div className="cop-calc-size">
-          {versionLabel && (
-            <span style={{
-              fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase',
-              color: 'var(--teal-light)', background: 'var(--teal-dim)',
-              border: '1px solid var(--teal-mid)', borderRadius: 4,
-              padding: '0.1rem 0.4rem', marginRight: '0.45rem', letterSpacing: '0.04em',
-            }}>
-              {versionLabel}
+  return (
+    <div className={`cop-calc-row${isApproved ? ' cop-calc-row--approved' : ''}`}>
+      {/* left accent bar */}
+      <div className="cop-calc-accent" onClick={onViewDetail} style={{ cursor: 'pointer' }} />
+
+      {/* ── Approved Quote Card ── */}
+      <div className="cop-aq-card">
+
+        {/* Header: ref + version badge | approved stamp + date */}
+        <div className="cop-aq-header" onClick={onViewDetail} style={{ cursor: 'pointer' }}>
+          <div className="cop-aq-refs">
+            {refCode && <span className="cop-calc-ref-badge">{refCode}</span>}
+            {versionLabel && <span className="cop-calc-ref-badge--ver">{versionLabel}</span>}
+          </div>
+          <div className="cop-aq-header-right">
+            <span className="cop-aq-approved-stamp">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Approved Quote
             </span>
+            <span className="cop-aq-date">{fmtDate(calc.created_at)}</span>
+          </div>
+        </div>
+
+        {/* Body: size + meta | pricing */}
+        <div className="cop-aq-body" onClick={onViewDetail} style={{ cursor: 'pointer' }}>
+          <div className="cop-aq-info">
+            <div className="cop-aq-size">{fmt(calc.width, 1)} × {fmt(calc.height, 1)} mm</div>
+            <div className="cop-aq-meta">
+              {calc.substrate_name || 'Custom substrate'}
+              {calc.yield_pct ? ` · ${calc.yield_pct}% yield` : ''}
+            </div>
+          </div>
+          {calc.pricing && (
+            <div className="cop-aq-pricing">
+              <div className="cop-aq-price-row">
+                <span className="cop-aq-price-inr">₹ {fmt(calc.pricing.price_inr_1000)}</span>
+                <span className="cop-aq-price-div"> · </span>
+                <span className="cop-aq-price-usd">$ {fmt(calc.pricing.price_usd_1000, 3)}</span>
+              </div>
+              <div className="cop-aq-price-unit">per 1,000 labels</div>
+            </div>
           )}
-          {fmt(calc.width, 1)} × {fmt(calc.height, 1)} mm
         </div>
-        <div className="cop-calc-meta">
-          {calc.substrate_name || 'Custom substrate'}
-          {calc.yield_pct ? ` · ${calc.yield_pct}% yield` : ''}
-          {' · '}{fmtDateTime(calc.created_at)}
+
+        {/* Footer: status badges | action buttons — no click-through to onViewDetail */}
+        <div className="cop-aq-footer">
+          <div className="cop-aq-statuses">
+            <div className="cop-aq-status-item">
+              <span className="cop-aq-status-label">CP Status</span>
+              <button
+                ref={cpBtnRef}
+                style={statusBadgeStyle(CP_STATUS_CFG[cpCurrent] ?? CP_STATUS_CFG.pending)}
+                onClick={openCPDropdown}
+                disabled={!onCPStatusChange}
+              >
+                {CP_STATUS_CFG[cpCurrent]?.label ?? cpCurrent}
+                {onCPStatusChange && <span style={{ fontSize: '0.56rem', opacity: 0.65, marginLeft: 2 }}>▾</span>}
+              </button>
+              {calc.status_changed_by_name && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', marginTop: '0.25rem' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-dim)' }}>
+                    by <strong style={{ color: 'var(--teal)', fontWeight: 600 }}>{calc.status_changed_by_name}</strong>
+                  </span>
+                  {calc.status_changed_at && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', opacity: 0.7 }}>
+                      {fmtDate(calc.status_changed_at)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="cop-aq-status-item">
+              <span className="cop-aq-status-label">Client Status</span>
+              <button
+                ref={clientBtnRef}
+                style={statusBadgeStyle(CLIENT_STATUS_CFG[clientCurrent] ?? CLIENT_STATUS_CFG.pending)}
+                onClick={openClientDropdown}
+                disabled={!onClientStatusUpdate}
+              >
+                {CLIENT_STATUS_CFG[clientCurrent]?.label ?? clientCurrent}
+                {onClientStatusUpdate && <span style={{ fontSize: '0.56rem', opacity: 0.65, marginLeft: 2 }}>▾</span>}
+              </button>
+              {calc.client_status_changed_by_name && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', marginTop: '0.25rem' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-dim)' }}>
+                    by <strong style={{ color: 'var(--teal)', fontWeight: 600 }}>{calc.client_status_changed_by_name}</strong>
+                  </span>
+                  {calc.client_status_changed_at && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', opacity: 0.7 }}>
+                      {fmtDate(calc.client_status_changed_at)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="cop-aq-actions">
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Quotation PDF">
+              {quotationLoading ? (
+                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              )}
+              Quotation
+            </button>
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Invoice PDF">
+              {pdfLoading ? (
+                <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              )}
+              Invoice
+            </button>
+            <button
+              className="cop-pdf-btn cop-pdf-btn--sm"
+              onClick={(e) => { e.stopPropagation(); onEmailDraft?.(calc) }}
+              title="Draft invoice email"
+              style={{ background: 'rgba(99,102,241,0.12)', borderColor: 'rgba(99,102,241,0.45)', color: '#4f46e5' }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+              Email
+            </button>
+          </div>
         </div>
+
       </div>
 
-      {/* pricing block */}
-      {calc.pricing && (
-        <div className="cop-calc-prices">
-          <div className="cop-calc-price-inr">₹ {fmt(calc.pricing.price_inr_1000)}</div>
-          <div className="cop-calc-price-usd">$ {fmt(calc.pricing.price_usd_1000, 3)}</div>
-          <div className="cop-calc-price-unit">/ 1000 labels</div>
-        </div>
+      {/* ── CP Status dropdown ── */}
+      {cpDropdownPos && createPortal(
+        <div
+          ref={cpDropdownRef}
+          className="status-dropdown"
+          style={{ position: 'fixed', top: cpDropdownPos.top, right: cpDropdownPos.right, zIndex: 9999 }}
+        >
+          {Object.entries(CP_STATUS_CFG).map(([key, c]) => (
+            <button
+              key={key}
+              className={`status-option${cpCurrent === key ? ' current' : ''}`}
+              style={{ color: c.color }}
+              onClick={(e) => selectCP(e, key)}
+            >
+              {cpCurrent === key && <span className="status-check">✓ </span>}
+              {c.label}
+            </button>
+          ))}
+        </div>,
+        document.body
       )}
 
-      {/* approve action */}
-      <div className="cop-calc-actions" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          {isApproved && (
-            <span className="cop-approved-chip">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-              Approved
-            </span>
-          )}
-          <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Download internal quotation">
-            {quotationLoading ? (
-              <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
-            ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-            )}
-            Quotation
-          </button>
-          {isApproved ? (
-            <>
-              <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Download client invoice">
-                {pdfLoading ? (
-                  <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
-                ) : (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                )}
-                Invoice
-              </button>
-              <button
-                className="cop-pdf-btn cop-pdf-btn--sm"
-                onClick={(e) => { e.stopPropagation(); onEmailDraft?.(calc) }}
-                title="Draft invoice email to client"
-                style={{ background: 'rgba(99,102,241,0.10)', borderColor: 'rgba(99,102,241,0.30)', color: '#818cf8' }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                  <polyline points="22,6 12,13 2,6"/>
-                </svg>
-                Email
-              </button>
-            </>
-          ) : (
+      {/* ── Client Status dropdown ── */}
+      {clientDropdownPos && createPortal(
+        <div
+          ref={clientDropdownRef}
+          className="status-dropdown"
+          style={{ position: 'fixed', top: clientDropdownPos.top, right: clientDropdownPos.right, zIndex: 9999 }}
+        >
+          {Object.entries(CLIENT_STATUS_CFG).map(([key, c]) => (
             <button
-              className={`cop-approve-btn${hasOtherApproved ? ' cop-approve-btn--dimmed' : ''}`}
-              onClick={() => onApproveRequest(calc)}
-              title={hasOtherApproved ? 'Another calc is approved — click to swap' : 'Approve this calculation'}
+              key={key}
+              className={`status-option${clientCurrent === key ? ' current' : ''}`}
+              style={{ color: c.color }}
+              onClick={(e) => selectClient(e, key)}
             >
-              Approve
+              {clientCurrent === key && <span className="status-check">✓ </span>}
+              {c.label}
             </button>
-          )}
-        </div>
-      </div>
+          ))}
+        </div>,
+        document.body
+      )}
+
+      {/* ── CP Status confirm modal ── */}
+      {cpConfirm && createPortal(
+        <div className="cop-modal-overlay">
+          <div className="cop-modal">
+            <div className="cop-modal-header">
+              <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>Update CP Status</span>
+              <button className="cop-modal-close" onClick={() => setCpConfirm(null)} disabled={saving}>✕</button>
+            </div>
+            <div className="cop-modal-body" style={{ padding: '1rem 1.4rem', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+              Set Chroma Print status to{' '}
+              <strong style={{ color: 'var(--text-main)' }}>{cpConfirm.label}</strong>?
+            </div>
+            <div className="cop-modal-footer">
+              <button className="cop-modal-btn" onClick={() => setCpConfirm(null)} disabled={saving}>Cancel</button>
+              <button className="cop-modal-btn cop-modal-btn--primary" onClick={confirmCPChange} disabled={saving}>
+                {saving ? '…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Client Status confirm modal ── */}
+      {clientConfirm && createPortal(
+        <div className="cop-modal-overlay">
+          <div className="cop-modal">
+            <div className="cop-modal-header">
+              <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>Update Client Status</span>
+              <button className="cop-modal-close" onClick={() => setClientConfirm(null)} disabled={saving}>✕</button>
+            </div>
+            <div className="cop-modal-body" style={{ padding: '1rem 1.4rem', color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+              Set Client Status to{' '}
+              <strong style={{ color: 'var(--text-main)' }}>{clientConfirm.label}</strong>?
+            </div>
+            <div className="cop-modal-footer">
+              <button className="cop-modal-btn" onClick={() => setClientConfirm(null)} disabled={saving}>Cancel</button>
+              <button className="cop-modal-btn cop-modal-btn--primary" onClick={confirmClientChange} disabled={saving}>
+                {saving ? '…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -1073,6 +1305,25 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
     setBusy(false)
   }
 
+  // ── CP status update (from CalcRow dropdown) ──
+  async function handleCPStatusChange(calcId, next) {
+    await api.updateQuoteStatus(calcId, next)
+    if (next !== 'confirmed') setApprovedId(null)
+    setCalcs((prev) => prev.map((c) => c.id === calcId ? { ...c, status: next } : c))
+  }
+
+  // ── Client status update (base calc) ──
+  async function handleClientStatusUpdate(calcId, next) {
+    await api.updateClientStatus(calcId, next)
+    setCalcs((prev) => prev.map((c) => c.id === calcId ? { ...c, client_status: next } : c))
+  }
+
+  // ── Client status update (version) ──
+  async function handleVersionClientStatusUpdate(versionId, next) {
+    await api.updateVersionClientStatus(versionId, next)
+    setApprovedVersions((prev) => prev.map((v) => v.id === versionId ? { ...v, client_status: next } : v))
+  }
+
   // ── Unapprove (from detail modal) ──
   async function handleUnapprove(calcId) {
     const pendingCalcForConflict = detailModal?.pendingCalcForConflict ?? null
@@ -1125,35 +1376,51 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
           approvedVersions.length > 0
         ) && (
           <div className="cop-calcs-list">
-            {calcs.filter((c) => c.status === 'confirmed').map((c) => (
-              <CalcRow
-                key={c.id}
-                calc={c}
-                isApproved={true}
-                hasOtherApproved={false}
-                onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
-                onApproveRequest={handleApproveRequest}
-                onEmailDraft={setEmailDraftCalc}
-                clientName={clientName}
-                orderName={order.name}
-                companySettings={companySettings}
-              />
-            ))}
-            {approvedVersions.map((v) => (
-              <CalcRow
-                key={`v-${v.id}`}
-                calc={{ ...v, pricing: v.result?.pricing }}
-                isApproved={true}
-                hasOtherApproved={false}
-                versionLabel={`V${v.version_number}`}
-                onViewDetail={() => setVersionDetailModal(v)}
-                onApproveRequest={() => {}}
-                onEmailDraft={setEmailDraftCalc}
-                clientName={clientName}
-                orderName={order.name}
-                companySettings={companySettings}
-              />
-            ))}
+            {(() => {
+              // Sequential number per calc (oldest = 1) for ref code
+              const sorted = [...calcs].sort((a, b) => a.id - b.id)
+              const numMap = {}
+              sorted.forEach((c, i) => { numMap[c.id] = i + 1 })
+              return calcs.filter((c) => c.status === 'confirmed').map((c) => (
+                <CalcRow
+                  key={c.id}
+                  calc={c}
+                  isApproved={true}
+                  hasOtherApproved={false}
+                  onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
+                  onApproveRequest={handleApproveRequest}
+                  onEmailDraft={setEmailDraftCalc}
+                  onCPStatusChange={handleCPStatusChange}
+                  onClientStatusUpdate={handleClientStatusUpdate}
+                  refCode={buildRef(clientName, order.name, numMap[c.id] ?? 1)}
+                  clientName={clientName}
+                  orderName={order.name}
+                />
+              ))
+            })()}
+            {approvedVersions.map((v) => {
+              const parentCalc = calcs?.find((c) => c.id === v.calculation_id)
+              const sorted = parentCalc ? [...calcs].sort((a, b) => a.id - b.id) : []
+              const numMap = {}
+              sorted.forEach((c, i) => { numMap[c.id] = i + 1 })
+              const parentNum = numMap[v.calculation_id] ?? 1
+              return (
+                <CalcRow
+                  key={`v-${v.id}`}
+                  calc={{ ...v, pricing: v.result?.pricing }}
+                  isApproved={true}
+                  hasOtherApproved={false}
+                  versionLabel={`V${v.version_number}`}
+                  onViewDetail={() => setVersionDetailModal(v)}
+                  onApproveRequest={() => {}}
+                  onEmailDraft={setEmailDraftCalc}
+                  onClientStatusUpdate={(_, next) => handleVersionClientStatusUpdate(v.id, next)}
+                  refCode={buildRef(clientName, order.name, parentNum)}
+                  clientName={clientName}
+                  orderName={order.name}
+                />
+              )
+            })}
           </div>
         )}
       </div>

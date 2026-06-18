@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from './api'
 import { generateInvoicePDF, generateQuotationPDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
@@ -7,8 +8,8 @@ import PricingPanel from './components/PricingPanel'
 import ComparisonPanel from './components/ComparisonPanel'
 import ComparisonPage from './components/ComparisonPage'
 import QuoteHistory from './components/QuoteHistory'
-import ManageCylinders from './components/ManageCylinders'
-import ManageSubstrates from './components/ManageSubstrates'
+import CatalogueManagement from './components/CatalogueManagement'
+import NotificationManagementPage from './components/NotificationManagementPage'
 import CustomerOrdersPage from './components/CustomerOrdersPage'
 import MailManagementPage from './components/MailManagementPage'
 import LoginPage from './components/LoginPage'
@@ -17,6 +18,7 @@ import SettingsPage from './components/SettingsPage'
 import Dashboard from './pages/Dashboard/Dashboard'
 import PDFPreview from './pages/Estimating/PDFPreview/PDFPreview'
 import Toast from './components/Toast'
+import { NotificationBell } from './components/NotificationPanel'
 
 const DEFAULTS = {
   width: 64.5,
@@ -49,6 +51,21 @@ function buildPayload(inputs, { save = false, clientId = null, orderId = null, s
   }
 }
 
+const ROUTE_MAP = {
+  'dashboard':       '/',
+  'calculator':      '/calculator',
+  'comparison':      '/comparison',
+  'history':         '/history',
+  'pdf-preview':     '/pdf-preview',
+  'client-orders':   '/clients',
+  'mail-management': '/mail',
+  'catalogue':                '/admin/catalogue',
+  'notification-management':  '/admin/notifications',
+  'user-management':          '/admin/users',
+  'settings':                 '/admin/settings',
+}
+const PATH_TO_VIEW = Object.fromEntries(Object.entries(ROUTE_MAP).map(([k, v]) => [v, k]))
+
 const NAV_SECTIONS = [
   {
     section: 'Main',
@@ -70,56 +87,56 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    section: 'Calculation',
+    section: 'Estimating',
     icon: (
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
       </svg>
     ),
     links: [
-      { id: 'calculator',   label: 'Pricing Calculator' },
-      { id: 'comparison',   label: 'Quote Comparison'   },
-      { id: 'history',      label: 'Quote History'      },
-      { id: 'pdf-preview',  label: 'PDF Quote Preview'  },
+      { id: 'calculator',   label: 'New Estimate'   },
+      { id: 'comparison',   label: 'Compare Quotes' },
+      { id: 'history',      label: 'Quote History'  },
+      { id: 'pdf-preview',  label: 'Invoice Preview'  },
     ],
   },
   {
-    section: 'Customers',
+    section: 'Clients',
     icon: (
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
       </svg>
     ),
     links: [
-      { id: 'client-orders',    label: 'Client & Orders'  },
-      { id: 'mail-management',  label: 'Mail Management'  },
-    ],
-  },
-  {
-    section: 'Product Master',
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-      </svg>
-    ),
-    links: [
-      { id: 'cylinders',  label: 'Cylinder Management'  },
-      { id: 'substrates', label: 'Substrate Management' },
+      { id: 'client-orders',    label: 'Clients & Orders' },
+      { id: 'mail-management',  label: 'Communications'   },
     ],
   },
 ]
 
 const ADMIN_SECTION = {
-  section: 'Admin',
+  section: 'Administration',
   icon: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
     </svg>
   ),
   links: [
-    { id: 'user-management', label: 'User Management' },
-    { id: 'settings',        label: 'Company Settings' },
+    { id: 'catalogue',               label: 'Catalogue Management'      },
+    { id: 'notification-management', label: 'Notification Management'   },
+    { id: 'user-management',         label: 'User Accounts'             },
+    { id: 'settings',                label: 'Settings'                  },
   ],
+}
+
+function getBreadcrumb(viewId) {
+  const allSections = [...NAV_SECTIONS, ADMIN_SECTION]
+  for (const { section, links } of allSections) {
+    for (const link of links) {
+      if (link.id === viewId) return { section, label: link.label }
+    }
+  }
+  return null
 }
 
 export default function App() {
@@ -135,7 +152,10 @@ export default function App() {
   const [loading, setLoading]             = useState(false)
   const [navOpen, setNavOpen]             = useState(true)
   const [formOpen, setFormOpen]           = useState(true)
-  const [activeView, setActiveView]       = useState('dashboard')
+  const location   = useLocation()
+  const navigate   = useNavigate()
+  const activeView = PATH_TO_VIEW[location.pathname] ?? 'dashboard'
+  function setActiveView(id) { navigate(ROUTE_MAP[id] ?? '/') }
   const [clientId, setClientId]           = useState(null)
   const [clientName, setClientName]       = useState(null)
   const [orderId, setOrderId]             = useState(null)
@@ -147,6 +167,7 @@ export default function App() {
   const [quoteConfirmed, setQuoteConfirmed] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [hasCalculated, setHasCalculated] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -171,6 +192,18 @@ export default function App() {
       .then(setSubstrates)
       .catch((e) => console.warn('Substrates unavailable:', e.message))
   }, [])
+
+  // Poll unread notification count every 60 s (matches backend check interval)
+  useEffect(() => {
+    if (!currentUser) return
+    const fetchCount = () =>
+      api.getUnreadCount()
+        .then(data => setUnreadCount(data.count ?? 0))
+        .catch(() => {})
+    fetchCount()
+    const id = setInterval(fetchCount, 60_000)
+    return () => clearInterval(id)
+  }, [currentUser])
 
   // After recalculation, preserve the previously selected cylinder by teeth count
   function applyResult(a, prevTeeth) {
@@ -496,9 +529,10 @@ export default function App() {
               </div>
               <div className="logo-text">
                 <div className="logo-title">Cost <span className="accent">Estimation</span> Intelligence</div>
-                <div className="logo-sub">Chroma Print — Label Estimator</div>
+                <div className="logo-sub">Chroma Print</div>
               </div>
             </div>
+
           </div>
 
           <div className="header-controls">
@@ -506,7 +540,7 @@ export default function App() {
               <span className="status-dot" />
               {currentUser.username}
               {isAdmin && (
-                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.04em' }}>ADMIN</span>
+                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', fontWeight: 700, color: 'var(--role-admin-text)', letterSpacing: '0.04em' }}>ADMIN</span>
               )}
             </div>
             <button
@@ -533,17 +567,23 @@ export default function App() {
               )}
             </button>
 
+            <NotificationBell
+              unreadCount={unreadCount}
+              onOpenChange={() => {}}
+              onRead={() => api.getUnreadCount().then(d => setUnreadCount(d.count ?? 0)).catch(() => {})}
+            />
+
             <button
-              className="theme-toggle"
+              className="logout-btn"
               onClick={handleLogout}
               title="Sign out"
-              style={{ marginLeft: '0.3rem' }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
+              Logout
             </button>
           </div>
         </div>
@@ -645,6 +685,19 @@ export default function App() {
         )}
 
         <div className="content-area">
+          {(() => {
+            const bc = getBreadcrumb(activeView)
+            if (!bc) return null
+            return (
+              <div className="breadcrumb">
+                <span className="breadcrumb-section">{bc.section}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', opacity: 1, flexShrink: 0 }}>
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                <span className="breadcrumb-page">{bc.label}</span>
+              </div>
+            )
+          })()}
           {error && <div className="error-banner">⚠ {error}</div>}
 
           {activeView === 'calculator' && !hasCalculated && !loading && (
@@ -829,8 +882,8 @@ export default function App() {
           {activeView === 'pdf-preview'     && <PDFPreview />}
           {activeView === 'comparison'      && <ComparisonPage />}
           {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} onEditVersion={handleEditVersion} />}
-          {activeView === 'cylinders'       && <ManageCylinders isAdmin={isAdmin} />}
-          {activeView === 'substrates'      && <ManageSubstrates isAdmin={isAdmin} />}
+          {activeView === 'catalogue'               && isAdmin && <CatalogueManagement isAdmin={isAdmin} />}
+          {activeView === 'notification-management' && isAdmin && <NotificationManagementPage currentUser={currentUser} />}
           {activeView === 'client-orders'   && <CustomerOrdersPage />}
           {activeView === 'mail-management' && <MailManagementPage />}
           {activeView === 'user-management' && isAdmin && <UserManagementPage currentUser={currentUser} />}

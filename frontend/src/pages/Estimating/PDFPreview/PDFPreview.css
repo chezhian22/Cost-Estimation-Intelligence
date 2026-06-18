@@ -20,7 +20,7 @@
   letter-spacing: -0.02em;
   margin: 0 0 0.2rem;
 }
-.pp-sub { font-size: 0.78rem; color: var(--text-muted); margin: 0; }
+.pp-sub { font-size: 0.78rem; color: var(--text-dim); margin: 0; }
 
 .pp-btn-generate {
   display: inline-flex;
@@ -42,7 +42,7 @@
 
 /* ── iframe wrapper ── */
 .pp-iframe-wrap {
-  background: #f0f2f5;
+  background: var(--bg-raised);
   border-radius: 8px;
   padding: 24px 16px;
   overflow: hidden;

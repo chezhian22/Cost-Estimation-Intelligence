@@ -17,6 +17,7 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
   const [dropdownOpen, setDropdownOpen]     = useState(false)
   const [selectedClient, setSelectedClient] = useState(null)
   const [orders, setOrders]                 = useState([])
+  const [completedOrderIds, setCompletedOrderIds] = useState(new Set())
   const [selectedOrder, setSelectedOrder]   = useState(null)
   const wrapRef = useRef(null)
 
@@ -44,8 +45,20 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
   }, [])
 
   useEffect(() => {
-    if (!selectedClient) { setOrders([]); return }
-    api.getOrders(selectedClient.id).then(setOrders).catch((e) => toast.error(e.message || 'Failed to load orders'))
+    if (!selectedClient) { setOrders([]); setCompletedOrderIds(new Set()); return }
+    api.getOrders(selectedClient.id).then(async (os) => {
+      setOrders(os)
+      const calcsPerOrder = await Promise.all(
+        os.map((o) => api.getOrderCalculations(o.id).catch(() => []))
+      )
+      const completed = new Set()
+      os.forEach((o, i) => {
+        if (calcsPerOrder[i].some((c) => c.status === 'confirmed' && c.client_status === 'approved')) {
+          completed.add(o.id)
+        }
+      })
+      setCompletedOrderIds(completed)
+    }).catch((e) => toast.error(e.message || 'Failed to load orders'))
   }, [selectedClient])
 
   useEffect(() => {
@@ -294,67 +307,88 @@ export default function ClientOrderSelector({ onClientChange, onOrderChange, fie
       {selectedClient && (
         <div className="field order-section">
           <label className="field-label">◈ Order <span className="field-required">*</span></label>
-          {orders.length === 0 ? (
-            <div className="no-order-note">No orders yet — create one below.</div>
-          ) : editingOrder ? (
-            <form className="cos-inline-form" onSubmit={handleRenameOrder}>
-              <input
-                className="cos-inline-input"
-                type="text"
-                value={editOrderName}
-                onChange={(e) => setEditOrderName(e.target.value)}
-                disabled={renameBusy}
-                autoFocus
-                maxLength={200}
-              />
-              {renameErr && <div className="cos-inline-err">{renameErr}</div>}
-              <div className="cos-inline-actions">
-                <button
-                  className="cos-inline-btn cos-inline-btn--primary"
-                  type="submit"
-                  disabled={renameBusy || !editOrderName.trim()}
-                >
-                  {renameBusy ? '…' : 'Save'}
-                </button>
-                <button
-                  className="cos-inline-btn"
-                  type="button"
-                  onClick={cancelRenameOrder}
-                  disabled={renameBusy}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <select
-                style={{ flex: 1 }}
-                className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
-                value={selectedOrder?.id ?? ''}
-                onChange={(e) => {
-                  const id = parseInt(e.target.value, 10)
-                  const o = orders.find((x) => x.id === id)
-                  if (o) pickOrder(o)
-                }}
-              >
-                <option value="">— Select an order —</option>
-                {orders.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-              {selectedOrder && (
-                <button
-                  type="button"
-                  className="combobox-clear"
-                  onClick={startRenameOrder}
-                  title="Rename order"
-                >
-                  ✎
-                </button>
-              )}
-            </div>
-          )}
+          {(() => {
+            const openOrders = orders.filter((o) => !completedOrderIds.has(o.id))
+            const hiddenCount = orders.length - openOrders.length
+            if (orders.length === 0) {
+              return <div className="no-order-note">No orders yet — create one below.</div>
+            }
+            if (editingOrder) {
+              return (
+                <form className="cos-inline-form" onSubmit={handleRenameOrder}>
+                  <input
+                    className="cos-inline-input"
+                    type="text"
+                    value={editOrderName}
+                    onChange={(e) => setEditOrderName(e.target.value)}
+                    disabled={renameBusy}
+                    autoFocus
+                    maxLength={200}
+                  />
+                  {renameErr && <div className="cos-inline-err">{renameErr}</div>}
+                  <div className="cos-inline-actions">
+                    <button
+                      className="cos-inline-btn cos-inline-btn--primary"
+                      type="submit"
+                      disabled={renameBusy || !editOrderName.trim()}
+                    >
+                      {renameBusy ? '…' : 'Save'}
+                    </button>
+                    <button
+                      className="cos-inline-btn"
+                      type="button"
+                      onClick={cancelRenameOrder}
+                      disabled={renameBusy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )
+            }
+            return (
+              <>
+                {openOrders.length === 0 ? (
+                  <div className="no-order-note">
+                    All orders for this client are fully approved and completed.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <select
+                      style={{ flex: 1 }}
+                      className={fieldErrors.order && !selectedOrder ? 'input-error' : ''}
+                      value={selectedOrder?.id ?? ''}
+                      onChange={(e) => {
+                        const id = parseInt(e.target.value, 10)
+                        const o = openOrders.find((x) => x.id === id)
+                        if (o) pickOrder(o)
+                      }}
+                    >
+                      <option value="">— Select an order —</option>
+                      {openOrders.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                    {selectedOrder && (
+                      <button
+                        type="button"
+                        className="combobox-clear"
+                        onClick={startRenameOrder}
+                        title="Rename order"
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
+                )}
+                {hiddenCount > 0 && (
+                  <div className="cos-completed-note">
+                    ✓ {hiddenCount} completed order{hiddenCount !== 1 ? 's' : ''} hidden
+                  </div>
+                )}
+              </>
+            )
+          })()}
           {fieldErrors.order && !selectedOrder && (
             <span className="field-error">{fieldErrors.order}</span>
           )}

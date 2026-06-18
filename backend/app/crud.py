@@ -250,9 +250,52 @@ def set_teeth_availability(
 
 
 # ── Calculations ─────────────────────────────────────────────────────────────
+def _build_ref_code(db: Session, client_id, order_id) -> Optional[str]:
+    """Generate a unique reference code like AR03-ORD001-Q1.
+    AR   = first 2 chars of client name
+    03   = client's global sequence number (makes same-prefix clients unique)
+    ORD  = first 3 chars of order name
+    001  = sequential order number within client (padded)
+    Q1   = sequential quote number within order
+    """
+    if not order_id:
+        return None
+    client = get_client(db, client_id) if client_id else None
+    order  = get_order(db, order_id)
+
+    c_name = ((client.name if client else '') or 'XX').replace(' ', '')
+    c_slug = c_name[:2].upper()
+
+    # Client global sequence number — unique even if prefix collides
+    if client_id:
+        client_seq = db.query(models.Client).filter(models.Client.id <= client_id).count()
+    else:
+        client_seq = 0
+
+    o_slug = ((order.name if order else '') or 'ORD').replace(' ', '')[:3].upper()
+
+    # Order sequence number within this client
+    if client_id and order:
+        order_seq = db.query(models.Order).filter(
+            models.Order.client_id == client_id,
+            models.Order.id <= order.id,
+        ).count()
+    else:
+        order_seq = 1
+
+    # Quote sequence number within this order
+    quote_seq = db.query(models.Calculation).filter(
+        models.Calculation.order_id == order_id
+    ).count() + 1
+
+    client_part = f"{c_slug}{str(client_seq).zfill(2)}" if client_seq else 'XX'
+    return f"{client_part}-{o_slug}{str(order_seq).zfill(3)}-Q{quote_seq}"
+
+
 def save_calculation(
     db: Session, req: schemas.CalculationRequest, result: dict, user_id: int = None
 ) -> models.Calculation:
+    ref_code = _build_ref_code(db, req.client_id, req.order_id)
     obj = models.Calculation(
         width=req.width,
         height=req.height,
@@ -264,6 +307,7 @@ def save_calculation(
         selected_teeth=req.selected_teeth if req.selected_teeth is not None else result["matched"]["matched_teeth"],
         exchange_rate=req.exchange_rate,
         order_qty=req.order_qty,
+        ref_code=ref_code,
         result=result,
         client_id=req.client_id,
         order_id=req.order_id,
@@ -329,9 +373,14 @@ def create_version(
         .filter(models.CalculationVersion.calculation_id == calc_id)
         .count()
     )
+    version_number = count + 1
+    parent = get_calculation(db, calc_id)
+    parent_ref = parent.ref_code if parent else None
+    ref_code = f"{parent_ref}-V{version_number}" if parent_ref else None
     obj = models.CalculationVersion(
         calculation_id=calc_id,
-        version_number=count + 1,
+        version_number=version_number,
+        ref_code=ref_code,
         width=req.width,
         height=req.height,
         yield_pct=req.yield_pct,
@@ -382,7 +431,7 @@ def _unconfirm_order(db: Session, order_id: int, except_calc_id: int = None, exc
 
 
 def update_version_status(
-    db: Session, version_id: int, status: str
+    db: Session, version_id: int, status: str, user_id: int = None, remarks: str = None
 ) -> Optional[models.CalculationVersion]:
     obj = db.query(models.CalculationVersion).filter(models.CalculationVersion.id == version_id).first()
     if not obj:
@@ -394,13 +443,17 @@ def update_version_status(
         if parent and parent.order_id:
             _unconfirm_order(db, parent.order_id, except_version_id=version_id)
         else:
-            # No order context — unconfirm sibling versions only
             db.query(models.CalculationVersion).filter(
                 models.CalculationVersion.calculation_id == obj.calculation_id,
                 models.CalculationVersion.id != version_id,
                 models.CalculationVersion.status == "confirmed",
             ).update({"status": "pending"})
+    from datetime import datetime as _dt
     obj.status = status
+    if user_id:
+        obj.status_changed_by_id = user_id
+    obj.status_changed_at = _dt.utcnow()
+    obj.status_remarks = remarks
     db.commit()
     db.refresh(obj)
     return obj
@@ -489,7 +542,7 @@ def update_email_log_status(
 
 
 def update_calculation_status(
-    db: Session, calc_id: int, status: str, user_id: int = None
+    db: Session, calc_id: int, status: str, user_id: int = None, remarks: str = None
 ) -> Optional[models.Calculation]:
     from datetime import datetime as _dt
     obj = db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
@@ -498,8 +551,131 @@ def update_calculation_status(
     if status == "confirmed" and obj.order_id:
         _unconfirm_order(db, obj.order_id, except_calc_id=calc_id)
     obj.status = status
-    if user_id: obj.updated_by_id = user_id
+    if user_id:
+        obj.updated_by_id = user_id
+        obj.status_changed_by_id = user_id
+    obj.status_changed_at = _dt.utcnow()
+    obj.status_remarks = remarks
     obj.updated_at = _dt.utcnow()
     db.commit()
     db.refresh(obj)
     return obj
+
+
+def update_client_status(
+    db: Session, calc_id: int, status: str, user_id: int = None
+) -> Optional[models.Calculation]:
+    from datetime import datetime as _dt
+    obj = db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
+    if not obj:
+        return None
+    obj.client_status = status
+    if user_id:
+        obj.client_status_changed_by_id = user_id
+    obj.client_status_changed_at = _dt.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def update_version_client_status(
+    db: Session, version_id: int, status: str, user_id: int = None
+) -> Optional[models.CalculationVersion]:
+    from datetime import datetime as _dt
+    obj = db.query(models.CalculationVersion).filter(models.CalculationVersion.id == version_id).first()
+    if not obj:
+        return None
+    obj.client_status = status
+    if user_id:
+        obj.client_status_changed_by_id = user_id
+    obj.client_status_changed_at = _dt.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+def list_notifications(db: Session) -> List[models.Notification]:
+    return (
+        db.query(models.Notification)
+        .order_by(models.Notification.updated_at.desc())
+        .limit(50)
+        .all()
+    )
+
+
+def list_notifications_admin(db: Session) -> List[models.Notification]:
+    return (
+        db.query(models.Notification)
+        .order_by(models.Notification.updated_at.desc())
+        .limit(200)
+        .all()
+    )
+
+
+def get_unread_count(db: Session) -> int:
+    return db.query(models.Notification).filter(models.Notification.is_read == False).count()
+
+
+def mark_notification_read(db: Session, notif_id: int, user_id: int) -> Optional[models.Notification]:
+    from datetime import datetime as _dt
+    obj = db.query(models.Notification).filter(models.Notification.id == notif_id).first()
+    if not obj:
+        return None
+    if not obj.is_read:
+        obj.is_read    = True
+        obj.read_by_id = user_id
+        obj.read_at    = _dt.utcnow()
+        db.commit()
+        db.refresh(obj)
+    return obj
+
+
+def mark_all_notifications_read(db: Session, user_id: int) -> None:
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+    db.query(models.Notification).filter(
+        models.Notification.is_read == False
+    ).update({"is_read": True, "read_by_id": user_id, "read_at": now})
+    db.commit()
+
+
+def upsert_order_notification(
+    db: Session, order_id: int, client_id: Optional[int], title: str, message: str
+) -> models.Notification:
+    from datetime import datetime as _dt
+    existing = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.order_id == order_id,
+            models.Notification.notification_type == "unconfirmed_quote",
+        )
+        .first()
+    )
+    if existing:
+        existing.updated_at = _dt.utcnow()
+        existing.is_read    = False
+        existing.read_by_id = None
+        existing.read_at    = None
+        db.commit()
+        db.refresh(existing)
+        return existing
+    obj = models.Notification(
+        title=title,
+        message=message,
+        client_id=client_id,
+        order_id=order_id,
+        notification_type="unconfirmed_quote",
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def resolve_order_notifications(db: Session, order_id: int) -> None:
+    db.query(models.Notification).filter(
+        models.Notification.order_id == order_id,
+        models.Notification.notification_type == "unconfirmed_quote",
+    ).delete()
+    db.commit()

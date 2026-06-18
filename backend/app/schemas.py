@@ -343,9 +343,10 @@ class StatusUpdate(BaseModel):
         description="New status value. Must be one of: `pending`, `confirmed`, `rejected`.",
         examples=["confirmed"],
     )
+    remarks: Optional[str] = Field(None, description="Optional note explaining the status change. Required when rejecting.")
 
     model_config = {
-        "json_schema_extra": {"example": {"status": "confirmed"}}
+        "json_schema_extra": {"example": {"status": "confirmed", "remarks": "Approved by management"}}
     }
 
 
@@ -356,6 +357,7 @@ class CalculationHistoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int                    = Field(..., description="Database ID.")
+    ref_code: Optional[str]    = Field(None, description="Short reference code e.g. KIN-ORD-001.")
     width: float               = Field(..., description="Label width that was calculated (mm).")
     height: float              = Field(..., description="Label height that was calculated (mm).")
     yield_pct: float           = Field(..., description="Yield percentage used (higher = less waste).")
@@ -374,9 +376,15 @@ class CalculationHistoryOut(BaseModel):
     status: str                = Field("pending", description="Quote status: `pending`, `confirmed`, or `rejected`.")
     pricing: Optional[dict]    = Field(None, description="Pricing summary from the saved result JSON.")
     confirmed_version_number: Optional[int] = Field(None, description="Version number of the confirmed edit, if any version (not the base calc) is approved.")
-    created_by_name: Optional[str] = Field(None, description="Username of who created this calculation.")
-    updated_by_name: Optional[str] = Field(None, description="Username of who last updated this calculation.")
-    updated_at: Optional[datetime]  = Field(None, description="When this calculation was last updated.")
+    created_by_name:        Optional[str]      = Field(None, description="Username of who created this calculation.")
+    updated_by_name:        Optional[str]      = Field(None, description="Username of who last updated this calculation.")
+    updated_at:             Optional[datetime] = Field(None, description="When this calculation was last updated.")
+    status_changed_by_name: Optional[str]      = Field(None, description="Username of who last changed the status.")
+    status_changed_at:      Optional[datetime] = Field(None, description="When the status was last changed.")
+    status_remarks:         Optional[str]      = Field(None, description="Remarks entered when status was changed.")
+    client_status:                 Optional[str]      = Field(None, description="Client approval status: pending | approved | rejected.")
+    client_status_changed_by_name: Optional[str]      = Field(None, description="Username of who last updated client status.")
+    client_status_changed_at:      Optional[datetime] = Field(None, description="When client status was last updated.")
 
 
 # ── Calculation version ──────────────────────────────────────────────────────
@@ -398,10 +406,16 @@ class CalculationVersionOut(BaseModel):
     selected_teeth: Optional[int]  = None
     exchange_rate:  float
     order_qty:      Optional[int]  = None
-    status:         str
-    created_by_name: Optional[str] = None
-    created_at:     datetime
-    result:         Optional[dict] = None
+    status:                        str
+    created_by_name:               Optional[str]      = None
+    status_changed_by_name:        Optional[str]      = None
+    status_changed_at:             Optional[datetime] = None
+    status_remarks:                Optional[str]      = None
+    client_status:                 Optional[str]      = None
+    client_status_changed_by_name: Optional[str]      = None
+    client_status_changed_at:      Optional[datetime] = None
+    created_at:                    datetime
+    result:                        Optional[dict] = None
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -419,8 +433,9 @@ class LoginResponse(BaseModel):
 class UserCreate(BaseModel):
     username: str          = Field(..., min_length=2, max_length=80)
     email:    str          = Field(..., max_length=200)
-    password: str          = Field(..., min_length=4)
+    password: Optional[str] = Field(None, min_length=4)
     role:     str          = Field("user", pattern="^(admin|user)$")
+    app_url:  Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -525,3 +540,24 @@ class ChangePasswordRequest(BaseModel):
 
 
 LoginResponse.model_rebuild()
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:                int
+    title:             str
+    message:           str
+    client_id:         Optional[int]      = None
+    order_id:          Optional[int]      = None
+    notification_type: str
+    is_read:           bool
+    created_at:        datetime
+    updated_at:        datetime
+    client_name:       Optional[str]      = None
+    order_name:        Optional[str]      = None
+
+
+class UnreadCountOut(BaseModel):
+    count: int

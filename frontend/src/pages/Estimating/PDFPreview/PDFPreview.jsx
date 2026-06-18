@@ -34,6 +34,7 @@ const SAMPLE = {
 
 export default function PDFPreview() {
   const [companySettings, setCompanySettings] = useState({})
+  const [theme, setTheme] = useState(document.documentElement.getAttribute('data-theme') || 'dark')
   const iframeRef = useRef(null)
 
   useEffect(() => {
@@ -41,30 +42,41 @@ export default function PDFPreview() {
   }, [])
 
   useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.getAttribute('data-theme') || 'dark')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const iframe = iframeRef.current
     if (!iframe) return
     const html = buildPDFHtml(SAMPLE, companySettings)
-    // Strip the print-bar buttons so the preview is clean
-    const previewHtml = html.replace(/<div class="print-bar">[\s\S]*?<\/div>/, '')
+    let previewHtml = html.replace(/<div class="print-bar">[\s\S]*?<\/div>/, '')
+    if (theme === 'dark') {
+      previewHtml = previewHtml.replace(
+        '</head>',
+        '<style>body{background:#1a2035!important}</style></head>'
+      )
+    }
     const doc = iframe.contentDocument || iframe.contentWindow.document
     doc.open()
     doc.write(previewHtml)
     doc.close()
-    // Fit iframe height to its content once rendered
     const resize = () => {
-      try {
-        iframe.style.height = doc.documentElement.scrollHeight + 'px'
-      } catch (_) {}
+      try { iframe.style.height = doc.documentElement.scrollHeight + 'px' } catch (_) {}
     }
     iframe.onload = resize
     setTimeout(resize, 120)
-  }, [companySettings])
+  }, [companySettings, theme])
+  
 
   return (
     <div className="pp-page">
       <div className="pp-page-header">
         <div>
-          <h1 className="pp-title">PDF Quote Preview</h1>
+          <h1 className="pp-title">Invoice Preview</h1>
           <p className="pp-sub">Sample client quotation — no internal cost details shown</p>
         </div>
         <button className="pp-btn-generate" onClick={() => generatePDF(SAMPLE, companySettings)}>

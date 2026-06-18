@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { api } from '../api'
 import { toast } from '../utils/toast'
 
@@ -32,7 +33,8 @@ function makeSlot(i) {
     substrate_price: 45,
     foil_cost: 0,
     exchange_rate: 85,
-    quoteResult: null,   // set when loaded from a saved calc
+    quoteResult: null,
+    quoteId: null,
   }
 }
 
@@ -55,7 +57,7 @@ function CountPicker({ count, onChange }) {
 }
 
 // ── Quote loader (client → order → saved calc) ────────────────────────────────
-function QuoteLoader({ onLoaded }) {
+function QuoteLoader({ onLoaded, takenIds = [] }) {
   const [clients, setClients]   = useState([])
   const [orders, setOrders]     = useState([])
   const [calcs, setCalcs]       = useState([])
@@ -114,14 +116,18 @@ function QuoteLoader({ onLoaded }) {
           <label className="field-label">◎ Quote</label>
           <select onChange={(e) => handleCalc(e.target.value)} defaultValue="">
             <option value="">— Select quote —</option>
-            {calcs.map((c) => (
-              <option key={c.id} value={c.id}>
-                {fmt(c.width, 1)} × {fmt(c.height, 1)} mm
-                {c.substrate_name ? ` · ${c.substrate_name}` : ''}
-                {' · '}
-                {c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN') : ''}
-              </option>
-            ))}
+            {[...calcs].reverse().map((c, i) => {
+              const taken = takenIds.includes(c.id)
+              return (
+                <option key={c.id} value={c.id} disabled={taken}>
+                  {taken ? '✕ ' : ''}
+                  {c.ref_code || `Quote ${i + 1}`}
+                  {c.substrate_name ? ` · ${c.substrate_name}` : ''}
+                  {c.created_at ? ` · ${new Date(c.created_at).toLocaleDateString('en-IN')}` : ''}
+                  {taken ? ' (already selected)' : ''}
+                </option>
+              )
+            })}
           </select>
         </div>
       )}
@@ -132,18 +138,17 @@ function QuoteLoader({ onLoaded }) {
 }
 
 // ── Single slot card ──────────────────────────────────────────────────────────
-function SlotCard({ index, slot, color, onChange }) {
+function SlotCard({ index, slot, color, onChange, takenIds }) {
   const [mode, setMode] = useState('manual')
 
   function switchMode(m) {
     setMode(m)
-    if (m === 'manual') onChange({ quoteResult: null })
+    if (m === 'manual') onChange({ quoteResult: null, quoteId: null })
   }
 
   function onQuoteLoaded(full) {
-    // full = { id, width, height, yield_pct, substrate_name, substrate_price,
-    //           foil_cost, exchange_rate, result: { rows, matched, pricing } }
     onChange({
+      label:           full.ref_code || full.order_name || '',
       width:           full.width,
       height:          full.height,
       yield_pct:       full.yield_pct,
@@ -152,6 +157,7 @@ function SlotCard({ index, slot, color, onChange }) {
       foil_cost:       full.foil_cost,
       exchange_rate:   full.exchange_rate,
       quoteResult:     full.result ?? null,
+      quoteId:         full.id ?? null,
     })
   }
 
@@ -160,7 +166,7 @@ function SlotCard({ index, slot, color, onChange }) {
       {/* slot header */}
       <div className="cmp-slot-header">
         <span className="cmp-slot-badge" style={{ background: color + '22', borderColor: color + '55', color }}>
-          Quote {LABELS[index]}
+          {slot.label || `Quote ${LABELS[index]}`}
         </span>
         <div className="cmp-slot-tabs">
           <button className={`cmp-tab${mode === 'manual' ? ' active' : ''}`} onClick={() => switchMode('manual')}>
@@ -181,7 +187,7 @@ function SlotCard({ index, slot, color, onChange }) {
         </div>
 
         {mode === 'quote' ? (
-          <QuoteLoader onLoaded={onQuoteLoaded} />
+          <QuoteLoader onLoaded={onQuoteLoaded} takenIds={takenIds} />
         ) : (
           <div className="field-stack">
             <div className="field">
@@ -270,232 +276,23 @@ function SlotCard({ index, slot, color, onChange }) {
   )
 }
 
-// ── Profit bar chart (SVG) ────────────────────────────────────────────────────
-const PROFIT_RATES = [
-  { key: 'rate_15',  label: '1 : 1.5'  },
-  { key: 'rate_175', label: '1 : 1.75' },
-  { key: 'rate_2',   label: '1 : 2'    },
-]
-
-function niceAxisMax(rawMax) {
-  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)))
-  const steps = [1, 2, 2.5, 5, 10]
-  for (const s of steps) {
-    const candidate = Math.ceil(rawMax / (magnitude * s)) * magnitude * s
-    if (candidate >= rawMax) return candidate
-  }
-  return Math.ceil(rawMax / magnitude) * magnitude
-}
-
-function ProfitBarChart({ slots, results }) {
-  const n = slots.length
-  const W = 620, H = 280
-  const PL = 54, PR = 14, PT = 44, PB = 38
-  const chartW = W - PL - PR
-  const chartH = H - PT - PB
-
-  const costs = results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2)
-
-  const groups = PROFIT_RATES.map(({ key, label }) => ({
-    label,
-    bars: results.map((r, qi) => {
-      const sell   = r?.pricing?.[key] ?? 0
-      const cost   = costs[qi]
-      const profit = Math.max(0, sell - cost)
-      const margin = sell > 0 ? Math.round((profit / sell) * 100) : 0
-      return { sell, cost, profit, margin }
-    }),
-  }))
-
-  const rawMax  = Math.max(...groups.flatMap((g) => g.bars.map((b) => b.profit)), 1)
-  const axisMax = niceAxisMax(rawMax)
-
-  const Y_TICKS = 4
-  const yTicks  = Array.from({ length: Y_TICKS + 1 }, (_, k) => (axisMax / Y_TICKS) * k)
-
-  const groupW   = chartW / groups.length
-  const barGap   = 8
-  const barW     = Math.min(46, (groupW - 20 - barGap * (n - 1)) / n)
-  const barsSpan = barW * n + barGap * (n - 1)
-
-  const bx  = (gi, qi) => PL + gi * groupW + (groupW - barsSpan) / 2 + qi * (barW + barGap)
-  const toY = (val)    => PT + chartH - (val / axisMax) * chartH
-
-  return (
-    <section className="card cmp-results-card">
-      <div className="card-header">
-        <div className="card-icon-wrap">₹</div>
-        <span className="card-title">Profit per 1000 Labels — by Rate</span>
-      </div>
-
-      {/* legend */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 16px', padding: '8px 1.4rem 4px' }}>
-        {slots.map((s, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#bbb' }}>
-            <div style={{ width: 10, height: 10, borderRadius: 2, background: SLOT_COLORS[i] }} />
-            <span style={{ color: SLOT_COLORS[i], fontWeight: 600 }}>{s.label || `Quote ${LABELS[i]}`}</span>
-          </div>
-        ))}
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#555' }}>profit = sell − production cost</span>
-      </div>
-
-      {/* bar chart */}
-      <div style={{ padding: '2px 1.4rem 0', display: 'flex', justifyContent: 'center' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 640, display: 'block' }}>
-
-          {yTicks.map((val, k) => {
-            const y = toY(val)
-            return (
-              <g key={k}>
-                <line x1={PL} y1={y} x2={W - PR} y2={y}
-                  stroke={k === 0 ? 'rgba(128,128,128,0.3)' : 'rgba(128,128,128,0.08)'}
-                  strokeWidth={0.8} strokeDasharray={k === 0 ? 'none' : '3 3'} />
-                <text x={PL - 5} y={y + 3.5} textAnchor="end" fontSize={11} fill="#666"
-                  fontFamily="JetBrains Mono,monospace">
-                  {val === 0 ? '0' : `₹${Math.round(val)}`}
-                </text>
-              </g>
-            )
-          })}
-
-          {groups.map((group, gi) => (
-            <g key={gi}>
-              <text x={PL + gi * groupW + groupW / 2} y={H - 10}
-                textAnchor="middle" fontSize={12} fill="#888" fontFamily="Inter,sans-serif">
-                {group.label}
-              </text>
-
-              {group.bars.map(({ profit, margin }, qi) => {
-                const color    = SLOT_COLORS[qi]
-                const x        = bx(gi, qi)
-                const profitH  = (profit / axisMax) * chartH
-                const baseline = PT + chartH
-
-                return (
-                  <g key={qi}>
-                    <rect x={x} y={baseline - profitH} width={barW} height={profitH}
-                      fill={color} stroke={color} strokeWidth={0.7} rx={2} />
-                    {/* profit value above bar */}
-                    <text x={x + barW / 2} y={baseline - profitH - 14}
-                      textAnchor="middle" fontSize={11} fill={color}
-                      fontFamily="JetBrains Mono,monospace" fontWeight="700">
-                      ₹{Math.round(profit)}
-                    </text>
-                    {/* margin % below profit value */}
-                    <text x={x + barW / 2} y={baseline - profitH - 4}
-                      textAnchor="middle" fontSize={9.5} fill={color} opacity={0.7}
-                      fontFamily="Inter,sans-serif">
-                      {margin}%
-                    </text>
-                  </g>
-                )
-              })}
-            </g>
-          ))}
-
-        </svg>
-      </div>
-
-      {/* calculation breakdown */}
-      <div style={{ padding: '0.5rem 1.4rem 1rem', overflowX: 'auto' }}>
-        <div style={{ fontSize: 10, color: '#555', marginBottom: 6, fontFamily: 'Inter, sans-serif' }}>
-          Profit = Selling Price − Production Cost &nbsp;(per 1000 labels)
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <th style={{ textAlign: 'left', padding: '4px 8px', color: '#555', fontWeight: 500 }}>Rate</th>
-              {slots.map((s, i) => (
-                <th key={i} colSpan={4} style={{ textAlign: 'center', padding: '4px 8px', color: SLOT_COLORS[i], fontWeight: 600 }}>
-                  {s.label || `Quote ${LABELS[i]}`}
-                </th>
-              ))}
-            </tr>
-            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <th />
-              {slots.map((_, i) => (
-                <React.Fragment key={i}>
-                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>Sell ₹</th>
-                  <th style={{ textAlign: 'center', padding: '2px 2px', color: '#444', fontWeight: 400, fontSize: 10 }}>−</th>
-                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>Cost ₹</th>
-                  <th style={{ textAlign: 'right', padding: '2px 5px', color: '#555', fontWeight: 400, fontSize: 10 }}>= Profit ₹</th>
-                </React.Fragment>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group, gi) => (
-              <tr key={gi} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <td style={{ padding: '5px 8px', color: '#777', whiteSpace: 'nowrap' }}>{group.label}</td>
-                {group.bars.map(({ sell, cost, profit, margin }, qi) => (
-                  <React.Fragment key={qi}>
-                    <td style={{ textAlign: 'right', padding: '5px 5px', color: '#aaa', fontFamily: 'JetBrains Mono, monospace' }}>
-                      {Math.round(sell)}
-                    </td>
-                    <td style={{ textAlign: 'center', padding: '5px 2px', color: '#444' }}>−</td>
-                    <td style={{ textAlign: 'right', padding: '5px 5px', color: '#666', fontFamily: 'JetBrains Mono, monospace' }}>
-                      {Math.round(cost)}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '5px 5px', fontFamily: 'JetBrains Mono, monospace',
-                      color: profit > 0 ? '#34d399' : '#f87171', fontWeight: 600 }}>
-                      {Math.round(profit)}
-                      <span style={{ color: '#555', fontSize: 9, marginLeft: 3, fontWeight: 400 }}>({margin}%)</span>
-                    </td>
-                  </React.Fragment>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
 // ── Comparison results table ──────────────────────────────────────────────────
 function ResultsTable({ slots, results }) {
   const mRows = results.map((r) => (r ? r.rows[r.matched.index] : null))
 
-  function bestOf(vals, better) {
-    const clean = vals.filter((v) => v != null)
-    if (clean.length < 2) return null
-    return better === 'max' ? Math.max(...clean) : Math.min(...clean)
-  }
-
-  function NumCell({ vals, i, better, display }) {
-    const best = bestOf(vals, better)
-    const v    = vals[i]
-    const star = v != null && v === best
-    return (
-      <td className={star ? 'cmp-best-cell' : ''}>
-        {v != null ? display(v) : '—'}
-        {star && <span className="cmp-best-star"> ★</span>}
-      </td>
-    )
-  }
-
   const pricingRows = [
-    // ── Efficiency ──
-    { label: 'Labels / m²',             vals: results.map((r) => r?.pricing?.labels_sqm),                    better: 'max', display: (v) => fmt(v) },
-    { label: 'Adj. Labels / m²',        vals: results.map((r) => r?.pricing?.adj_labels),                    better: 'max', display: (v) => fmt(v) },
-    // ── Production cost (substrate cost per 1000 labels) ──
-    { label: 'Production Cost / 1000',  vals: results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2),             better: 'min', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Production Cost / Label', vals: results.map((r) => (r?.pricing?.rate_2 ?? 0) / 2000),          better: 'min', display: (v) => `₹ ${fmt(v, 4)}` },
-    // ── Selling rates ──
-    { label: 'Selling Rate 1 : 1.5',    vals: results.map((r) => r?.pricing?.rate_15),                       better: 'min', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Selling Rate 1 : 1.75',   vals: results.map((r) => r?.pricing?.rate_175),                      better: 'min', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Selling Rate 1 : 2',      vals: results.map((r) => r?.pricing?.rate_2),                        better: 'min', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Selling Rate 1 : 2 ($)',  vals: results.map((r) => r?.pricing?.price_usd_1000),                better: 'min', display: (v) => `$ ${fmt(v, 3)}` },
-    // ── Profit per 1000 labels at each rate ──
-    { label: 'Profit at 1 : 1.5',       vals: results.map((r) => (r?.pricing?.rate_15  ?? 0) - (r?.pricing?.rate_2 ?? 0) / 2), better: 'max', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Profit at 1 : 1.75',      vals: results.map((r) => (r?.pricing?.rate_175 ?? 0) - (r?.pricing?.rate_2 ?? 0) / 2), better: 'max', display: (v) => `₹ ${fmt(v)}` },
-    { label: 'Profit at 1 : 2',         vals: results.map((r) => (r?.pricing?.rate_2   ?? 0) / 2),           better: 'max', display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Labels / m²',            vals: results.map((r) => r?.pricing?.labels_sqm),       display: (v) => fmt(v) },
+    { label: 'Adj. Labels / m²',       vals: results.map((r) => r?.pricing?.adj_labels),        display: (v) => fmt(v) },
+    { label: 'Selling Rate 1 : 1.5',   vals: results.map((r) => r?.pricing?.rate_15),           display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 1.75',  vals: results.map((r) => r?.pricing?.rate_175),          display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 2',     vals: results.map((r) => r?.pricing?.rate_2),            display: (v) => `₹ ${fmt(v)}` },
+    { label: 'Selling Rate 1 : 2 ($)', vals: results.map((r) => r?.pricing?.price_usd_1000),   display: (v) => `$ ${fmt(v, 3)}` },
   ]
 
   return (
     <section className="card cmp-results-card">
       <div className="card-header">
-        <div className="card-icon-wrap">★</div>
+        <div className="card-icon-wrap">⇄</div>
         <span className="card-title">Comparison Results</span>
       </div>
 
@@ -583,12 +380,12 @@ function ResultsTable({ slots, results }) {
             </tr>
 
             {/* ── Pricing ── */}
-            <tr className="cmp-section-row"><td colSpan={slots.length + 1}>Efficiency · Cost · Selling Rates · Profit</td></tr>
+            <tr className="cmp-section-row"><td colSpan={slots.length + 1}>Efficiency · Selling Rates</td></tr>
             {pricingRows.map((row) => (
               <tr key={row.label}>
                 <td style={{ textAlign: 'left' }}>{row.label}</td>
                 {row.vals.map((v, i) => (
-                  <NumCell key={i} vals={row.vals} i={i} better={row.better} display={row.display} />
+                  <td key={i}>{v != null ? row.display(v) : '—'}</td>
                 ))}
               </tr>
             ))}
@@ -656,6 +453,52 @@ export default function ComparisonPage() {
     s.quoteResult || (parseFloat(s.width) > 0 && parseFloat(s.height) > 0)
   )
 
+  function exportToExcel() {
+    if (!results) return
+    const headers = ['Metric', ...slots.map((s, i) => s.label || `Quote ${LABELS[i]}`)]
+    const mRows   = results.map((r) => (r ? r.rows[r.matched.index] : null))
+
+    const section = (title) => [title, ...slots.map(() => '')]
+
+    const rows = [
+      headers,
+      section('── Inputs ──'),
+      ['Label Size (mm)',        ...slots.map((s) => `${fmt(s.width,1)} × ${fmt(s.height,1)}`)],
+      ['Substrate',              ...slots.map((s) => s.substrate_name || '—')],
+      ['Yield %',                ...slots.map((s) => `${s.yield_pct ?? 85}%`)],
+      ['Substrate Price (₹/m²)', ...slots.map((s) => `₹ ${fmt(s.substrate_price)}`)],
+      ['Foil Cost (₹)',          ...slots.map((s) => `₹ ${fmt(s.foil_cost)}`)],
+      ['Exchange Rate (₹/$)',    ...slots.map((s) => `₹ ${fmt(s.exchange_rate, 0)}`)],
+      section('── Cylinder Match ──'),
+      ['Teeth',                  ...results.map((r) => r?.matched?.matched_teeth ?? '—')],
+      ['Matched Size (mm)',      ...results.map((r) => r?.matched ? `${fmt(r.matched.matched_width,1)} × ${fmt(r.matched.matched_height,1)}` : '—')],
+      ['Around × Across',        ...mRows.map((mr) => mr ? `${mr.around} × ${mr.across}` : '—')],
+      ['Labels / Repeat',        ...mRows.map((mr) => mr ? mr.around * mr.across : '—')],
+      ['Circumference (mm)',     ...mRows.map((mr) => mr ? fmt(mr.circumference) : '—')],
+      ['Paper Size (mm)',        ...mRows.map((mr) => mr ? mr.paper_size : '—')],
+      ['Paper +20 (mm)',         ...mRows.map((mr) => mr ? mr.paper_plus_20 : '—')],
+      section('── Efficiency · Selling Rates ──'),
+      ['Labels / m²',            ...results.map((r) => r?.pricing?.labels_sqm != null ? fmt(r.pricing.labels_sqm) : '—')],
+      ['Adj. Labels / m²',       ...results.map((r) => r?.pricing?.adj_labels  != null ? fmt(r.pricing.adj_labels)  : '—')],
+      ['Selling Rate 1:1.5',     ...results.map((r) => r?.pricing?.rate_15     != null ? `₹ ${fmt(r.pricing.rate_15)}`   : '—')],
+      ['Selling Rate 1:1.75',    ...results.map((r) => r?.pricing?.rate_175    != null ? `₹ ${fmt(r.pricing.rate_175)}`  : '—')],
+      ['Selling Rate 1:2',       ...results.map((r) => r?.pricing?.rate_2      != null ? `₹ ${fmt(r.pricing.rate_2)}`    : '—')],
+      ['Selling Rate 1:2 ($)',   ...results.map((r) => r?.pricing?.price_usd_1000 != null ? `$ ${fmt(r.pricing.price_usd_1000, 3)}` : '—')],
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 26 },
+      ...slots.map(() => ({ wch: 20 })),
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Quote Comparison')
+    XLSX.writeFile(wb, `quote-comparison-${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
   return (
     <div className="cmp-page">
       {/* count picker at top */}
@@ -679,30 +522,40 @@ export default function ComparisonPage() {
             slot={slot}
             color={SLOT_COLORS[i]}
             onChange={(patch) => updateSlot(i, patch)}
+            takenIds={slots.filter((_, idx) => idx !== i).map(s => s.quoteId).filter(Boolean)}
           />
         ))}
       </div>
 
-      {/* compare button */}
+      {/* compare + export buttons */}
       <div className="cmp-compare-row">
-        {error && <div className="error-banner" style={{ flex: 1 }}>⚠ {error}</div>}
-        <button
-          className="calc-btn cmp-compare-btn"
-          onClick={handleCompare}
-          disabled={comparing || !canCompare}
-        >
-          {comparing
-            ? <><span className="calc-btn-spinner" /> Comparing…</>
-            : <>⇄ Compare {count} Quotes</>}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {error && <div className="error-banner">⚠ {error}</div>}
+          <button
+            className="calc-btn cmp-compare-btn"
+            onClick={handleCompare}
+            disabled={comparing || !canCompare}
+          >
+            {comparing
+              ? <><span className="calc-btn-spinner" /> Comparing…</>
+              : <>⇄ Compare {count} Quotes</>}
+          </button>
+        </div>
+        {results && (
+          <button className="cmp-export-btn" onClick={exportToExcel} title="Download comparison as Excel">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Excel
+          </button>
+        )}
       </div>
 
       {/* results */}
       {results && (
-        <>
-          <ProfitBarChart slots={slots} results={results} />
-          <ResultsTable  slots={slots} results={results} />
-        </>
+        <ResultsTable slots={slots} results={results} />
       )}
     </div>
   )

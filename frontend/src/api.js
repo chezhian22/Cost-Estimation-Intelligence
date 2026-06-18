@@ -22,9 +22,10 @@ export const api = {
 
   // User management (admin only)
   getUsers:   () => request('/api/users'),
-  createUser: (data) => request('/api/users', { method: 'POST', body: JSON.stringify(data) }),
+  createUser: (data) => request('/api/users', { method: 'POST', body: JSON.stringify({ ...data, app_url: window.location.origin }) }),
   updateUser: (id, data) => request(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/api/users/${id}`, { method: 'DELETE' }),
+  resetUserPassword: (id) => request(`/api/users/${id}/reset-password`, { method: 'POST' }),
 
   // Substrates
   getSubstrates: () => request('/api/substrates'),
@@ -76,12 +77,22 @@ export const api = {
   getVersions: (calcId) => request(`/api/calculations/${calcId}/versions`),
   createVersion: (calcId, payload) =>
     request(`/api/calculations/${calcId}/versions`, { method: 'POST', body: JSON.stringify(payload) }),
-  updateVersionStatus: (versionId, status) =>
+  updateVersionStatus: (versionId, status, remarks) =>
     request(`/api/calculations/versions/${versionId}/status`, {
-      method: 'PATCH', body: JSON.stringify({ status }),
+      method: 'PATCH', body: JSON.stringify({ status, remarks: remarks ?? null }),
     }),
-  updateQuoteStatus: (id, status) =>
+  updateQuoteStatus: (id, status, remarks) =>
     request(`/api/calculations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, remarks: remarks ?? null }),
+    }),
+  updateClientStatus: (id, status) =>
+    request(`/api/calculations/${id}/client-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  updateVersionClientStatus: (id, status) =>
+    request(`/api/calculations/versions/${id}/client-status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
@@ -134,4 +145,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, old_password: oldPassword, new_password: newPassword }),
     }),
+
+  // Notifications
+  getNotifications: () => request('/api/notifications'),
+  getUnreadCount: () => request('/api/notifications/unread-count'),
+  markNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () => request('/api/notifications/read-all', { method: 'PATCH' }),
+  getAdminNotifications: () => request('/api/admin/notifications'),
 }

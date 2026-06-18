@@ -13,7 +13,7 @@ class User(Base):
     __tablename__ = "users"
 
     id            = Column(Integer, primary_key=True, index=True)
-    username      = Column(String(80),  nullable=False, unique=True)
+    username      = Column(String(80),  nullable=False)
     email         = Column(String(200), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
     role          = Column(String(20),  nullable=False, default="user")   # "admin" | "user"
@@ -82,6 +82,7 @@ class Calculation(Base):
     selected_teeth   = Column(Integer, nullable=True)
     exchange_rate    = Column(Float, nullable=False)
     order_qty        = Column(Integer, nullable=True)
+    ref_code         = Column(String(30), nullable=True)
     result           = Column(JSON, nullable=False)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
@@ -93,13 +94,23 @@ class Calculation(Base):
     status = Column(String(20), nullable=False, default="pending")
 
     # Audit trail
-    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    updated_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    updated_at    = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    created_by_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_at           = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    status_changed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status_changed_at    = Column(DateTime, nullable=True)
+    status_remarks       = Column(Text, nullable=True)
 
-    order      = relationship("Order", back_populates="calculations")
-    created_by = relationship("User", foreign_keys=[created_by_id])
-    updated_by = relationship("User", foreign_keys=[updated_by_id])
+    order              = relationship("Order", back_populates="calculations")
+    created_by         = relationship("User", foreign_keys=[created_by_id])
+    updated_by         = relationship("User", foreign_keys=[updated_by_id])
+    # Client approval status (set by any user after sending quote email)
+    client_status             = Column(String(20), nullable=True)
+    client_status_changed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    client_status_changed_at  = Column(DateTime, nullable=True)
+
+    status_changed_by  = relationship("User", foreign_keys=[status_changed_by_id])
+    client_status_changed_by = relationship("User", foreign_keys=[client_status_changed_by_id])
     versions   = relationship("CalculationVersion", back_populates="calculation",
                               order_by="CalculationVersion.version_number",
                               cascade="all, delete-orphan")
@@ -173,10 +184,41 @@ class CalculationVersion(Base):
     selected_teeth = Column(Integer, nullable=True)
     exchange_rate  = Column(Float, nullable=False)
     order_qty      = Column(Integer, nullable=True)
+    ref_code       = Column(String(30), nullable=True)
     result         = Column(JSON, nullable=False)
-    status         = Column(String(20), nullable=False, default="pending")
-    created_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    status               = Column(String(20), nullable=False, default="pending")
+    created_by_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status_changed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status_changed_at    = Column(DateTime, nullable=True)
+    status_remarks       = Column(Text, nullable=True)
+    client_status                  = Column(String(20), nullable=True)
+    client_status_changed_by_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    client_status_changed_at       = Column(DateTime, nullable=True)
+    created_at           = Column(DateTime, default=datetime.utcnow)
 
-    calculation = relationship("Calculation", back_populates="versions")
-    created_by  = relationship("User", foreign_keys=[created_by_id])
+    calculation                = relationship("Calculation", back_populates="versions")
+    created_by                 = relationship("User", foreign_keys=[created_by_id])
+    status_changed_by          = relationship("User", foreign_keys=[status_changed_by_id])
+    client_status_changed_by   = relationship("User", foreign_keys=[client_status_changed_by_id])
+
+
+class Notification(Base):
+    """In-app notification for orders that have no confirmed quotation."""
+
+    __tablename__ = "notifications"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    title             = Column(String(200), nullable=False)
+    message           = Column(Text, nullable=False)
+    client_id         = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    order_id          = Column(Integer, ForeignKey("orders.id"),  nullable=True)
+    notification_type = Column(String(50), nullable=False, default="unconfirmed_quote")
+    is_read           = Column(Boolean, nullable=False, default=False)
+    read_by_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    read_at           = Column(DateTime, nullable=True)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client   = relationship("Client")
+    order    = relationship("Order")
+    read_by  = relationship("User", foreign_keys=[read_by_id])

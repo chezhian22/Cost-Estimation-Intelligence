@@ -10,11 +10,81 @@ function blockNonNumeric(e) {
   e.preventDefault()
 }
 
-function EditModal({ substrate, onClose, onSaved }) {
-  const [name, setName]     = useState(substrate.name)
-  const [price, setPrice]   = useState(String(substrate.price))
+function AddModal({ onClose, onAdded }) {
+  const [name,   setName]   = useState('')
+  const [price,  setPrice]  = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState(null)
+  const [error,  setError]  = useState(null)
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    const n = name.trim()
+    const p = parseFloat(price)
+    if (!n || isNaN(p) || p < 0) { setError('Valid name and price required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const created = await api.createSubstrate(n, p)
+      onAdded(created)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div className="edit-modal-overlay" onClick={onClose}>
+      <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="edit-modal-header">
+          <span className="edit-modal-header-icon">▤</span>
+          <span className="edit-modal-header-title">Add Substrate</span>
+          <button type="button" className="edit-modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <form onSubmit={handleAdd}>
+          <div className="edit-modal-body">
+            <div className="field">
+              <label className="field-label">Substrate Name</label>
+              <input
+                type="text"
+                placeholder="e.g. PP Gloss"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus required maxLength={120}
+              />
+            </div>
+            <div className="field">
+              <label className="field-label">Price <span className="unit">(₹ / m²)</span></label>
+              <input
+                type="number" min="0" step="0.5"
+                placeholder="e.g. 45"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                onKeyDown={blockNonNumeric}
+                required
+              />
+            </div>
+            {error && <div className="selector-error">⚠ {error}</div>}
+          </div>
+          <div className="edit-modal-footer">
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
+              {saving ? 'Adding…' : 'Add Substrate'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function EditModal({ substrate, onClose, onSaved }) {
+  const [name,      setName]      = useState(substrate.name)
+  const [price,     setPrice]     = useState(String(substrate.price))
+  const [available, setAvailable] = useState(substrate.available !== false)
+  const [saving,    setSaving]    = useState(false)
+  const [error,     setError]     = useState(null)
 
   async function handleSave(e) {
     e.preventDefault()
@@ -24,7 +94,11 @@ function EditModal({ substrate, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const updated = await api.updateSubstrate(substrate.id, n, p)
+      let updated = await api.updateSubstrate(substrate.id, n, p)
+      if (available !== (substrate.available !== false)) {
+        const withAvail = await api.setSubstrateAvailability(substrate.id, available)
+        updated = { ...updated, available: withAvail.available }
+      }
       onSaved(updated)
     } catch (err) {
       setError(err.message)
@@ -49,9 +123,7 @@ function EditModal({ substrate, onClose, onSaved }) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                autoFocus
-                required
-                maxLength={120}
+                autoFocus required maxLength={120}
               />
             </div>
             <div className="field">
@@ -64,12 +136,27 @@ function EditModal({ substrate, onClose, onSaved }) {
                 required
               />
             </div>
+            <div className="field">
+              <label className="field-label">Availability</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <select
+                  value={available ? 'yes' : 'no'}
+                  onChange={(e) => setAvailable(e.target.value === 'yes')}
+                  style={{ flex: 1 }}
+                >
+                  <option value="yes">Available</option>
+                  <option value="no">Unavailable</option>
+                </select>
+                <span className={`avail-badge ${available ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default', flexShrink: 0 }}>
+                  <span className="avail-dot" />
+                  {available ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
             {error && <div className="selector-error">⚠ {error}</div>}
           </div>
           <div className="edit-modal-footer">
-            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
+            <button type="button" className="edit-modal-btn" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="submit" className="edit-modal-btn edit-modal-btn--primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -83,15 +170,9 @@ function EditModal({ substrate, onClose, onSaved }) {
 
 export default function ManageSubstrates({ isAdmin = false }) {
   const [substrates, setSubstrates] = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
-
-  const [newName, setNewName]       = useState('')
-  const [newPrice, setNewPrice]     = useState('')
-  const [adding, setAdding]         = useState(false)
-  const [addError, setAddError]     = useState(null)
-  const [deletingId, setDeletingId] = useState(null)
-  const [togglingId, setTogglingId] = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
+  const [showAdd,    setShowAdd]    = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
   useEffect(() => {
@@ -101,47 +182,9 @@ export default function ManageSubstrates({ isAdmin = false }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function handleAdd(e) {
-    e.preventDefault()
-    const name  = newName.trim()
-    const price = parseFloat(newPrice)
-    if (!name || isNaN(price) || price < 0) return
-    setAdding(true)
-    setAddError(null)
-    try {
-      const created = await api.createSubstrate(name, price)
-      setSubstrates((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
-      setNewName('')
-      setNewPrice('')
-    } catch (e) {
-      setAddError(e.message)
-    } finally {
-      setAdding(false)
-    }
-  }
-
-  async function handleDelete(id) {
-    setDeletingId(id)
-    try {
-      await api.deleteSubstrate(id)
-      setSubstrates((prev) => prev.filter((s) => s.id !== id))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  async function handleToggleAvailability(s) {
-    setTogglingId(s.id)
-    try {
-      const updated = await api.setSubstrateAvailability(s.id, !s.available)
-      setSubstrates((prev) => prev.map((x) => x.id === updated.id ? updated : x))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setTogglingId(null)
-    }
+  function handleAdded(created) {
+    setSubstrates((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+    setShowAdd(false)
   }
 
   function handleSaved(updated) {
@@ -151,52 +194,44 @@ export default function ManageSubstrates({ isAdmin = false }) {
     setEditTarget(null)
   }
 
+  const totalCount     = substrates.length
+  const availableCount = substrates.filter((s) => s.available !== false).length
+  const unavailCount   = totalCount - availableCount
+
   return (
     <section className="card">
       <div className="card-header">
         <div className="card-icon-wrap">▤</div>
-        <span className="card-title">Manage Substrates</span>
-        <span className="card-number">SYS-07</span>
+        <span className="card-title">Substrates</span>
+        <div className="card-header-right">
+          <span className="card-number">SYS-07</span>
+          {isAdmin && (
+            <button className="section-add-btn" onClick={() => setShowAdd(true)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Substrate
+            </button>
+          )}
+        </div>
       </div>
 
-      {isAdmin ? (
-        <div className="cyl-add-form">
-          <div className="cyl-add-title">Add New Substrate</div>
-          <form className="cyl-form-row" onSubmit={handleAdd}>
-            <div className="cyl-field" style={{ flex: 2 }}>
-              <label className="field-label">Substrate Name</label>
-              <input
-                type="text"
-                placeholder="e.g. PP Gloss"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="cyl-field">
-              <label className="field-label">Price <span className="unit">(₹ / m²)</span></label>
-              <input
-                type="number" min="0" step="0.5"
-                placeholder="e.g. 45"
-                value={newPrice}
-                onChange={(e) => setNewPrice(e.target.value)}
-                onKeyDown={blockNonNumeric}
-                required
-              />
-            </div>
-            <button type="submit" className="cyl-add-btn" disabled={adding || !newName.trim() || !newPrice}>
-              {adding ? 'Adding…' : '＋ Add'}
-            </button>
-          </form>
-          {addError && <div className="selector-error" style={{ marginTop: '0.5rem' }}>{addError}</div>}
-        </div>
-      ) : (
-        <div className="admin-only-notice">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Only admins can add or edit substrates.
+      {!loading && !error && (
+        <div className="manage-stats-bar">
+          <div className="manage-stat">
+            <span className="manage-stat-value">{totalCount}</span>
+            <span className="manage-stat-label">Total</span>
+          </div>
+          <div className="manage-stat-divider" />
+          <div className="manage-stat">
+            <span className="manage-stat-value manage-stat-value--avail">{availableCount}</span>
+            <span className="manage-stat-label">Available</span>
+          </div>
+          <div className="manage-stat-divider" />
+          <div className="manage-stat">
+            <span className="manage-stat-value manage-stat-value--unavail">{unavailCount}</span>
+            <span className="manage-stat-label">Unavailable</span>
+          </div>
         </div>
       )}
 
@@ -215,18 +250,24 @@ export default function ManageSubstrates({ isAdmin = false }) {
           <table>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left' }}>#</th>
+                <th style={{ textAlign: 'left', width: 40 }}>#</th>
                 <th style={{ textAlign: 'left' }}>Name</th>
                 <th>Price <span className="th-unit">₹ / m²</span></th>
-                <th>Availability</th>
-                {isAdmin && <th></th>}
+                <th>Status</th>
+                {isAdmin && <th style={{ width: 72 }}></th>}
               </tr>
             </thead>
             <tbody>
               {substrates.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>
-                    No substrates yet.
+                  <td colSpan={5} className="manage-empty-cell">
+                    <div className="manage-empty-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.35 }}>
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      <span>No substrates added yet.</span>
+                      {isAdmin && <button className="section-add-btn" onClick={() => setShowAdd(true)}>Add your first substrate</button>}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -234,26 +275,14 @@ export default function ManageSubstrates({ isAdmin = false }) {
                   const avail = s.available !== false
                   return (
                     <tr key={s.id} className={!avail ? 'row-unavailable' : ''}>
-                      <td style={{ textAlign: 'left' }}>{i + 1}</td>
-                      <td style={{ textAlign: 'left' }}>{s.name}</td>
-                      <td>{Number(s.price).toFixed(2)}</td>
+                      <td style={{ textAlign: 'left', color: 'var(--text-dim)', fontSize: '0.78rem' }}>{i + 1}</td>
+                      <td style={{ textAlign: 'left' }}><strong>{s.name}</strong></td>
+                      <td>₹ {Number(s.price).toFixed(2)}</td>
                       <td>
-                        {isAdmin ? (
-                          <button
-                            className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`}
-                            onClick={() => handleToggleAvailability(s)}
-                            disabled={togglingId === s.id}
-                            title="Click to toggle availability"
-                          >
-                            <span className="avail-dot" />
-                            {togglingId === s.id ? '…' : avail ? 'Available' : 'Unavailable'}
-                          </button>
-                        ) : (
-                          <span className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default' }}>
-                            <span className="avail-dot" />
-                            {avail ? 'Available' : 'Unavailable'}
-                          </span>
-                        )}
+                        <span className={`avail-badge ${avail ? 'avail-yes' : 'avail-no'}`} style={{ cursor: 'default' }}>
+                          <span className="avail-dot" />
+                          {avail ? 'Available' : 'Unavailable'}
+                        </span>
                       </td>
                       {isAdmin && (
                         <td style={{ textAlign: 'right', paddingRight: '1rem' }}>
@@ -269,12 +298,9 @@ export default function ManageSubstrates({ isAdmin = false }) {
         </div>
       )}
 
+      {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={handleAdded} />}
       {editTarget && (
-        <EditModal
-          substrate={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={handleSaved}
-        />
+        <EditModal substrate={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />
       )}
     </section>
   )

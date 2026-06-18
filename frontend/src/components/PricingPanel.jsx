@@ -83,8 +83,8 @@ export default function PricingPanel({ result, orderQty, selectedIdx, inputs }) 
           <span style={{
             marginLeft: '0.5rem', fontSize: '0.68rem', fontWeight: 700,
             padding: '0.15rem 0.55rem', borderRadius: 100,
-            background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.40)',
-            color: '#a5b4fc',
+            background: 'rgba(99,102,241,0.14)', border: '1px solid rgba(99,102,241,0.45)',
+            color: '#4f46e5',
           }}>
             {selectedRow.teeth} teeth selected
           </span>
@@ -92,75 +92,74 @@ export default function PricingPanel({ result, orderQty, selectedIdx, inputs }) 
         <span className="card-number">SYS-03</span>
       </div>
 
-      <div className="pricing-meta">
-        <div className="meta-item">
-          <span className="meta-label">Label Size</span>
-          <span className="meta-value">{fmt(p.label_w_cm)} × {fmt(p.label_h_cm)} cm</span>
+      <div className="pricing-info-box">
+        <div className="pib-row">
+          <span className="pib-label">Label Size</span>
+          <span className="pib-value">{fmt(p.label_w_cm)} × {fmt(p.label_h_cm)} cm</span>
         </div>
-        <div className="meta-item">
-          <span className="meta-label">Labels / m²</span>
-          <span className="meta-value">{fmt(p.labels_sqm)}</span>
+        <div className="pib-row">
+          <span className="pib-label">Labels / m²</span>
+          <span className="pib-value">{fmt(p.labels_sqm)}</span>
         </div>
-        <div className="meta-item">
-          <span className="meta-label">Adj. Labels / m²</span>
-          <span className="meta-value">{fmt(p.adj_labels)}</span>
+        <div className="pib-row">
+          <span className="pib-label">Adj. Labels / m²</span>
+          <span className="pib-value">{fmt(p.adj_labels)}</span>
         </div>
         {p.substrate_price != null && (
-          <div className="meta-item">
-            <span className="meta-label">Substrate Cost</span>
-            <span className="meta-value">₹ {fmt(p.substrate_price)} / m²</span>
+          <div className="pib-row">
+            <span className="pib-label">Substrate Cost</span>
+            <span className="pib-value">₹ {fmt(p.substrate_price)} / m²</span>
           </div>
         )}
         {p.foil_cost != null && p.foil_cost > 0 && (
-          <div className="meta-item">
-            <span className="meta-label">Foil Cost</span>
-            <span className="meta-value meta-value--foil">₹ {fmt(p.foil_cost)} / m²</span>
+          <div className="pib-row">
+            <span className="pib-label">Foil Cost</span>
+            <span className="pib-value pib-value--foil">₹ {fmt(p.foil_cost)} / m²</span>
           </div>
         )}
         {p.custom_cost != null && p.custom_cost > 0 && (
-          <div className="meta-item">
-            <span className="meta-label">Custom Cost</span>
-            <span className="meta-value">₹ {fmt(p.custom_cost, 3)} / label</span>
+          <div className="pib-row">
+            <span className="pib-label">Custom Cost</span>
+            <span className="pib-value">₹ {fmt(p.custom_cost, 3)} / label</span>
           </div>
         )}
         {p.substrate_price != null && p.foil_cost != null && p.foil_cost > 0 && (
-          <div className="meta-item">
-            <span className="meta-label">Total Material</span>
-            <span className="meta-value meta-value--total">₹ {fmt(p.substrate_price + p.foil_cost)} / m²</span>
+          <div className="pib-row pib-row--total">
+            <span className="pib-label">Total Material</span>
+            <span className="pib-value pib-value--total">₹ {fmt(p.substrate_price + p.foil_cost)} / m²</span>
           </div>
         )}
       </div>
 
-      <div className="section-label">Rate Tiers</div>
-      <div className="rates-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="section-label">
+        Rate Tiers
+        <span className="tier-hint">select to apply</span>
+      </div>
+      <div className="tier-selector">
         {TIERS.map(({ key, label }) => (
-          <div
+          <button
             key={key}
-            className={`rate-card${activeTier === key ? ' active' : ''}`}
+            className={`tier-option${activeTier === key ? ' tier-option--active' : ''}`}
             onClick={() => setActiveTier(key)}
-            style={{ cursor: 'pointer' }}
           >
-            <span className="rate-ratio">{label}</span>
-            <span className="rate-amount">₹ {fmt(p[key])}</span>
-          </div>
+            <span className="tier-option-ratio">{label}</span>
+            <span className="tier-option-amount">₹ {fmt(p[key])}</span>
+            {activeTier === key && (
+              <span className="tier-option-check">✓</span>
+            )}
+          </button>
         ))}
-        <div
-          className={`rate-card${activeTier === 'custom' ? ' active' : ''}`}
+        <button
+          className={`tier-option${activeTier === 'custom' ? ' tier-option--active' : ''}`}
           onClick={() => setActiveTier('custom')}
-          style={{ cursor: 'pointer' }}
         >
-          <span className="rate-ratio">Custom</span>
+          <span className="tier-option-ratio">Custom</span>
           {activeTier === 'custom' ? (
             <div
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: '0.2rem', marginTop: '0.25rem',
-                fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: '0.9rem',
-                color: 'var(--teal-bright)',
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', justifyContent: 'center' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <span>1 :</span>
+              <span style={{ fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: '0.82rem', color: 'var(--teal-bright)' }}>1 :</span>
               <input
                 type="number"
                 min="0.1"
@@ -172,22 +171,22 @@ export default function PricingPanel({ result, orderQty, selectedIdx, inputs }) 
                   if (v === '' || parseFloat(v) > 0) setCustomMultiplier(v)
                 }}
                 style={{
-                  width: '3rem',
-                  background: 'transparent',
+                  width: '3rem', background: 'transparent',
                   border: 'none', borderBottom: '1px solid var(--teal)',
                   color: 'var(--teal-bright)', fontFamily: 'JetBrains Mono',
-                  fontSize: '0.9rem', fontWeight: 700,
-                  textAlign: 'center', outline: 'none', padding: '0',
+                  fontSize: '0.82rem', fontWeight: 700,
+                  textAlign: 'center', outline: 'none', padding: 0,
                 }}
                 autoFocus
               />
             </div>
           ) : (
-            <span className="rate-amount" style={{ fontSize: '0.75rem' }}>
+            <span className="tier-option-amount" style={{ fontSize: '0.72rem' }}>
               {customRate != null ? `₹ ${fmt(customRate)}` : '1 : ?'}
             </span>
           )}
-        </div>
+          {activeTier === 'custom' && <span className="tier-option-check">✓</span>}
+        </button>
       </div>
 
       <div className="section-divider" />
