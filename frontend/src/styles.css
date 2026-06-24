@@ -2712,10 +2712,9 @@ td.size-cell { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem }
 
 /* ─── COMPARE FAB ─── */
 .qh-compare-fab-wrap {
-  position: fixed; bottom: 2.5rem; z-index: 1500;
+  position: fixed; bottom: 2.5rem; right: 2rem; z-index: 1500;
+  display: flex; align-items: center; gap: 0.65rem;
 }
-.qh-compare-fab-wrap--left  { left: 3rem; }
-.qh-compare-fab-wrap--right { right: 3rem; }
 .qh-compare-fab {
   display: inline-flex; align-items: center; gap: 0.55rem;
   padding: 0.72rem 1.4rem;

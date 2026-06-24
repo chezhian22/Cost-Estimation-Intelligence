@@ -1759,40 +1759,33 @@ export default function QuoteHistory({ onEditCalc, onEditVersion, onCompareQuote
 
 			{/* ── Compare FAB ── */}
 			{createPortal(
-				<>
-					{/* Bottom-left in select mode, bottom-right when idle */}
-					<div className={`qh-compare-fab-wrap${selectMode ? " qh-compare-fab-wrap--left" : " qh-compare-fab-wrap--right"}`} style={!selectMode ? { right: 'calc(3rem + 100px)' } : { left: 'calc(3rem + 300px)' }}>
-						{selectMode ? (
-							<button
-								className={`qh-compare-fab${selectedItems.size >= 2 ? " qh-compare-fab--ready" : ""}`}
-								onClick={selectedItems.size >= 2 ? handleCompare : undefined}
-								disabled={selectedItems.size < 2}
-								title={selectedItems.size < 2 ? "Select at least 2 quotes" : `Compare ${selectedItems.size} quotes`}
-							>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-									<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-								</svg>
-								{selectedItems.size >= 2 ? `Compare ${selectedItems.size} Quotes` : "Select 2–4 Quotes"}
-							</button>
-						) : (
-							<button className="qh-compare-fab" onClick={toggleSelectMode} title="Compare quotes side by side">
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-									<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-								</svg>
-								Compare Quotes
-							</button>
-						)}
-					</div>
-
-					{/* Bottom-right: Cancel only in select mode */}
+				<div className="qh-compare-fab-wrap">
 					{selectMode && (
-						<div className="qh-compare-fab-wrap qh-compare-fab-wrap--right">
-							<button className="qh-compare-fab-cancel" onClick={toggleSelectMode}>
-								✕ Cancel
-							</button>
-						</div>
+						<button className="qh-compare-fab-cancel" onClick={toggleSelectMode}>
+							✕ Cancel
+						</button>
 					)}
-				</>,
+					{selectMode ? (
+						<button
+							className={`qh-compare-fab${selectedItems.size >= 2 ? " qh-compare-fab--ready" : ""}`}
+							onClick={selectedItems.size >= 2 ? handleCompare : undefined}
+							disabled={selectedItems.size < 2}
+							title={selectedItems.size < 2 ? "Select at least 2 quotes" : `Compare ${selectedItems.size} quotes`}
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+								<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+							</svg>
+							{selectedItems.size >= 2 ? `Compare ${selectedItems.size} Quotes` : "Select 2–4 Quotes"}
+						</button>
+					) : (
+						<button className="qh-compare-fab" onClick={toggleSelectMode} title="Compare quotes side by side">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+								<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+							</svg>
+							Compare Quotes
+						</button>
+					)}
+				</div>,
 				document.body
 			)}
 		</section>

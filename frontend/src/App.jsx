@@ -828,10 +828,11 @@ export default function App() {
                     onClick={handleNewCalculation}
                     title="Reset — clear all and start a fresh calculation"
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: 28, height: 28, borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', gap: '0.35rem',
+                      padding: '0 0.7rem', height: 28, borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--border)', background: 'transparent',
                       color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0,
+                      fontSize: '0.76rem', fontWeight: 600, fontFamily: 'Inter, sans-serif',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
@@ -840,6 +841,7 @@ export default function App() {
                       <polyline points="1 4 1 10 7 10"/>
                       <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
                     </svg>
+                    Reset
                   </button>
                 )}
               </div>
