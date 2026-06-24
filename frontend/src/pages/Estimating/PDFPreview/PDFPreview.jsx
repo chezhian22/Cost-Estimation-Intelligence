@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+﻿import React, { useEffect, useRef, useState } from 'react'
 import './PDFPreview.css'
 import { buildPDFHtml, generatePDF } from '../../../utils/generatePDF'
 import { api } from '../../../api'
@@ -12,7 +12,8 @@ const SAMPLE = {
   },
   order: {
     order_id: 'CALC-108',
-    label:    'KF-2026-Premium-Label',
+    label:    'ORDER-001',
+    ref:      'KI01-ORD001-Q1',
   },
   inputs: {
     label_width_mm:  64.5,
@@ -76,7 +77,7 @@ export default function PDFPreview() {
     <div className="pp-page">
       <div className="pp-page-header">
         <div>
-          <h1 className="pp-title">Invoice Preview</h1>
+          <h1 className="pp-title">Quotation Preview</h1>
           <p className="pp-sub">Sample client quotation — no internal cost details shown</p>
         </div>
         <button className="pp-btn-generate" onClick={() => generatePDF(SAMPLE, companySettings)}>
@@ -100,3 +101,4 @@ export default function PDFPreview() {
     </div>
   )
 }
+

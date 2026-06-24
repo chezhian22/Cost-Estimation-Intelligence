@@ -101,6 +101,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ selected_teeth: selectedTeeth }),
     }),
+  updateSelectedTier: (id, selectedTier) =>
+    request(`/api/calculations/${id}/tier`, {
+      method: 'PATCH',
+      body: JSON.stringify({ selected_tier: selectedTier }),
+    }),
 
   // Company settings — public (any user) vs admin (SMTP included)
   getPublicSettings:  () => request('/api/settings/public'),

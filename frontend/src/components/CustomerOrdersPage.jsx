@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+﻿import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { generateInvoicePDF, generateQuotationPDF } from '../utils/generatePDF'
@@ -57,6 +57,7 @@ function buildInvoicePayload(calcData, clientName, orderName) {
     order: {
       order_id: calcData.id ? `CALC-${calcData.id}` : '',
       label:    orderName  || calcData.order_name || '',
+      ref:      calcData.ref_code || '',
     },
     inputs: {
       label_width_mm:  calcData.width,
@@ -103,6 +104,41 @@ function buildQuotationPayload(calcData, clientName, orderName) {
     result:     calcData.result || {},
     preparedBy: '',
   }
+}
+
+// ── Date Picker Modal ─────────────────────────────────────────────────────────
+function DatePickerModal({ onConfirm, onCancel, confirmLabel = 'Generate PDF' }) {
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
+  return createPortal(
+    <div className="cop-detail-overlay" style={{ alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
+      <div className="cop-detail-modal" style={{ maxWidth: 340, flex: 'none', width: '100%' }} onClick={e => e.stopPropagation()}>
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onCancel}>← Cancel</button>
+          <span className="cop-detail-title">Select Quotation Date</span>
+        </div>
+        <div className="cop-detail-body" style={{ padding: '1.5rem 1.5rem 0.5rem' }}>
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '0.5rem' }}>
+            Date to print on the quotation
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="qh-email-input"
+            style={{ width: '100%' }}
+            autoFocus
+          />
+        </div>
+        <div className="cop-detail-footer" style={{ justifyContent: 'flex-end', gap: '0.6rem' }}>
+          <button className="qh-action-btn" onClick={onCancel}>Cancel</button>
+          <button className="cop-pdf-btn" onClick={() => date && onConfirm(date)} disabled={!date}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 // ── Edit Client Drawer ────────────────────────────────────────────────────────
@@ -220,12 +256,13 @@ function EditClientDrawer({ client, onUpdated, onClose }) {
 // ── Calculation Detail Modal ──────────────────────────────────────────────────
 // Shows the full CylinderTable + PricingPanel for a saved calculation,
 // plus Approve / Unapprove buttons.
-function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName }) {
+function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, onClose, clientName, orderName, readOnly }) {
   const [data, setData]                         = useState(null)
   const [loading, setLoading]                   = useState(true)
   const [loadError, setLoadError]               = useState(null)
   const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+  const [showDatePicker, setShowDatePicker]     = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -237,15 +274,43 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
   }, [calcId])
 
   const isApproved = calcId === approvedId
+  const result     = data?.result   || {}
+  const matched    = result.matched || {}
+  const pricing    = result.pricing || {}
+  const rows       = result.rows    || []
+  const matchedRow = rows[matched.index] || {}
 
   return (
     <div className="cop-detail-overlay" onClick={onClose}>
       <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="cop-detail-header">
-          <button className="cop-detail-close" onClick={onClose}>← Close</button>
-          <span className="cop-detail-title">Calculation Detail</span>
+          {!readOnly
+            ? <button className="cop-detail-close" onClick={onClose}>← Close</button>
+            : (
+              <button
+                onClick={onClose}
+                style={{
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)',
+                  color: '#f87171', borderRadius: '6px', padding: '0.32rem 0.85rem',
+                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                }}
+              >
+                ✕ Close
+              </button>
+            )
+          }
+          <div className="cop-detail-header-info">
+            <span className="cop-detail-title">
+              {data?.ref_code || 'Quote Details'}
+            </span>
+            {data && (
+              <span className="cop-detail-size-chip">
+                {fmt(data.width, 1)} × {fmt(data.height, 1)} mm
+              </span>
+            )}
+          </div>
           {isApproved
             ? <span className="cop-status-badge cop-status-confirmed"><span className="cop-status-dot" /> Approved</span>
             : <span className="cop-status-badge cop-status-pending"><span className="cop-status-dot" /> Draft</span>
@@ -265,43 +330,64 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
 
         {!loading && data && (
           <>
-            {/* Meta strip */}
-            <div className="cop-detail-meta-strip">
-              <span className="cop-detail-meta-item">
-                <span className="cop-detail-meta-label">Size:</span>
-                <span className="cop-detail-meta-val">{fmt(data.width,1)} × {fmt(data.height,1)} mm</span>
-              </span>
-              <span className="cop-detail-meta-item">
-                <span className="cop-detail-meta-label">Substrate:</span>
-                <span className="cop-detail-meta-val">{data.substrate_name || 'Custom'} · ₹{fmt(data.substrate_price)}/m²</span>
-              </span>
-              <span className="cop-detail-meta-item">
-                <span className="cop-detail-meta-label">Yield:</span>
-                <span className="cop-detail-meta-val">{data.yield_pct}%</span>
-              </span>
+            {/* ── Quote summary cards ── */}
+            <div className="cop-qd-summary">
+              <div className="cop-qd-card">
+                <div className="cop-qd-card-label">Substrate</div>
+                <div className="cop-qd-card-val">{data.substrate_name || 'Custom'}</div>
+                <div className="cop-qd-card-sub">₹{fmt(data.substrate_price)}/m²</div>
+              </div>
+
               {data.foil_cost > 0 && (
-                <span className="cop-detail-meta-item">
-                  <span className="cop-detail-meta-label">Foil:</span>
-                  <span className="cop-detail-meta-val">₹{fmt(data.foil_cost)}/m²</span>
-                </span>
+                <div className="cop-qd-card">
+                  <div className="cop-qd-card-label">Foil Cost</div>
+                  <div className="cop-qd-card-val">₹{fmt(data.foil_cost)}</div>
+                  <div className="cop-qd-card-sub">per m²</div>
+                </div>
               )}
-              <span className="cop-detail-meta-item">
-                <span className="cop-detail-meta-label">Rate:</span>
-                <span className="cop-detail-meta-val">₹{fmt(data.exchange_rate,0)} / $</span>
-              </span>
+
+              <div className="cop-qd-card">
+                <div className="cop-qd-card-label">Exchange Rate</div>
+                <div className="cop-qd-card-val">₹{fmt(data.exchange_rate, 0)}</div>
+                <div className="cop-qd-card-sub">per USD</div>
+              </div>
+
+              {matched.matched_teeth && (
+                <div className="cop-qd-card">
+                  <div className="cop-qd-card-label">Cylinder</div>
+                  <div className="cop-qd-card-val">{matched.matched_teeth}T</div>
+                  <div className="cop-qd-card-sub">
+                    {matchedRow.around != null ? `${matchedRow.around}×${matchedRow.across} layout` : ''}
+                  </div>
+                </div>
+              )}
+
+              {pricing.price_inr_1000 != null && (
+                <div className="cop-qd-card cop-qd-card--accent">
+                  <div className="cop-qd-card-label">Rate / 1000</div>
+                  <div className="cop-qd-card-val">₹{fmt(pricing.price_inr_1000)}</div>
+                  <div className="cop-qd-card-sub">$ {fmt(pricing.price_usd_1000, 3)}</div>
+                </div>
+              )}
+
               {data.order_qty != null && (
-                <span className="cop-detail-meta-item">
-                  <span className="cop-detail-meta-label">Qty:</span>
-                  <span className="cop-detail-meta-val">{Number(data.order_qty).toLocaleString()} labels</span>
-                </span>
+                <div className="cop-qd-card">
+                  <div className="cop-qd-card-label">Order Qty</div>
+                  <div className="cop-qd-card-val">{Number(data.order_qty).toLocaleString('en-IN')}</div>
+                  <div className="cop-qd-card-sub">labels</div>
+                </div>
               )}
-              <span className="cop-detail-meta-item">
-                <span className="cop-detail-meta-label">Saved:</span>
-                <span className="cop-detail-meta-val">{fmtDateTime(data.created_at)}</span>
-              </span>
+
+              <div className="cop-qd-card">
+                <div className="cop-qd-card-label">Saved</div>
+                <div className="cop-qd-card-val cop-qd-card-val--date">{fmtDate(data.created_at)}</div>
+                <div className="cop-qd-card-sub">
+                  {data.created_at ? new Date(data.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                </div>
+              </div>
             </div>
 
-            {/* Full calculation output */}
+            {/* ── Full calculation output ── */}
             <div className="cop-detail-body">
               {data.result && (
                 <>
@@ -312,7 +398,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
             </div>
 
             {/* Approve / Unapprove footer */}
-            <div className="cop-detail-footer">
+            {!readOnly && <div className="cop-detail-footer">
               {isApproved ? (
                 <>
                   <span className="cop-detail-approved-note">★ This calculation is approved for this order</span>
@@ -339,19 +425,12 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                           <line x1="16" y1="17" x2="8" y2="17"/>
                         </svg>
                       )}
-                      {quotationLoading ? 'Generating…' : 'Quotation'}
+                      {quotationLoading ? 'Generating…' : 'Cost Estimate'}
                     </button>
                     <button
                       className="cop-pdf-btn"
                       disabled={pdfLoading}
-                      onClick={async () => {
-                        setPdfLoading(true)
-                        try {
-                          let cs = {}
-                          try { cs = await api.getPublicSettings() } catch (_) {}
-                          generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
-                        } finally { setPdfLoading(false) }
-                      }}
+                      onClick={() => setShowDatePicker(true)}
                     >
                       {pdfLoading ? (
                         <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
@@ -361,8 +440,22 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                           <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
                       )}
-                      {pdfLoading ? 'Generating…' : 'Invoice'}
+                      {pdfLoading ? 'Generating…' : 'Quotation'}
                     </button>
+                    {showDatePicker && (
+                      <DatePickerModal
+                        onCancel={() => setShowDatePicker(false)}
+                        onConfirm={async (date) => {
+                          setShowDatePicker(false)
+                          setPdfLoading(true)
+                          try {
+                            let cs = {}
+                            try { cs = await api.getPublicSettings() } catch (_) {}
+                            generateInvoicePDF({ ...buildInvoicePayload(data, clientName, orderName), quotation_date: date }, cs)
+                          } finally { setPdfLoading(false) }
+                        }}
+                      />
+                    )}
                     <button className="cop-detail-unapprove-btn" onClick={() => onUnapprove(calcId)}>
                       ↩ Unapprove
                     </button>
@@ -384,7 +477,7 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                         } finally { setQuotationLoading(false) }
                       }}
                     >
-                      {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                      {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Cost Estimate'}
                     </button>
                     <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
                       ★ Approve this instead
@@ -405,14 +498,14 @@ function CalcDetailModal({ calcId, approvedId, onApproveRequest, onUnapprove, on
                       } finally { setQuotationLoading(false) }
                     }}
                   >
-                    {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Quotation'}
+                    {quotationLoading ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : 'Cost Estimate'}
                   </button>
                   <button className="cop-detail-approve-btn" onClick={() => onApproveRequest(data)}>
                     ★ Approve this Calculation
                   </button>
                 </div>
               )}
-            </div>
+            </div>}
           </>
         )}
       </div>
@@ -493,16 +586,17 @@ function SwapConfirmModal({ approvedCalc, onConfirm, onCancel }) {
 function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
   const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+  const [showDatePicker, setShowDatePicker]     = useState(false)
 
-  async function handleInvoice() {
+  async function handleInvoice(date) {
     setPdfLoading(true)
     try {
       let cs = {}
       try { cs = await api.getPublicSettings() } catch (_) {}
-      generateInvoicePDF(buildInvoicePayload(
-        { ...version, result: version.result },
-        clientName, orderName,
-      ), cs)
+      generateInvoicePDF({
+        ...buildInvoicePayload({ ...version, result: version.result }, clientName, orderName),
+        quotation_date: date,
+      }, cs)
     } finally { setPdfLoading(false) }
   }
 
@@ -518,49 +612,86 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
     } finally { setQuotationLoading(false) }
   }
 
+  const vResult     = version.result   || {}
+  const vMatched    = vResult.matched  || {}
+  const vPricing    = vResult.pricing  || {}
+  const vRows       = vResult.rows     || []
+  const vMatchedRow = vRows[vMatched.index] || {}
+  const vQty        = version.order_qty ?? version._parent_order_qty
+
   return (
     <div className="cop-detail-overlay" onClick={onClose}>
       <div className="cop-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cop-detail-header">
           <button className="cop-detail-close" onClick={onClose}>← Close</button>
-          <span className="cop-detail-title">V{version.version_number}</span>
+          <div className="cop-detail-header-info">
+            <span className="cop-detail-title">
+              {version.ref_code || `Version ${version.version_number}`}
+            </span>
+            <span className="cop-detail-size-chip">
+              {fmt(version.width, 1)} × {fmt(version.height, 1)} mm
+            </span>
+          </div>
           <span className="cop-status-badge cop-status-confirmed">
             <span className="cop-status-dot" /> Approved
           </span>
         </div>
-        <div className="cop-detail-meta-strip">
-          <span className="cop-detail-meta-item">
-            <span className="cop-detail-meta-label">Size:</span>
-            <span className="cop-detail-meta-val">{fmt(version.width,1)} × {fmt(version.height,1)} mm</span>
-          </span>
-          <span className="cop-detail-meta-item">
-            <span className="cop-detail-meta-label">Substrate:</span>
-            <span className="cop-detail-meta-val">{version.substrate_name || 'Custom'} · ₹{fmt(version.substrate_price)}/m²</span>
-          </span>
-          <span className="cop-detail-meta-item">
-            <span className="cop-detail-meta-label">Yield:</span>
-            <span className="cop-detail-meta-val">{version.yield_pct}%</span>
-          </span>
+
+        {/* ── Quote summary cards ── */}
+        <div className="cop-qd-summary">
+          <div className="cop-qd-card">
+            <div className="cop-qd-card-label">Substrate</div>
+            <div className="cop-qd-card-val">{version.substrate_name || 'Custom'}</div>
+            <div className="cop-qd-card-sub">₹{fmt(version.substrate_price)}/m²</div>
+          </div>
+
           {version.foil_cost > 0 && (
-            <span className="cop-detail-meta-item">
-              <span className="cop-detail-meta-label">Foil:</span>
-              <span className="cop-detail-meta-val">₹{fmt(version.foil_cost)}/m²</span>
-            </span>
+            <div className="cop-qd-card">
+              <div className="cop-qd-card-label">Foil Cost</div>
+              <div className="cop-qd-card-val">₹{fmt(version.foil_cost)}</div>
+              <div className="cop-qd-card-sub">per m²</div>
+            </div>
           )}
-          <span className="cop-detail-meta-item">
-            <span className="cop-detail-meta-label">Rate:</span>
-            <span className="cop-detail-meta-val">₹{fmt(version.exchange_rate,0)} / $</span>
-          </span>
-          {(version.order_qty ?? version._parent_order_qty) != null && (
-            <span className="cop-detail-meta-item">
-              <span className="cop-detail-meta-label">Qty:</span>
-              <span className="cop-detail-meta-val">{Number(version.order_qty ?? version._parent_order_qty).toLocaleString()} labels</span>
-            </span>
+
+          <div className="cop-qd-card">
+            <div className="cop-qd-card-label">Exchange Rate</div>
+            <div className="cop-qd-card-val">₹{fmt(version.exchange_rate, 0)}</div>
+            <div className="cop-qd-card-sub">per USD</div>
+          </div>
+
+          {vMatched.matched_teeth && (
+            <div className="cop-qd-card">
+              <div className="cop-qd-card-label">Cylinder</div>
+              <div className="cop-qd-card-val">{vMatched.matched_teeth}T</div>
+              <div className="cop-qd-card-sub">
+                {vMatchedRow.around != null ? `${vMatchedRow.around}×${vMatchedRow.across} layout` : ''}
+              </div>
+            </div>
           )}
-          <span className="cop-detail-meta-item">
-            <span className="cop-detail-meta-label">Saved:</span>
-            <span className="cop-detail-meta-val">{fmtDateTime(version.created_at)}</span>
-          </span>
+
+          {vPricing.price_inr_1000 != null && (
+            <div className="cop-qd-card cop-qd-card--accent">
+              <div className="cop-qd-card-label">Rate / 1000</div>
+              <div className="cop-qd-card-val">₹{fmt(vPricing.price_inr_1000)}</div>
+              <div className="cop-qd-card-sub">$ {fmt(vPricing.price_usd_1000, 3)}</div>
+            </div>
+          )}
+
+          {vQty != null && (
+            <div className="cop-qd-card">
+              <div className="cop-qd-card-label">Order Qty</div>
+              <div className="cop-qd-card-val">{Number(vQty).toLocaleString('en-IN')}</div>
+              <div className="cop-qd-card-sub">labels</div>
+            </div>
+          )}
+
+          <div className="cop-qd-card">
+            <div className="cop-qd-card-label">Saved</div>
+            <div className="cop-qd-card-val cop-qd-card-val--date">{fmtDate(version.created_at)}</div>
+            <div className="cop-qd-card-sub">
+              {version.created_at ? new Date(version.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+            </div>
+          </div>
         </div>
         <div className="cop-detail-body">
           {version.result && (
@@ -585,9 +716,9 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
                   <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
               )}
-              {quotationLoading ? 'Generating…' : 'Quotation'}
+              {quotationLoading ? 'Generating…' : 'Cost Estimate'}
             </button>
-            <button className="cop-pdf-btn" onClick={handleInvoice} disabled={pdfLoading}>
+            <button className="cop-pdf-btn" onClick={() => setShowDatePicker(true)} disabled={pdfLoading}>
               {pdfLoading ? (
                 <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
               ) : (
@@ -596,8 +727,14 @@ function VersionQuoteDetailModal({ version, onClose, clientName, orderName }) {
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
               )}
-              {pdfLoading ? 'Generating…' : 'Invoice'}
+              {pdfLoading ? 'Generating…' : 'Quotation'}
             </button>
+            {showDatePicker && (
+              <DatePickerModal
+                onCancel={() => setShowDatePicker(false)}
+                onConfirm={(date) => { setShowDatePicker(false); handleInvoice(date) }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -616,6 +753,7 @@ function DraftEmailModal({ calc, clientEmail, clientName, orderName, onClose }) 
   const [invoiceLoading, setInvoiceLoading] = useState(false)
   const [sending, setSending]           = useState(false)
   const [sent, setSent]                 = useState(false)
+  const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().split('T')[0])
 
   const calcId = calc.calculation_id || calc.id  // versions use calculation_id; regular calcs use id
 
@@ -632,25 +770,25 @@ function DraftEmailModal({ calc, clientEmail, clientName, orderName, onClose }) 
         const coName  = cs.company_name || 'ChromaPrint'
         const coPhone = cs.phone || ''
         const coEmail = cs.email || ''
-        const today   = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+        const today   = new Date(quotationDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
         const invNo   = `INV-${new Date().getFullYear()}-${String(calcId).padStart(4, '0')}`
         const qty     = Number(data.order_qty) || 0
         const pricing = calc.pricing || data.result?.pricing || {}
         const pricePerLabel = Number(pricing.price_inr_label || 0)
         const amountDue = qty > 0 && pricePerLabel > 0
           ? `₹ ${(qty * pricePerLabel).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          : 'Please refer to the attached invoice'
+          : 'Please refer to the attached quotation'
 
-        setSubject(`Invoice ${invNo} — ${orderName || 'Your Order'}`)
+        setSubject(`Quotation ${invNo} — ${orderName || 'Your Order'}`)
         setBody(
 `Dear ${clientName || 'Sir/Madam'},
 
 I hope you are doing well.
 
-Please find the attached invoice for the services provided. Kindly review the invoice and process the payment as per the payment terms mentioned in the document.
+Please find the attached quotation for the services provided. Kindly review the quotation and process the payment as per the payment terms mentioned in the document.
 
-Invoice Number: ${invNo}
-Invoice Date: ${today}
+Quotation Number: ${invNo}
+Quotation Date: ${today}
 Amount Due: ${amountDue}
 
 If you have any questions or require any additional information, please feel free to contact me.
@@ -669,11 +807,22 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
     init()
   }, [])
 
+  function handleDateChange(newDate) {
+    setQuotationDate(newDate)
+    setBody(prev => prev.replace(
+      /^Quotation Date: .+$/m,
+      `Quotation Date: ${new Date(newDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+    ))
+  }
+
   async function handleDownloadInvoice() {
     if (!calcData) return
     setInvoiceLoading(true)
     try {
-      generateInvoicePDF(buildInvoicePayload(calcData, clientName, orderName), companySettings)
+      generateInvoicePDF(
+        { ...buildInvoicePayload(calcData, clientName, orderName), quotation_date: quotationDate },
+        companySettings,
+      )
     } catch (err) {
       toast.error(err.message || 'Failed to generate invoice')
     } finally {
@@ -698,7 +847,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
       await api.sendInvoiceEmail(calcId, clientEmail, subject, body)
       setSent(true)
       toast.success(
-        `Invoice sent to ${clientEmail}. Visit Communications to monitor delivery status and any bounce alerts.`,
+        `Quotation sent to ${clientEmail}. Visit Communications to monitor delivery status and any bounce alerts.`,
         7000
       )
       setTimeout(() => setSent(false), 4000)
@@ -718,7 +867,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
       >
         <div className="cop-detail-header">
           <button className="cop-detail-close" onClick={onClose}>← Close</button>
-          <span className="cop-detail-title">Draft Invoice Email</span>
+          <span className="cop-detail-title">Draft Quotation Email</span>
           <span className="cop-status-badge cop-status-confirmed">
             <span className="cop-status-dot" /> Approved
           </span>
@@ -741,7 +890,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
               lineHeight: 1.7,
             }}>
               <strong style={{ color: 'var(--teal)', display: 'block', marginBottom: '0.15rem' }}>
-                Invoice will be attached automatically.
+                Quotation will be attached automatically.
               </strong>
               Edit the subject and body if needed, then click <strong style={{ color: 'var(--text)' }}>Send Email</strong>.
               The invoice PDF will be generated and sent as an attachment via your configured SMTP server.
@@ -770,6 +919,15 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
               )}
             </div>
             <div className="qh-email-field">
+              <label className="qh-email-label">Quotation Date</label>
+              <input
+                type="date"
+                className="qh-email-input"
+                value={quotationDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+              />
+            </div>
+            <div className="qh-email-field">
               <label className="qh-email-label">Subject</label>
               <input
                 className="qh-email-input"
@@ -794,7 +952,7 @@ ${coName}${coPhone ? '\n' + coPhone : ''}${coEmail ? '\n' + coEmail : ''}`)
             <button className="qh-action-btn" onClick={handleCopy} style={{ minWidth: 110 }}>
               {copied ? '✓ Copied!' : 'Copy Body'}
             </button>
-            <button className="cop-pdf-btn" onClick={handleDownloadInvoice} disabled={invoiceLoading} title="Preview invoice PDF">
+            <button className="cop-pdf-btn" onClick={handleDownloadInvoice} disabled={invoiceLoading} title="Preview quotation PDF">
               {invoiceLoading ? (
                 <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
               ) : (
@@ -847,9 +1005,10 @@ const CP_STATUS_CFG = {
 }
 
 // ── Calculation row ───────────────────────────────────────────────────────────
-function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRequest, onEmailDraft, versionLabel, clientName, orderName, refCode, onCPStatusChange, onClientStatusUpdate }) {
+function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onViewReadOnly, onApproveRequest, onEmailDraft, versionLabel, clientName, orderName, refCode, onCPStatusChange, onClientStatusUpdate }) {
   const [pdfLoading, setPdfLoading]             = useState(false)
   const [quotationLoading, setQuotationLoading] = useState(false)
+  const [showDatePicker, setShowDatePicker]     = useState(false)
   const [cpDropdownPos, setCpDropdownPos]       = useState(null)
   const [clientDropdownPos, setClientDropdownPos] = useState(null)
   const [cpConfirm, setCpConfirm]               = useState(null) // { next, label }
@@ -933,14 +1092,19 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
     }
   }
 
-  async function handleInvoicePDF(e) {
+  function handleInvoicePDF(e) {
     e.stopPropagation()
+    setShowDatePicker(true)
+  }
+
+  async function generateInvoiceWithDate(date) {
+    setShowDatePicker(false)
     setPdfLoading(true)
     try {
       const data = calc.result ? calc : await api.getCalculation(calc.id)
       let cs = {}
       try { cs = await api.getPublicSettings() } catch (_) {}
-      generateInvoicePDF(buildInvoicePayload(data, clientName, orderName), cs)
+      generateInvoicePDF({ ...buildInvoicePayload(data, clientName, orderName), quotation_date: date }, cs)
     } catch (err) {
       toast.error(err.message || 'PDF generation failed')
     } finally {
@@ -973,13 +1137,13 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
   return (
     <div className={`cop-calc-row${isApproved ? ' cop-calc-row--approved' : ''}`}>
       {/* left accent bar */}
-      <div className="cop-calc-accent" onClick={onViewDetail} style={{ cursor: 'pointer' }} />
+      <div className="cop-calc-accent" />
 
       {/* ── Approved Quote Card ── */}
       <div className="cop-aq-card">
 
         {/* Header: ref + version badge | approved stamp + date */}
-        <div className="cop-aq-header" onClick={onViewDetail} style={{ cursor: 'pointer' }}>
+        <div className="cop-aq-header">
           <div className="cop-aq-refs">
             {refCode && <span className="cop-calc-ref-badge">{refCode}</span>}
             {versionLabel && <span className="cop-calc-ref-badge--ver">{versionLabel}</span>}
@@ -995,13 +1159,11 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
           </div>
         </div>
 
-        {/* Body: size + meta | pricing */}
-        <div className="cop-aq-body" onClick={onViewDetail} style={{ cursor: 'pointer' }}>
+        {/* Body: meta | pricing */}
+        <div className="cop-aq-body">
           <div className="cop-aq-info">
-            <div className="cop-aq-size">{fmt(calc.width, 1)} × {fmt(calc.height, 1)} mm</div>
             <div className="cop-aq-meta">
               {calc.substrate_name || 'Custom substrate'}
-              {calc.yield_pct ? ` · ${calc.yield_pct}% yield` : ''}
             </div>
           </div>
           {calc.pricing && (
@@ -1070,7 +1232,7 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
           </div>
 
           <div className="cop-aq-actions">
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Quotation PDF">
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleQuotationPDF} disabled={quotationLoading} title="Cost Estimate PDF">
               {quotationLoading ? (
                 <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
               ) : (
@@ -1081,9 +1243,9 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
                   <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
               )}
-              Quotation
+              Cost Estimate
             </button>
-            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Invoice PDF">
+            <button className="cop-pdf-btn cop-pdf-btn--sm" onClick={handleInvoicePDF} disabled={pdfLoading} title="Quotation PDF">
               {pdfLoading ? (
                 <span className="cop-spinner" style={{ width: 10, height: 10, borderWidth: 2 }} />
               ) : (
@@ -1092,12 +1254,18 @@ function CalcRow({ calc, isApproved, hasOtherApproved, onViewDetail, onApproveRe
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
               )}
-              Invoice
+              Quotation
             </button>
+            {showDatePicker && (
+              <DatePickerModal
+                onCancel={() => setShowDatePicker(false)}
+                onConfirm={generateInvoiceWithDate}
+              />
+            )}
             <button
               className="cop-pdf-btn cop-pdf-btn--sm"
               onClick={(e) => { e.stopPropagation(); onEmailDraft?.(calc) }}
-              title="Draft invoice email"
+              title="Draft Quotation Email"
               style={{ background: 'rgba(99,102,241,0.12)', borderColor: 'rgba(99,102,241,0.45)', color: '#4f46e5' }}
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1218,6 +1386,7 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
   }, [])
 
   // Modal states — only one shows at a time, except detailModal can layer over conflict
+  const [viewOnlyCalcId, setViewOnlyCalcId]   = useState(null) // read-only view for approved quotes
   const [detailModal, setDetailModal]         = useState(null) // { calcId, pendingCalcForConflict }
   const [versionDetailModal, setVersionDetailModal] = useState(null) // version object
   const [approveConfirm, setApproveConfirm]   = useState(null) // calc object
@@ -1392,11 +1561,12 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
                   isApproved={true}
                   hasOtherApproved={false}
                   onViewDetail={() => setDetailModal({ calcId: c.id, pendingCalcForConflict: null })}
+                  onViewReadOnly={() => setViewOnlyCalcId(c.id)}
                   onApproveRequest={handleApproveRequest}
                   onEmailDraft={setEmailDraftCalc}
                   onCPStatusChange={handleCPStatusChange}
                   onClientStatusUpdate={handleClientStatusUpdate}
-                  refCode={buildRef(clientName, order.name, numMap[c.id] ?? 1)}
+                  refCode={c.ref_code || buildRef(clientName, order.name, numMap[c.id] ?? 1)}
                   clientName={clientName}
                   orderName={order.name}
                 />
@@ -1419,7 +1589,7 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
                   onApproveRequest={() => {}}
                   onEmailDraft={setEmailDraftCalc}
                   onClientStatusUpdate={(_, next) => handleVersionClientStatusUpdate(v.id, next)}
-                  refCode={buildRef(clientName, order.name, parentNum)}
+                  refCode={v.ref_code || buildRef(clientName, order.name, parentNum)}
                   clientName={clientName}
                   orderName={order.name}
                 />
@@ -1430,6 +1600,17 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
       </div>
 
       {/* ── Modals ── */}
+
+      {viewOnlyCalcId && (
+        <CalcDetailModal
+          calcId={viewOnlyCalcId}
+          approvedId={approvedId}
+          onClose={() => setViewOnlyCalcId(null)}
+          clientName={clientName}
+          orderName={order.name}
+          readOnly
+        />
+      )}
 
       {detailModal && (
         <CalcDetailModal
@@ -1491,8 +1672,8 @@ function OrderPanel({ order, hideHeader, clientName, clientEmail }) {
   )
 }
 
-// ── New Order inline form ─────────────────────────────────────────────────────
-function NewOrderForm({ clientId, existingOrders, onCreated, onCancel }) {
+// ── New Order modal ───────────────────────────────────────────────────────────
+function NewOrderModal({ clientId, clientName, existingOrders, onCreated, onCancel }) {
   const nextNum = () => {
     if (!existingOrders || existingOrders.length === 0) return 'ORDER-001'
     const nums = existingOrders.map((o) => {
@@ -1521,36 +1702,73 @@ function NewOrderForm({ clientId, existingOrders, onCreated, onCancel }) {
     }
   }
 
-  return (
-    <form className="cop-new-order-form" onSubmit={handleSubmit}>
-      <div className="cop-new-order-title">New Order</div>
-      <div className="cop-new-order-fields">
-        <div className="cop-field">
-          <label className="cop-label">Order Name</label>
-          <input
-            className="cop-input" type="text"
-            value={orderName}
-            readOnly
-            style={{ opacity: 0.7, cursor: 'not-allowed', background: 'var(--bg-raised)' }}
-          />
+  return createPortal(
+    <div
+      className="cop-detail-overlay"
+      style={{ alignItems: 'center', justifyContent: 'center' }}
+      onClick={onCancel}
+    >
+      <div
+        className="cop-detail-modal"
+        style={{ maxWidth: 420, flex: 'none', width: '100%' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="cop-detail-header">
+          <button className="cop-detail-close" onClick={onCancel} disabled={busy}>← Cancel</button>
+          <span className="cop-detail-title">New Order</span>
         </div>
-        <div className="cop-field">
-          <label className="cop-label">Order Date</label>
-          <input
-            className="cop-input" type="date"
-            value={orderDate} onChange={(e) => setOrderDate(e.target.value)}
-            disabled={busy} autoFocus
-          />
-        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="cop-detail-body" style={{ padding: '1.4rem 1.6rem', gap: '1rem', display: 'flex', flexDirection: 'column' }}>
+
+            {/* Client info */}
+            <div style={{
+              background: 'rgba(26,188,171,0.07)',
+              border: '1px solid rgba(26,188,171,0.2)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.65rem 0.9rem',
+            }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: '0.2rem' }}>Client</div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>{clientName || '—'}</div>
+            </div>
+
+            <div className="cop-field">
+              <label className="cop-label">Order Name</label>
+              <input
+                className="cop-input"
+                type="text"
+                value={orderName}
+                readOnly
+                style={{ opacity: 0.7, cursor: 'not-allowed', background: 'var(--bg-raised)' }}
+              />
+            </div>
+
+            <div className="cop-field">
+              <label className="cop-label">Order Date</label>
+              <input
+                className="cop-input"
+                type="date"
+                value={orderDate}
+                onChange={e => setOrderDate(e.target.value)}
+                disabled={busy}
+                autoFocus
+              />
+            </div>
+
+            {err && <div className="cop-inline-err">{err}</div>}
+          </div>
+
+          <div className="cop-detail-footer" style={{ justifyContent: 'flex-end', gap: '0.6rem' }}>
+            <button className="qh-action-btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
+            <button className="cop-pdf-btn" type="submit" disabled={busy}>
+              {busy ? <span className="cop-spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : null}
+              {busy ? 'Creating…' : '+ Create Order'}
+            </button>
+          </div>
+        </form>
       </div>
-      {err && <div className="cop-inline-err">{err}</div>}
-      <div className="cop-new-order-actions">
-        <button className="cop-btn cop-btn--primary" type="submit" disabled={busy}>
-          {busy ? '…' : '+ Create Order'}
-        </button>
-        <button className="cop-btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
-      </div>
-    </form>
+    </div>,
+    document.body
   )
 }
 
@@ -1613,8 +1831,8 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
             </div>
             {(client.email || client.phone) && (
               <div className="cop-customer-contacts">
-                {client.email && <span className="cop-contact-item">✉ {client.email}</span>}
-                {client.phone && <span className="cop-contact-item">📞 {client.phone}</span>}
+                {client.email && <span className="cop-contact-item">{client.email}</span>}
+                {client.phone && <span className="cop-contact-item">{client.phone}</span>}
               </div>
             )}
           </div>
@@ -1688,20 +1906,20 @@ function CustomerCard({ client, onOrderCountChange, onClientUpdated }) {
                   </div>
                 )}
 
-                {showNewOrder ? (
-                  <NewOrderForm
+                <button
+                  className="cop-add-order-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowNewOrder(true) }}
+                >
+                  + New Order
+                </button>
+                {showNewOrder && (
+                  <NewOrderModal
                     clientId={client.id}
+                    clientName={client.name}
                     existingOrders={orders}
                     onCreated={handleOrderCreated}
                     onCancel={() => setShowNewOrder(false)}
                   />
-                ) : (
-                  <button
-                    className="cop-add-order-btn"
-                    onClick={(e) => { e.stopPropagation(); setShowNewOrder(true) }}
-                  >
-                    + New Order
-                  </button>
                 )}
               </>
             )}
@@ -2006,3 +2224,4 @@ export default function CustomerOrdersPage() {
     </div>
   )
 }
+

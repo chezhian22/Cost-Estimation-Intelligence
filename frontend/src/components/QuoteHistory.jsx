@@ -387,6 +387,11 @@ function VersionsSection({
 	clientName,
 	orderName,
 	refCode,
+	selectMode,
+	selectedItems,
+	onToggleSelect,
+	lockedClientId,
+	lockedOrderId,
 }) {
 	const [versions, setVersions] = useState(null);
 	const [loading, setLoading] = useState(true);
@@ -509,7 +514,8 @@ function VersionsSection({
 	return (
 		<>
 			{/* ── Column header row ── */}
-			<div className="qh-v-header">
+			<div className={`qh-v-header${selectMode ? " qh-v-header--select" : ""}`}>
+				{selectMode && <div className="qh-v-header-cell"></div>}
 				<div className="qh-v-header-cell"></div>
 				<div className="qh-v-header-cell">Size (mm)</div>
 				<div className="qh-v-header-cell">Yield%</div>
@@ -528,9 +534,26 @@ function VersionsSection({
 							className={`qh-v-card${
 								v.status === "confirmed" ? " qh-v-card--confirmed"
 								: v.status === "rejected" ? " qh-v-card--rejected"
-								: ""
+								: ""}${selectedItems?.has(`ver-${v.id}`) ? " qh-v-card--selected" : ""}${selectMode ? " qh-v-card--select" : ""
 							}`}
 						>
+							{/* ── Checkbox (select mode) ── */}
+							{selectMode && (
+								<div
+									className="qh-vc-cell"
+									style={{ alignItems: "center", justifyContent: "center", cursor: "pointer", padding: "0 0.3rem" }}
+									onClick={(e) => { e.stopPropagation(); onToggleSelect?.(`ver-${v.id}`, { ...v, client_id: parentCalc?.client_id, order_id: parentCalc?.order_id, client_name: parentCalc?.client_name, order_name: parentCalc?.order_name }) }}
+								>
+									<div className={`qh-row-checkbox${selectedItems?.has(`ver-${v.id}`) ? " qh-row-checkbox--checked" : ""}${!selectedItems?.has(`ver-${v.id}`) && (selectedItems?.size >= 4 || (lockedClientId !== null && (parentCalc?.client_id !== lockedClientId || parentCalc?.order_id !== lockedOrderId))) ? " qh-row-checkbox--disabled" : ""}`}>
+										{selectedItems?.has(`ver-${v.id}`) && (
+											<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--bg-page)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+												<polyline points="20 6 9 17 4 12"/>
+											</svg>
+										)}
+									</div>
+								</div>
+							)}
+
 							{/* ── Col 1: Reference ── */}
 							<div className="qh-vc-cell" style={{ alignItems: "center" }}>
 								<span
@@ -968,7 +991,7 @@ function StatusBadge({ calcId, status, onChoose, onSave }) {
 	);
 }
 
-export default function QuoteHistory({ onEditCalc, onEditVersion }) {
+export default function QuoteHistory({ onEditCalc, onEditVersion, onCompareQuotes }) {
 	const [quotes, setQuotes] = useState(null);
 	const [clients, setClients] = useState([]);
 	const [orders, setOrders] = useState([]);
@@ -981,6 +1004,8 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 	const [expandedRows, setExpandedRows] = useState(new Set());
 	const [versionsRefreshAt, setVersionsRefreshAt] = useState(null);
 	const [pdfLoadingIds, setPdfLoadingIds] = useState(new Set());
+	const [selectMode, setSelectMode]         = useState(false);
+	const [selectedItems, setSelectedItems]   = useState(new Map()); // key → item data
 
 	const loadData = useCallback(async (silent = false) => {
 		if (!silent) setLoading(true);
@@ -1156,6 +1181,36 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 		setOrders([]);
 	}
 
+	function toggleSelectMode() {
+		setSelectMode(v => !v);
+		setSelectedItems(new Map());
+	}
+
+	function toggleSelectItem(key, data) {
+		setSelectedItems(prev => {
+			const next = new Map(prev);
+			if (next.has(key)) { next.delete(key); return next; }
+			if (next.size >= 4) return prev;
+			if (next.size > 0) {
+				const first = Array.from(next.values())[0];
+				if (data.client_id !== first.client_id || data.order_id !== first.order_id) return prev;
+			}
+			next.set(key, data);
+			return next;
+		});
+	}
+
+	const _firstSel = selectedItems.size > 0 ? Array.from(selectedItems.values())[0] : null;
+	const lockedClientId = _firstSel?.client_id ?? null;
+	const lockedOrderId  = _firstSel?.order_id  ?? null;
+
+	function handleCompare() {
+		const selected = Array.from(selectedItems.values());
+		onCompareQuotes?.(selected);
+		setSelectMode(false);
+		setSelectedItems(new Map());
+	}
+
 	const hasFilters = selectedClient || selectedOrder;
 
 	return (
@@ -1252,10 +1307,28 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 						</span>
 					</div>
 
-					{/* ── Flat table ── */}
+					{/* ── Selection banner ── */}
+					{selectMode && (
+						<div className="qh-select-banner">
+							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+								<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+							</svg>
+							<span>
+								Expand a quote to also select its versions. Select 2–4 from the same client and order.
+								{selectedItems.size > 0 && (
+									<strong style={{ marginLeft: '0.5rem', color: 'var(--teal)' }}>
+										{selectedItems.size} selected{selectedItems.size === 4 ? ' (max)' : ''}. Locked to: {_firstSel?.client_name} / {_firstSel?.order_name}.
+									</strong>
+								)}
+							</span>
+						</div>
+					)}
+
+				{/* ── Flat table ── */}
 					<div className="table-wrapper">
 						<table className="qh-table" style={{ tableLayout: "fixed" }}>
 							<colgroup>
+								{selectMode && <col style={{ width: 36 }} />}
 								<col style={{ width: 145 }} />
 								{/* Ref */}
 								<col style={{ width: 88 }} />
@@ -1275,6 +1348,7 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 							</colgroup>
 							<thead>
 								<tr>
+									{selectMode && <th style={{ width: 36 }}></th>}
 									<th style={{ textAlign: "center" }}>Ref</th>
 									<th style={{ textAlign: "center" }}>Client</th>
 									<th style={{ textAlign: "center" }}>Order</th>
@@ -1323,10 +1397,24 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 														" qh-quote-row--confirmed"
 													: q.status === "rejected" ? " qh-quote-row--rejected"
 													: ""
-												}`}
+												}${selectMode ? " qh-quote-row--selectable" : ""}${selectedItems.has(`calc-${q.id}`) ? " qh-quote-row--selected" : ""}`}
 												style={{ cursor: "pointer" }}
 												onClick={() => toggleExpand(q.id)}
 											>
+												{selectMode && (
+													<td
+														style={{ textAlign: "center", verticalAlign: "middle", padding: "0 0.4rem" }}
+														onClick={(e) => { e.stopPropagation(); if (!selectedItems.has(`calc-${q.id}`) && lockedClientId !== null && (q.client_id !== lockedClientId || q.order_id !== lockedOrderId)) return; toggleSelectItem(`calc-${q.id}`, q) }}
+													>
+														<div className={`qh-row-checkbox${selectedItems.has(`calc-${q.id}`) ? " qh-row-checkbox--checked" : ""}${!selectedItems.has(`calc-${q.id}`) && (selectedItems.size >= 4 || (lockedClientId !== null && (q.client_id !== lockedClientId || q.order_id !== lockedOrderId))) ? " qh-row-checkbox--disabled" : ""}`}>
+															{selectedItems.has(`calc-${q.id}`) && (
+																<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--bg-page)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+																	<polyline points="20 6 9 17 4 12"/>
+																</svg>
+															)}
+														</div>
+													</td>
+												)}
 												<td
 													style={{ textAlign: "center", whiteSpace: "nowrap" }}
 												>
@@ -1337,19 +1425,21 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 															gap: "0.25rem",
 														}}
 													>
-														<svg
-															className={`qh-row-chevron${isExpanded ? " qh-row-chevron--open" : ""}`}
-															width="11"
-															height="11"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															strokeWidth="2.5"
-															strokeLinecap="round"
-															strokeLinejoin="round"
-														>
-															<polyline points="6 9 12 15 18 9" />
-														</svg>
+														{!selectMode && (
+															<svg
+																className={`qh-row-chevron${isExpanded ? " qh-row-chevron--open" : ""}`}
+																width="11"
+																height="11"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																strokeWidth="2.5"
+																strokeLinecap="round"
+																strokeLinejoin="round"
+															>
+																<polyline points="6 9 12 15 18 9" />
+															</svg>
+														)}
 														<span
 															className="qh-v-badge"
 															style={{ letterSpacing: "0.03em" }}
@@ -1606,7 +1696,7 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 													key={`versions-${q.id}`}
 													className="qh-versions-expand-row"
 												>
-													<td colSpan={8} style={{ padding: 0 }}>
+													<td colSpan={selectMode ? 9 : 8} style={{ padding: 0 }}>
 														<div className="qh-versions-container">
 															<div className="qh-versions-header">
 																<svg
@@ -1641,6 +1731,11 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 																onEditVersion={onEditVersion}
 																clientName={q.client_name}
 																orderName={q.order_name}
+					selectMode={selectMode}
+					selectedItems={selectedItems}
+					onToggleSelect={toggleSelectItem}
+					lockedClientId={lockedClientId}
+					lockedOrderId={lockedOrderId}
 															/>
 														</div>
 													</td>
@@ -1660,6 +1755,45 @@ export default function QuoteHistory({ onEditCalc, onEditVersion }) {
 					calcId={detailCalcId}
 					onClose={() => setDetailCalcId(null)}
 				/>
+			)}
+
+			{/* ── Compare FAB ── */}
+			{createPortal(
+				<>
+					{/* Bottom-left in select mode, bottom-right when idle */}
+					<div className={`qh-compare-fab-wrap${selectMode ? " qh-compare-fab-wrap--left" : " qh-compare-fab-wrap--right"}`} style={!selectMode ? { right: 'calc(3rem + 100px)' } : { left: 'calc(3rem + 300px)' }}>
+						{selectMode ? (
+							<button
+								className={`qh-compare-fab${selectedItems.size >= 2 ? " qh-compare-fab--ready" : ""}`}
+								onClick={selectedItems.size >= 2 ? handleCompare : undefined}
+								disabled={selectedItems.size < 2}
+								title={selectedItems.size < 2 ? "Select at least 2 quotes" : `Compare ${selectedItems.size} quotes`}
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+									<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+								</svg>
+								{selectedItems.size >= 2 ? `Compare ${selectedItems.size} Quotes` : "Select 2–4 Quotes"}
+							</button>
+						) : (
+							<button className="qh-compare-fab" onClick={toggleSelectMode} title="Compare quotes side by side">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+									<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+								</svg>
+								Compare Quotes
+							</button>
+						)}
+					</div>
+
+					{/* Bottom-right: Cancel only in select mode */}
+					{selectMode && (
+						<div className="qh-compare-fab-wrap qh-compare-fab-wrap--right">
+							<button className="qh-compare-fab-cancel" onClick={toggleSelectMode}>
+								✕ Cancel
+							</button>
+						</div>
+					)}
+				</>,
+				document.body
 			)}
 		</section>
 	);

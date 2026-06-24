@@ -80,6 +80,7 @@ class Calculation(Base):
     foil_cost        = Column(Float, nullable=False, default=0)
     custom_cost      = Column(Float, nullable=False, default=0)
     selected_teeth   = Column(Integer, nullable=True)
+    selected_tier    = Column(String(20), nullable=True)
     exchange_rate    = Column(Float, nullable=False)
     order_qty        = Column(Integer, nullable=True)
     ref_code         = Column(String(30), nullable=True)
@@ -138,6 +139,17 @@ class CompanySettings(Base):
     logo           = Column(Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=True)
     updated_at     = Column(DateTime,    nullable=True)
 
+    # Tax & compliance
+    hsn_sac_code   = Column(String(30),  nullable=True)
+    lut_number     = Column(String(50),  nullable=True)
+
+    # Bank details
+    bank_name           = Column(String(120), nullable=True)
+    bank_account_name   = Column(String(120), nullable=True)
+    bank_account_number = Column(String(30),  nullable=True)
+    bank_ifsc           = Column(String(20),  nullable=True)
+    bank_branch         = Column(String(120), nullable=True)
+
     # SMTP / email settings
     smtp_host      = Column(String(200), nullable=True)
     smtp_port      = Column(Integer,     nullable=True, default=587)
@@ -145,6 +157,9 @@ class CompanySettings(Base):
     smtp_password  = Column(String(500), nullable=True)
     smtp_use_tls   = Column(Boolean,     nullable=True, default=True)
     smtp_from_name = Column(String(120), nullable=True)
+
+    # Notification monitor interval (seconds)
+    notification_interval_seconds = Column(Integer, nullable=True, default=60)
 
 
 class EmailLog(Base):
@@ -182,6 +197,7 @@ class CalculationVersion(Base):
     foil_cost      = Column(Float, nullable=False, default=0)
     custom_cost    = Column(Float, nullable=False, default=0)
     selected_teeth = Column(Integer, nullable=True)
+    selected_tier  = Column(String(20), nullable=True)
     exchange_rate  = Column(Float, nullable=False)
     order_qty      = Column(Integer, nullable=True)
     ref_code       = Column(String(30), nullable=True)

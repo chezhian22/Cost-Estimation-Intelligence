@@ -334,6 +334,11 @@ class CylinderUpdate(BaseModel):
     selected_teeth: int = Field(..., description="Teeth count of the approved cylinder.")
 
 
+class TierUpdate(BaseModel):
+    """Body for PATCH /api/calculations/{id}/tier."""
+    selected_tier: str = Field(..., description="Rate tier key: rate_15 | rate_175 | rate_2 | custom:<multiplier>")
+
+
 # ── Status update ────────────────────────────────────────────────────────────
 class StatusUpdate(BaseModel):
     """Body for PATCH /api/calculations/{id}/status."""
@@ -366,6 +371,7 @@ class CalculationHistoryOut(BaseModel):
     foil_cost: float           = Field(..., description="Foil cost used (₹/m²).")
     custom_cost: float         = Field(0,   description="Extra per-label cost used (₹/label).")
     selected_teeth: Optional[int] = Field(None, description="Teeth count of the user-selected cylinder.")
+    selected_tier:  Optional[str] = Field(None, description="User-selected rate tier key.")
     exchange_rate: float       = Field(..., description="Exchange rate used (₹ per $).")
     order_qty: Optional[int]   = Field(None, description="Label quantity for this order.")
     created_at: datetime       = Field(..., description="UTC timestamp when this was saved.")
@@ -404,6 +410,7 @@ class CalculationVersionOut(BaseModel):
     foil_cost:      float
     custom_cost:    float
     selected_teeth: Optional[int]  = None
+    selected_tier:  Optional[str]  = None
     exchange_rate:  float
     order_qty:      Optional[int]  = None
     status:                        str
@@ -474,6 +481,13 @@ class CompanySettingsOut(BaseModel):
     gst_number:   Optional[str]    = None
     cgst_pct:     Optional[float]  = None
     sgst_pct:     Optional[float]  = None
+    hsn_sac_code:        Optional[str]  = None
+    lut_number:          Optional[str]  = None
+    bank_name:           Optional[str]  = None
+    bank_account_name:   Optional[str]  = None
+    bank_account_number: Optional[str]  = None
+    bank_ifsc:           Optional[str]  = None
+    bank_branch:         Optional[str]  = None
     logo:           Optional[str]    = None
     updated_at:     Optional[datetime] = None
     smtp_host:         Optional[str]    = None
@@ -495,10 +509,17 @@ class CompanySettingsUpdate(BaseModel):
     email:          Optional[str]    = Field(None, max_length=200)
     phone:          Optional[str]    = Field(None, max_length=30)
     website:        Optional[str]    = Field(None, max_length=200)
-    gst_number:     Optional[str]    = Field(None, max_length=50)
-    cgst_pct:       Optional[float]  = Field(None, ge=0, le=100)
-    sgst_pct:       Optional[float]  = Field(None, ge=0, le=100)
-    smtp_host:      Optional[str]    = Field(None, max_length=200)
+    gst_number:          Optional[str]   = Field(None, max_length=50)
+    cgst_pct:            Optional[float] = Field(None, ge=0, le=100)
+    sgst_pct:            Optional[float] = Field(None, ge=0, le=100)
+    hsn_sac_code:        Optional[str]   = Field(None, max_length=30)
+    lut_number:          Optional[str]   = Field(None, max_length=50)
+    bank_name:           Optional[str]   = Field(None, max_length=120)
+    bank_account_name:   Optional[str]   = Field(None, max_length=120)
+    bank_account_number: Optional[str]   = Field(None, max_length=30)
+    bank_ifsc:           Optional[str]   = Field(None, max_length=20)
+    bank_branch:         Optional[str]   = Field(None, max_length=120)
+    smtp_host:           Optional[str]   = Field(None, max_length=200)
     smtp_port:      Optional[int]    = Field(None, ge=1, le=65535)
     smtp_user:      Optional[str]    = Field(None, max_length=200)
     smtp_password:  Optional[str]    = Field(None, max_length=500)

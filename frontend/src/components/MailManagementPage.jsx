@@ -1,15 +1,23 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+﻿import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '../api'
 
 const AUTO_REFRESH_MS = 2 * 60 * 1000  // re-poll every 2 min for auto-detected bounces
 
+function parseUTC(dt) {
+  if (!dt) return null
+  // If the string has no timezone indicator, treat it as UTC (backend stores utcnow without Z)
+  const s = /[Zz]$|[+-]\d{2}:\d{2}$/.test(dt) ? dt : dt + 'Z'
+  return new Date(s)
+}
 function fmtDate(dt) {
-  if (!dt) return '—'
-  return new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const d = parseUTC(dt)
+  if (!d) return '—'
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 function fmtTime(dt) {
-  if (!dt) return ''
-  return new Date(dt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const d = parseUTC(dt)
+  if (!d) return ''
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
 function StatusBadge({ status }) {
@@ -86,7 +94,7 @@ export default function MailManagementPage() {
         <div className="cop-page-title-wrap">
           <div className="cop-page-title">Mail Management</div>
           <div className="cop-page-sub">
-            History of all invoice emails · Bounces are auto-detected from your Gmail inbox every 5 min
+            History of all invoice emails
           </div>
         </div>
         <div className="cop-header-right">
@@ -133,7 +141,7 @@ export default function MailManagementPage() {
         </span>
         {lastChecked && (
           <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', flexShrink: 0, fontSize: '0.8rem' }}>
-            Last refreshed: {lastChecked.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            Last refreshed: {lastChecked.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
           </span>
         )}
       </div>
@@ -213,7 +221,7 @@ export default function MailManagementPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', color: 'var(--text)' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Client', 'Order', 'Quotation', 'To Email', 'Date & Time', 'Sent By', 'Status', 'Remarks'].map((h) => (
+                {['Client', 'Order', 'Cost Estimate', 'To Email', 'Date & Time', 'Sent By', 'Status', 'Remarks'].map((h) => (
                   <th key={h} style={{
                     padding: '0.6rem 0.75rem', textAlign: 'center',
                     fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase',
@@ -304,3 +312,4 @@ export default function MailManagementPage() {
     </div>
   )
 }
+

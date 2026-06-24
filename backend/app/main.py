@@ -18,7 +18,7 @@ from .bounce_monitor import bounce_monitor_loop, check_bounces_debug
 from .notification_monitor import notification_monitor_loop
 from . import notification_monitor as _notif_monitor
 from .invoice_pdf import generate_invoice_pdf_bytes
-from .auth import create_access_token, decode_token, hash_password, verify_password
+from .auth import create_access_token, decode_token, decrypt_smtp_password, hash_password, verify_password
 from .database import Base, engine, get_db
 from .security import check_request_body
 
@@ -148,6 +148,8 @@ def _migrate():
                 conn.execute(text("ALTER TABLE calculations ADD COLUMN client_status_changed_by_id INTEGER NULL"))
             if "client_status_changed_at" not in existing:
                 conn.execute(text("ALTER TABLE calculations ADD COLUMN client_status_changed_at DATETIME NULL"))
+            if "selected_tier" not in existing:
+                conn.execute(text("ALTER TABLE calculations ADD COLUMN selected_tier VARCHAR(20) NULL"))
             if "ref_code" not in existing:
                 conn.execute(text("ALTER TABLE calculations ADD COLUMN ref_code VARCHAR(30) NULL"))
                 # Backfill ref_code for existing rows that have an order_id
@@ -242,6 +244,8 @@ def _migrate():
                     ref = f"{row[2]}-V{row[1]}"
                     conn.execute(text("UPDATE calculation_versions SET ref_code = :ref WHERE id = :id"),
                                  {"ref": ref, "id": row[0]})
+            if "selected_tier" not in ver_cols:
+                conn.execute(text("ALTER TABLE calculation_versions ADD COLUMN selected_tier VARCHAR(20) NULL"))
 
         # notifications — read_by_id / read_at added for first-reader tracking
         if "notifications" in tables:
@@ -270,6 +274,14 @@ def _migrate():
                 ("smtp_password",  "VARCHAR(500) NULL"),
                 ("smtp_use_tls",   "BOOLEAN NULL DEFAULT TRUE"),
                 ("smtp_from_name", "VARCHAR(120) NULL"),
+                ("notification_interval_seconds", "INT NULL DEFAULT 60"),
+                ("hsn_sac_code",        "VARCHAR(30)  NULL"),
+                ("lut_number",          "VARCHAR(50)  NULL"),
+                ("bank_name",           "VARCHAR(120) NULL"),
+                ("bank_account_name",   "VARCHAR(120) NULL"),
+                ("bank_account_number", "VARCHAR(30)  NULL"),
+                ("bank_ifsc",           "VARCHAR(20)  NULL"),
+                ("bank_branch",         "VARCHAR(120) NULL"),
             ]:
                 if col not in cs_cols:
                     conn.execute(text(f"ALTER TABLE company_settings ADD COLUMN {col} {ddl}"))
@@ -415,6 +427,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def _start_background_tasks():
     import asyncio
+    db = _SL()
+    try:
+        settings = db.query(models.CompanySettings).filter(models.CompanySettings.id == 1).first()
+        if settings and settings.notification_interval_seconds:
+            _notif_monitor._INTERVAL_SECONDS = settings.notification_interval_seconds
+    finally:
+        db.close()
     asyncio.create_task(bounce_monitor_loop())
     asyncio.create_task(notification_monitor_loop())
 
@@ -970,6 +989,24 @@ def update_cylinder(
 
 
 @app.patch(
+    "/api/calculations/{calc_id}/tier",
+    tags=["history"],
+    summary="Update selected rate tier",
+)
+def update_tier(
+    calc_id: int,
+    body: schemas.TierUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_optional_user),
+):
+    uid = current_user.id if current_user else None
+    obj = crud.update_selected_tier(db, calc_id, body.selected_tier, user_id=uid)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Calculation not found")
+    return {"id": obj.id, "selected_tier": obj.selected_tier}
+
+
+@app.patch(
     "/api/calculations/{calc_id}/status",
     tags=["history"],
     summary="Update quote status",
@@ -1062,6 +1099,9 @@ def get_calculation(calc_id: int, db: Session = Depends(get_db)):
         "substrate_name": obj.substrate_name,
         "substrate_price": obj.substrate_price,
         "foil_cost": obj.foil_cost,
+        "custom_cost": obj.custom_cost if obj.custom_cost is not None else 0,
+        "selected_teeth": obj.selected_teeth,
+        "selected_tier": obj.selected_tier,
         "exchange_rate": obj.exchange_rate,
         "order_qty": obj.order_qty,
         "created_at": obj.created_at,
@@ -1103,7 +1143,9 @@ def list_versions(calc_id: int, db: Session = Depends(get_db)):
             "foil_cost": v.foil_cost,
             "custom_cost": v.custom_cost,
             "selected_teeth": v.selected_teeth,
+            "selected_tier": v.selected_tier,
             "exchange_rate": v.exchange_rate,
+            "order_qty": v.order_qty,
             "status": v.status,
             "created_by_name": v.created_by.username if v.created_by else None,
             "status_changed_by_name": v.status_changed_by.username if v.status_changed_by else None,
@@ -1294,17 +1336,18 @@ def _send_welcome_email(cs, to_email: str, username: str, plain_password: str, a
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
     ctx     = _ssl_mod.create_default_context()
+    smtp_pwd = decrypt_smtp_password(cs.smtp_password)
     try:
         if port == 465:
             with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as srv:
-                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.login(cs.smtp_user, smtp_pwd)
                 srv.send_message(msg)
         else:
             with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as srv:
                 srv.ehlo()
                 if use_tls:
                     srv.starttls(context=ctx)
-                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.login(cs.smtp_user, smtp_pwd)
                 srv.send_message(msg)
         _logger.info("Welcome email sent to %s", to_email)
         return True
@@ -1341,17 +1384,18 @@ def _send_password_changed_email(cs, to_email: str, username: str, new_password:
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
     ctx     = _ssl_mod.create_default_context()
+    smtp_pwd = decrypt_smtp_password(cs.smtp_password)
     try:
         if port == 465:
             with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as srv:
-                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.login(cs.smtp_user, smtp_pwd)
                 srv.send_message(msg)
         else:
             with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as srv:
                 srv.ehlo()
                 if use_tls:
                     srv.starttls(context=ctx)
-                srv.login(cs.smtp_user, cs.smtp_password)
+                srv.login(cs.smtp_user, smtp_pwd)
                 srv.send_message(msg)
         _logger.info("Password-changed email sent to %s", to_email)
         return True
@@ -1474,10 +1518,17 @@ def get_public_company_settings(
         "email":        obj.email,
         "phone":        obj.phone,
         "website":      obj.website,
-        "gst_number":   obj.gst_number,
-        "cgst_pct":     obj.cgst_pct,
-        "sgst_pct":     obj.sgst_pct,
-        "logo":         obj.logo,
+        "gst_number":          obj.gst_number,
+        "cgst_pct":            obj.cgst_pct,
+        "sgst_pct":            obj.sgst_pct,
+        "logo":                obj.logo,
+        "hsn_sac_code":        obj.hsn_sac_code,
+        "lut_number":          obj.lut_number,
+        "bank_name":           obj.bank_name,
+        "bank_account_name":   obj.bank_account_name,
+        "bank_account_number": obj.bank_account_number,
+        "bank_ifsc":           obj.bank_ifsc,
+        "bank_branch":         obj.bank_branch,
     }
 
 
@@ -1610,6 +1661,7 @@ def send_invoice_email(
     port    = cs.smtp_port or 587
     use_tls = cs.smtp_use_tls if cs.smtp_use_tls is not None else True
     ctx     = _ssl_mod.create_default_context()
+    smtp_pwd = decrypt_smtp_password(cs.smtp_password)
 
     _log_status  = "sent"
     _log_remarks = None
@@ -1617,14 +1669,14 @@ def send_invoice_email(
     try:
         if port == 465:
             with _SMTP_SSL_IPv4(cs.smtp_host, port, context=ctx) as server:
-                server.login(cs.smtp_user, cs.smtp_password)
+                server.login(cs.smtp_user, smtp_pwd)
                 server.send_message(email_msg)
         else:
             with _SMTP_IPv4(cs.smtp_host, port, timeout=15) as server:
                 server.ehlo()
                 if use_tls:
                     server.starttls(context=ctx)
-                server.login(cs.smtp_user, cs.smtp_password)
+                server.login(cs.smtp_user, smtp_pwd)
                 server.send_message(email_msg)
     except smtplib.SMTPRecipientsRefused as e:
         refused = e.recipients or {}
@@ -1797,7 +1849,10 @@ def admin_list_notifications(
 
 
 @app.get("/api/admin/notifications/monitor-interval", tags=["notifications"], summary="Get notification monitor interval")
-def get_monitor_interval(_: models.User = Depends(require_admin)):
+def get_monitor_interval(_: models.User = Depends(require_admin), db: Session = Depends(get_db)):
+    settings = db.query(models.CompanySettings).filter(models.CompanySettings.id == 1).first()
+    if settings and settings.notification_interval_seconds:
+        return {"interval_seconds": settings.notification_interval_seconds}
     return {"interval_seconds": _notif_monitor._INTERVAL_SECONDS}
 
 
@@ -1805,11 +1860,16 @@ def get_monitor_interval(_: models.User = Depends(require_admin)):
 def set_monitor_interval(
     body: dict,
     _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
     seconds = int(body.get("interval_seconds", 60))
     if seconds < 30:
         raise HTTPException(status_code=400, detail="Minimum interval is 30 seconds")
     _notif_monitor._INTERVAL_SECONDS = seconds
+    settings = db.query(models.CompanySettings).filter(models.CompanySettings.id == 1).first()
+    if settings:
+        settings.notification_interval_seconds = seconds
+        db.commit()
     return {"interval_seconds": _notif_monitor._INTERVAL_SECONDS}
 
 

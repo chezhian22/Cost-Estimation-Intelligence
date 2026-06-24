@@ -87,7 +87,7 @@ function LoginView({ onLogin, onChangePassword }) {
         </div>
 
         <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-          ChromaPrint
+          Chroma Print
         </div>
         <div style={{ fontSize: '1rem', fontWeight: 500, color: '#36E5C2', marginTop: '0.4rem', letterSpacing: '0.01em' }}>
           Cost Estimation Intelligence
@@ -133,7 +133,7 @@ function LoginView({ onLogin, onChangePassword }) {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="admin@gmail.com"
+                placeholder="you@company.com"
                 autoComplete="email"
                 autoFocus
                 style={{
@@ -251,12 +251,12 @@ function LoginView({ onLogin, onChangePassword }) {
               onClick={onChangePassword}
               style={{
                 background: 'none', border: 'none', padding: 0,
-                color: 'rgba(255,255,255,0.40)', fontSize: '0.82rem',
+                color: 'rgba(255,255,255,0.65)', fontSize: '0.82rem',
                 cursor: 'pointer', fontFamily: 'inherit',
                 textDecoration: 'underline', textUnderlineOffset: 3,
               }}
               onMouseEnter={e => e.currentTarget.style.color = '#36E5C2'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.40)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.65)'}
             >
               Change Password
             </button>
@@ -353,7 +353,7 @@ function ChangePasswordView({ onBack }) {
             <line x1="3" y1="16" x2="29" y2="16" stroke="#36E5C2" strokeWidth="1.3" strokeOpacity="0.6"/>
           </svg>
         </div>
-        <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>ChromaPrint</div>
+        <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>Chroma Print</div>
         <div style={{ fontSize: '1rem', fontWeight: 500, color: '#36E5C2', marginTop: '0.4rem' }}>Cost Estimation Intelligence</div>
         <div style={{ width: 48, height: 3, background: '#36E5C2', borderRadius: 2, margin: '1.6rem 0' }} />
         <div style={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, maxWidth: 280 }}>

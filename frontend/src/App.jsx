@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+﻿import React, { useEffect, useRef, useState } from 'react'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { api } from './api'
 import { generateInvoicePDF, generateQuotationPDF } from './utils/generatePDF'
 import InputPanel from './components/InputPanel'
@@ -95,10 +95,10 @@ const NAV_SECTIONS = [
       </svg>
     ),
     links: [
-      { id: 'calculator',   label: 'New Estimate'   },
-      { id: 'comparison',   label: 'Compare Quotes' },
-      { id: 'history',      label: 'Quote Management'  },
-      { id: 'pdf-preview',  label: 'Invoice Preview'  },
+      { id: 'calculator',   label: 'New Estimate'         },
+      { id: 'history',      label: 'Estimate Management'  },
+      { id: 'comparison',   label: 'Estimate Comparison', hidden: true },
+      { id: 'pdf-preview',  label: 'Quotation Preview'    },
     ],
   },
   {
@@ -109,8 +109,8 @@ const NAV_SECTIONS = [
       </svg>
     ),
     links: [
-      { id: 'client-orders',    label: 'Clients & Orders' },
-      { id: 'mail-management',  label: 'Communications'   },
+      { id: 'client-orders',    label: 'Approved Orders' },
+      { id: 'mail-management',  label: 'Mail Communications'   },
     ],
   },
 ]
@@ -148,7 +148,7 @@ function getBreadcrumb(viewId) {
   const allSections = [...NAV_SECTIONS, ADMIN_SECTION, USER_CATALOGUE_SECTION]
   for (const { section, links } of allSections) {
     for (const link of links) {
-      if (link.id === viewId) return { section, label: link.label }
+      if (link.id === viewId && !link.hidden) return { section, label: link.label }
     }
   }
   return null
@@ -162,6 +162,7 @@ export default function App() {
   const [substrates, setSubstrates]       = useState([])
   const [result, setResult]               = useState(null)
   const [selectedCylIdx, setSelectedCylIdx] = useState(null)
+  const [activeTierKey,  setActiveTierKey]  = useState(null)
   const [approvingCyl, setApprovingCyl] = useState(false)
   const [error, setError]                 = useState(null)
   const [loading, setLoading]             = useState(false)
@@ -169,6 +170,7 @@ export default function App() {
   const [formOpen, setFormOpen]           = useState(true)
   const location   = useLocation()
   const navigate   = useNavigate()
+  const [searchParams] = useSearchParams()
   const activeView = PATH_TO_VIEW[location.pathname] ?? 'dashboard'
   function setActiveView(id) { navigate(ROUTE_MAP[id] ?? '/') }
   const [clientId, setClientId]           = useState(null)
@@ -179,10 +181,15 @@ export default function App() {
   const [editingCalc, setEditingCalc]     = useState(null) // { id, client_name, order_name }
   const [pendingConfirm, setPendingConfirm] = useState(null) // { type: 'calc'|'version', id }
   const [confirmingQuote, setConfirmingQuote] = useState(false)
+  const [compareQuoteData, setCompareQuoteData] = useState([])
   const [quoteConfirmed, setQuoteConfirmed] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [hasCalculated, setHasCalculated] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [newNotifPopup, setNewNotifPopup] = useState([])
+  const prevUnreadRef = useRef(-1)   // -1 = first load not yet done
+  const seenNotifIdsRef = useRef(new Set())
+  const [errorDismissed, setErrorDismissed] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -208,13 +215,30 @@ export default function App() {
       .catch((e) => console.warn('Substrates unavailable:', e.message))
   }, [])
 
-  // Poll unread notification count every 60 s (matches backend check interval)
+  // Poll unread notification count every 60 s; show popup when new ones arrive
   useEffect(() => {
     if (!currentUser) return
-    const fetchCount = () =>
-      api.getUnreadCount()
-        .then(data => setUnreadCount(data.count ?? 0))
-        .catch(() => {})
+    const fetchCount = async () => {
+      try {
+        const data = await api.getUnreadCount()
+        const count = data.count ?? 0
+        if (prevUnreadRef.current === -1) {
+          // First load — seed seenIds so we don't popup existing unread
+          if (count > 0) {
+            const notifs = await api.getNotifications()
+            notifs.forEach(n => seenNotifIdsRef.current.add(n.id))
+          }
+        } else if (count > prevUnreadRef.current) {
+          // New notifications arrived — find which ones are genuinely new
+          const notifs = await api.getNotifications()
+          const newOnes = notifs.filter(n => !n.is_read && !seenNotifIdsRef.current.has(n.id))
+          newOnes.forEach(n => seenNotifIdsRef.current.add(n.id))
+          if (newOnes.length > 0) setNewNotifPopup(newOnes)
+        }
+        prevUnreadRef.current = count
+        setUnreadCount(count)
+      } catch (_) {}
+    }
     fetchCount()
     const id = setInterval(fetchCount, 60_000)
     return () => clearInterval(id)
@@ -224,6 +248,7 @@ export default function App() {
   function applyResult(a, prevTeeth) {
     setResult(a)
     setError(null)
+    setActiveTierKey(null)  // let initialTier re-read from result.selected_tier
     if (prevTeeth != null) {
       const idx = a.rows.findIndex(r => r.teeth === prevTeeth)
       setSelectedCylIdx(idx >= 0 ? idx : a.matched.index)
@@ -344,6 +369,8 @@ export default function App() {
 
   const handleCalculate = () => {
     setLoading(true)
+    setError(null)
+    setErrorDismissed(false)
     setPendingConfirm(null)
     setQuoteConfirmed(false)
     setHasCalculated(false)
@@ -394,11 +421,36 @@ export default function App() {
     const teeth = result?.rows[rowIdx]?.teeth
     if (!teeth) return
     setSelectedCylIdx(rowIdx)
-    if (!result?.calculation_id) return   // not yet saved, selection is local only
+    if (!result?.calculation_id) return
     setApprovingCyl(true)
     api.updateSelectedCylinder(result.calculation_id, teeth)
       .catch((e) => setError(e.message))
       .finally(() => setApprovingCyl(false))
+  }
+
+  const handleTierChange = (tierKey) => {
+    setActiveTierKey(tierKey)
+    if (!result?.calculation_id) return
+    api.updateSelectedTier(result.calculation_id, tierKey)
+      .catch((e) => setError(e.message))
+  }
+
+  const handleNewCalculation = () => {
+    setInputs(DEFAULTS)
+    setResult(null)
+    setSelectedCylIdx(null)
+    setActiveTierKey(null)
+    setEditingCalc(null)
+    setHasCalculated(false)
+    setError(null)
+    setErrorDismissed(false)
+    setPendingConfirm(null)
+    setQuoteConfirmed(false)
+    setClientId(null)
+    setClientName(null)
+    setOrderId(null)
+    setOrderName(null)
+    setFormOpen(true)
   }
 
   const handleDownloadQuotation = async () => {
@@ -410,7 +462,7 @@ export default function App() {
       order:  {
         order_id: result.calculation_id ? `CALC-${result.calculation_id}` : '',
         label:    orderName || '',
-        ref:      editingCalc ? `Edit v${result.version_number ?? '?'}` : '',
+        ref:      result.ref_code || (result.calculation_id ? `QT-${new Date().getFullYear()}-${String(result.calculation_id).padStart(4, '0')}` : ''),
       },
       inputs: {
         label_width_mm:  parseFloat(inputs.width),
@@ -465,6 +517,7 @@ export default function App() {
       order:  {
         order_id: result.calculation_id ? `CALC-${result.calculation_id}` : '',
         label:    orderName || '',
+        ref:      result.ref_code || (result.calculation_id ? `QT-${new Date().getFullYear()}-${String(result.calculation_id).padStart(4, '0')}` : ''),
       },
       inputs: {
         label_width_mm:  parseFloat(inputs.width),
@@ -506,12 +559,20 @@ export default function App() {
   }
 
   if (authLoading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-page)' }}>
-      <div style={{ color: 'var(--teal)', fontSize: '0.9rem' }}>Loading…</div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.2rem', background: 'var(--bg-page)' }}>
+      <svg width="42" height="42" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="13" stroke="#36E5C2" strokeWidth="2" strokeOpacity="0.9"/>
+        <ellipse cx="16" cy="16" rx="5.5" ry="13" stroke="#36E5C2" strokeWidth="1.5" strokeOpacity="0.7"/>
+        <line x1="3" y1="16" x2="29" y2="16" stroke="#36E5C2" strokeWidth="1.2" strokeOpacity="0.6"/>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ width: 28, height: 28, border: '2.5px solid rgba(54,229,194,0.20)', borderTopColor: '#36E5C2', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', letterSpacing: '0.04em' }}>Loading…</div>
+      </div>
     </div>
   )
 
-  if (!currentUser) return <LoginPage onLogin={setCurrentUser} />
+  if (!currentUser) return <LoginPage onLogin={(user) => { setCurrentUser(user); navigate('/') }} />
 
   const isAdmin = currentUser.role === 'admin'
 
@@ -524,6 +585,8 @@ export default function App() {
               className="nav-toggle"
               onClick={() => setNavOpen((v) => !v)}
               title={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-label={navOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-expanded={navOpen}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
                 <rect y="2"  width="18" height="2" rx="1"/>
@@ -562,6 +625,7 @@ export default function App() {
               className="theme-toggle"
               onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {theme === 'dark' ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -586,6 +650,8 @@ export default function App() {
               unreadCount={unreadCount}
               onOpenChange={() => {}}
               onRead={() => api.getUnreadCount().then(d => setUnreadCount(d.count ?? 0)).catch(() => {})}
+              newNotifPopup={newNotifPopup}
+              onDismissPopup={() => setNewNotifPopup([])}
             />
 
             <button
@@ -616,7 +682,7 @@ export default function App() {
               )}
               {section ? (
                 <div className="nav-link-group">
-                  {links.map(link => (
+                  {links.filter(l => !l.hidden).map(link => (
                     <button
                       key={link.id}
                       className={`nav-link nav-link--sub${activeView === link.id ? ' active' : ''}`}
@@ -628,7 +694,7 @@ export default function App() {
                   ))}
                 </div>
               ) : (
-                links.map(link => (
+                links.filter(l => !l.hidden).map(link => (
                   <button
                     key={link.id}
                     className={`nav-link${activeView === link.id ? ' active' : ''}`}
@@ -716,6 +782,7 @@ export default function App() {
               }}
               initialClientId={editingCalc?.client_id ?? null}
               initialOrderId={editingCalc?.order_id ?? null}
+              onReset={handleNewCalculation}
             />
           </aside>
         )}
@@ -724,17 +791,70 @@ export default function App() {
           {(() => {
             const bc = getBreadcrumb(activeView)
             if (!bc) return null
+            const quoteRef    = activeView === 'history' ? (searchParams.get('ref') || searchParams.get('vref') || null) : null
+            const versionLabel = activeView === 'history' ? (searchParams.get('vlabel') || null) : null
+            const chevron = (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', opacity: 1, flexShrink: 0 }}>
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            )
             return (
-              <div className="breadcrumb">
-                <span className="breadcrumb-section">{bc.section}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', opacity: 1, flexShrink: 0 }}>
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
-                <span className="breadcrumb-page">{bc.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="breadcrumb">
+                  <span className="breadcrumb-section">{bc.section}</span>
+                  {chevron}
+                  <span className={quoteRef ? 'breadcrumb-page breadcrumb-page--link' : 'breadcrumb-page'}>
+                    {bc.label}
+                  </span>
+                  {quoteRef && (
+                    <>
+                      {chevron}
+                      <span className="breadcrumb-page" style={{ color: versionLabel ? 'var(--text-dim)' : 'var(--teal)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', fontWeight: versionLabel ? 600 : 700 }}>
+                        {quoteRef}
+                      </span>
+                    </>
+                  )}
+                  {versionLabel && (
+                    <>
+                      {chevron}
+                      <span className="breadcrumb-page" style={{ color: 'var(--teal)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem' }}>
+                        {versionLabel}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {activeView === 'calculator' && (
+                  <button
+                    onClick={handleNewCalculation}
+                    title="Reset — clear all and start a fresh calculation"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 28, height: 28, borderRadius: '50%',
+                      border: '1px solid var(--border)', background: 'transparent',
+                      color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="1 4 1 10 7 10"/>
+                      <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+                    </svg>
+                  </button>
+                )}
               </div>
             )
           })()}
-          {error && <div className="error-banner">⚠ {error}</div>}
+          {error && !errorDismissed && (
+            <div className="error-banner">
+              <span>⚠ {error}</span>
+              <button
+                onClick={() => setErrorDismissed(true)}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.7, fontSize: '1rem', lineHeight: 1, padding: '0 0 0 0.5rem', flexShrink: 0 }}
+                aria-label="Dismiss error"
+              >✕</button>
+            </div>
+          )}
 
           {activeView === 'calculator' && !hasCalculated && !loading && (
             <div className="calc-empty-state">
@@ -771,7 +891,7 @@ export default function App() {
                   </span>
                   <button
                     className="edit-mode-exit"
-                    onClick={() => setEditingCalc(null)}
+                    onClick={handleNewCalculation}
                   >
                     Exit Edit Mode
                   </button>
@@ -781,55 +901,52 @@ export default function App() {
                 <button
                   className={`calc-toggle-btn${formOpen ? ' calc-toggle-btn--active' : ''}`}
                   onClick={() => setFormOpen((v) => !v)}
+                  title={formOpen ? 'Collapse input form' : 'Edit inputs'}
+                  style={{ width: 'auto', padding: '0 0.75rem', gap: '0.4rem', borderRadius: 'var(--radius-sm)', fontSize: '0.78rem', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ transform: formOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}>
+                    style={{ transform: formOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
                     <polyline points="15 18 9 12 15 6"/>
                   </svg>
+                  {formOpen ? 'Close' : 'Edit Inputs'}
                 </button>
 
                 {result && hasCalculated && (
-                  <button className="btn-download-pdf" onClick={handleDownloadQuotation} title="Download internal quotation comparison">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    Download Quotation
-                  </button>
-                )}
-                {result && quoteConfirmed && (
-                  <button className="btn-download-pdf" onClick={handleDownloadInvoice} title="Download client invoice">
+                  <button className="btn-download-pdf" onClick={handleDownloadQuotation} title="Download Cost Estimate">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/>
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Download Invoice
+                    Cost Estimate
                   </button>
                 )}
               </div>
-              {hasCalculated && (
-              <>
-              <CylinderTable
-                result={result}
-                orderQty={inputs.order_qty}
-                selectedIdx={selectedCylIdx}
-                onApproveCylinder={handleApproveCylinder}
-                approvingCyl={approvingCyl}
-                hasSavedCalc={Boolean(result?.calculation_id)}
-                inputWidth={parseFloat(inputs.width) || 0}
-                inputHeight={parseFloat(inputs.height) || 0}
-              />
-              <PricingPanel
-                result={result}
-                orderQty={inputs.order_qty}
-                selectedIdx={selectedCylIdx}
-                inputs={inputs}
-              />
-              </>
-              )}
+              {hasCalculated && (() => {
+                return (
+                <>
+                <CylinderTable
+                  result={result}
+                  orderQty={inputs.order_qty}
+                  selectedIdx={selectedCylIdx}
+                  onApproveCylinder={handleApproveCylinder}
+                  approvingCyl={approvingCyl}
+                  hasSavedCalc={Boolean(result?.calculation_id)}
+                  inputWidth={parseFloat(inputs.width) || 0}
+                  inputHeight={parseFloat(inputs.height) || 0}
+                  inputs={inputs}
+                />
+                <PricingPanel
+                  result={result}
+                  orderQty={inputs.order_qty}
+                  selectedIdx={selectedCylIdx}
+                  inputs={inputs}
+                  initialTier={activeTierKey ?? result?.selected_tier ?? undefined}
+                  onTierChange={handleTierChange}
+                />
+                </>
+              )
+              })()}
 
               {quoteConfirmed && (
                 <div className="confirm-quote-banner confirm-quote-banner--success">
@@ -840,26 +957,17 @@ export default function App() {
                     </svg>
                   </div>
                   <div className="confirm-quote-text">
-                    <div className="confirm-quote-title">Quotation confirmed</div>
+                    <div className="confirm-quote-title">Cost Estimate confirmed</div>
                     <div className="confirm-quote-sub">You can now download the PDF quote for the client.</div>
                   </div>
                   <div className="confirm-quote-actions">
-                    <button className="btn-download-pdf" onClick={handleDownloadQuotation} title="Download internal quotation comparison">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                      </svg>
-                      Download Quotation
-                    </button>
-                    <button className="btn-download-pdf" onClick={handleDownloadInvoice} title="Download client invoice">
+                    <button className="btn-download-pdf" onClick={handleDownloadInvoice} title="Download client quotation">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                         <polyline points="7 10 12 15 17 10"/>
                         <line x1="12" y1="15" x2="12" y2="3"/>
                       </svg>
-                      Download Invoice
+                      Quotation
                     </button>
                   </div>
                 </div>
@@ -877,10 +985,10 @@ export default function App() {
                     </svg>
                   </div>
                   <div className="confirm-quote-text">
-                    <div className="confirm-quote-title">Quotation saved successfully</div>
+                    <div className="confirm-quote-title">Cost Estimate saved successfully</div>
                     <div className="confirm-quote-sub">
                       {pendingConfirm.type === 'version' ? 'New version created. ' : ''}
-                      Do you want to confirm this quotation for the client?
+                      Do you want to confirm this cost estimate for the client?
                     </div>
                   </div>
                   <div className="confirm-quote-actions">
@@ -896,7 +1004,7 @@ export default function App() {
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                           </svg>
-                          Confirm Quotation
+                          Confirm Cost Estimate
                         </>
                       )}
                     </button>
@@ -916,8 +1024,8 @@ export default function App() {
 
           {activeView === 'dashboard'        && <Dashboard onNavigate={setActiveView} currentUser={currentUser} />}
           {activeView === 'pdf-preview'     && <PDFPreview />}
-          {activeView === 'comparison'      && <ComparisonPage />}
-          {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} onEditVersion={handleEditVersion} />}
+          {activeView === 'comparison'      && <ComparisonPage preloadedData={compareQuoteData} onClearPreload={() => setCompareQuoteData([])} onBack={() => setActiveView('history')} backLabel={compareQuoteData?.length > 0 ? 'Cancel Compare' : undefined} />}
+          {activeView === 'history'         && <QuoteHistory onEditCalc={handleEditCalc} onEditVersion={handleEditVersion} onCompareQuotes={(data) => { setCompareQuoteData(data); setActiveView('comparison') }} />}
           {activeView === 'catalogue-view'           && !isAdmin && <CatalogueManagement isAdmin={false} />}
           {activeView === 'catalogue'               && isAdmin && <CatalogueManagement isAdmin={isAdmin} />}
           {activeView === 'notification-management' && isAdmin && <NotificationManagementPage currentUser={currentUser} />}
@@ -929,7 +1037,7 @@ export default function App() {
       </div>
 
       <footer>
-        <strong>Chroma Print</strong> · Cost Estimation Intelligence · Label Estimator
+        <strong>Chroma Print</strong> · Cost Estimation Intelligence · v1.0
       </footer>
       <Toast />
     </>

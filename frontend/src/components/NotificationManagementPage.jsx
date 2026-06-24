@@ -1,16 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 
+function toUTC(dt) {
+  if (!dt) return null
+  const s = dt.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dt) ? dt : dt + 'Z'
+  return new Date(s)
+}
+
 function fmtDate(dt) {
-  if (!dt) return ''
-  return new Date(dt).toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  })
+  const d = toUTC(dt)
+  if (!d) return ''
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function fmtDateTime(dt) {
-  if (!dt) return ''
-  return new Date(dt).toLocaleString('en-IN', {
+  const d = toUTC(dt)
+  if (!d) return ''
+  return d.toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
@@ -99,6 +105,19 @@ export default function NotificationManagementPage({ currentUser }) {
     setMarking(null)
   }
 
+  const [markingAll, setMarkingAll] = useState(false)
+  async function handleMarkAllRead() {
+    setMarkingAll(true)
+    try {
+      await api.markAllNotificationsRead()
+      const now = new Date().toISOString()
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, is_read: true, read_by_name: currentUser?.username, read_at: now }))
+      )
+    } catch (_) {}
+    setMarkingAll(false)
+  }
+
   const unreadCount = notifications.filter(n => !n.is_read).length
   const readCount   = notifications.filter(n => n.is_read).length
 
@@ -117,9 +136,6 @@ export default function NotificationManagementPage({ currentUser }) {
           <div className="nm-sub">Track and acknowledge unconfirmed quote alerts</div>
         </div>
         <div className="nm-header-right">
-          {unreadCount > 0 && (
-            <span className="nm-badge">{unreadCount} unread</span>
-          )}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             background: 'var(--bg-raised)', border: '1px solid var(--border)',
@@ -154,8 +170,9 @@ export default function NotificationManagementPage({ currentUser }) {
                 value={intervalUnit}
                 onChange={e => setIntervalUnit(e.target.value)}
                 disabled={savingInterval}
+                className="nm-interval-select"
                 style={{
-                  border: 'none', background: 'transparent', color: 'var(--text)',
+                  border: 'none', background: 'var(--bg-input)', color: 'var(--text)',
                   fontSize: '0.78rem', padding: '0.25rem 0.35rem',
                   cursor: 'pointer', outline: 'none', fontWeight: 500,
                 }}
@@ -199,19 +216,29 @@ export default function NotificationManagementPage({ currentUser }) {
 
       {notifications.length > 0 && (
         <div className="nm-stats-bar">
-          <div className="nm-stat-item">
-            <span className="nm-stat-val">{notifications.length}</span>
-            <span className="nm-stat-label">Total</span>
-          </div>
-          <div className="nm-stat-divider" />
-          <div className="nm-stat-item">
-            <span className="nm-stat-val" style={{ color: '#ef4444' }}>{unreadCount}</span>
-            <span className="nm-stat-label">Unread</span>
-          </div>
-          <div className="nm-stat-divider" />
-          <div className="nm-stat-item">
-            <span className="nm-stat-val" style={{ color: 'var(--teal)' }}>{readCount}</span>
-            <span className="nm-stat-label">Acknowledged</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {unreadCount > 0 ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 600, color: '#f59e0b' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                {unreadCount} unread {unreadCount === 1 ? 'alert' : 'alerts'}
+              </span>
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--teal)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                All acknowledged
+              </span>
+            )}
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllRead}
+                disabled={markingAll}
+                className="nm-mark-all-btn"
+              >
+                {markingAll ? 'Marking…' : 'Mark all as read'}
+              </button>
+            )}
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.35rem' }}>
             {[
@@ -269,13 +296,6 @@ export default function NotificationManagementPage({ currentUser }) {
           {filtered.map(n => (
             <div key={n.id} className={`nm-card${n.is_read ? ' nm-card--read' : ''}`}>
               <div className="nm-card-top">
-                <div className="nm-card-icon">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                </div>
                 <div className="nm-card-title">{n.title}</div>
                 {!n.is_read && <span className="nm-unread-dot" role="img" aria-label="Unread" title="Unread" />}
                 <div className="nm-card-date">{fmtDate(n.updated_at)}</div>
@@ -285,31 +305,17 @@ export default function NotificationManagementPage({ currentUser }) {
 
               <div className="nm-card-meta">
                 {n.client_name && (
-                  <span className="nm-meta-tag nm-meta-tag--client">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                    </svg>
-                    {n.client_name}
-                  </span>
+                  <span className="nm-meta-tag nm-meta-tag--client">{n.client_name}</span>
                 )}
                 {n.order_name && (
-                  <span className="nm-meta-tag nm-meta-tag--order">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    {n.order_name}
-                  </span>
+                  <span className="nm-meta-tag nm-meta-tag--order">{n.order_name}</span>
                 )}
               </div>
 
               <div className="nm-card-footer">
                 <div className="nm-read-status">
                   {n.is_read ? (
-                    <span className="nm-reader-chip">
-                      <CheckIcon />
-                      Acknowledged by {n.read_by_name}
-                    </span>
+                    <span className="nm-reader-chip">Acknowledged by {n.read_by_name}</span>
                   ) : (
                     <span className="nm-not-read">Pending acknowledgement</span>
                   )}
@@ -325,10 +331,7 @@ export default function NotificationManagementPage({ currentUser }) {
                     onClick={() => handleMarkRead(n.id)}
                     disabled={marking === n.id}
                   >
-                    {marking === n.id
-                      ? <><span className="nm-spinner nm-spinner--sm" /> Marking…</>
-                      : <><CheckIcon /> Acknowledge</>
-                    }
+                    {marking === n.id ? 'Marking…' : 'Acknowledge'}
                   </button>
                 )}
               </div>

@@ -82,6 +82,36 @@ const FIELDS = [
     hint: 'CGST + SGST = Total GST. Set by admin as per applicable tax rate.',
   },
   {
+    section: 'Tax & Compliance',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    ),
+    rows: [
+      { key: 'hsn_sac_code', label: 'HSN Code', placeholder: 'e.g. 4821', maxLength: 30 },
+      { key: 'lut_number',   label: 'LUT Number',      placeholder: 'e.g. AD330421006857F (export only)', maxLength: 50 },
+    ],
+    hint: 'HSN code prints on the invoice line item. LUT number appears only when filled (for export orders).',
+  },
+  {
+    section: 'Bank Details',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    ),
+    rows: [
+      { key: 'bank_name',           label: 'Bank Name',           placeholder: 'e.g. State Bank of India', maxLength: 120 },
+      { key: 'bank_account_name',   label: 'Account Holder Name', placeholder: 'e.g. Chromaprint India Pvt Ltd', maxLength: 120 },
+      { key: 'bank_account_number', label: 'Account Number',      placeholder: 'e.g. 39812345678', maxLength: 30 },
+      { key: 'bank_ifsc',           label: 'IFSC Code',           placeholder: 'e.g. SBIN0001234', maxLength: 20 },
+      { key: 'bank_branch',         label: 'Branch',              placeholder: 'e.g. Coimbatore Main', maxLength: 120 },
+    ],
+    hint: 'Bank details print at the bottom of the client quotation to speed up payments.',
+  },
+  {
     section: 'Email / SMTP',
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

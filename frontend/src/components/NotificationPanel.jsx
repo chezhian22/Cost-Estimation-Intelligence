@@ -13,12 +13,16 @@ function timeAgo(dateStr) {
   return `${d}d ago`
 }
 
-export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
+export function NotificationBell({ unreadCount, onOpenChange, onRead, newNotifPopup = [], onDismissPopup }) {
   const [open, setOpen]             = useState(false)
   const [notifications, setNotifs]  = useState([])
   const [loading, setLoading]       = useState(false)
   const [panelPos, setPanelPos]     = useState({ top: 0, right: 0 })
-  const btnRef = useRef(null)
+  const [popupVisible, setPopupVisible] = useState(false)
+  const [popupPos, setPopupPos]     = useState({ top: 0, right: 0 })
+  const [popupKey, setPopupKey]     = useState(0)
+  const btnRef   = useRef(null)
+  const timerRef = useRef(null)
 
   function toggle() {
     const next = !open
@@ -28,13 +32,14 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
       const rect = btnRef.current?.getBoundingClientRect()
       if (rect) setPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right })
       loadNotifications()
+      if (popupVisible) dismissPopup()
     }
   }
 
   function loadNotifications() {
     setLoading(true)
     api.getNotifications()
-      .then(setNotifs)
+      .then(all => setNotifs(all.filter(n => !n.is_read)))
       .catch(() => {})
       .finally(() => setLoading(false))
   }
@@ -42,7 +47,7 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
   function handleMarkRead(id) {
     api.markNotificationRead(id)
       .then(() => {
-        setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
+        setNotifs(prev => prev.filter(n => n.id !== id))
         onRead?.()
       })
       .catch(() => {})
@@ -51,13 +56,19 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
   function handleMarkAllRead() {
     api.markAllNotificationsRead()
       .then(() => {
-        setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
+        setNotifs([])
         onRead?.()
       })
       .catch(() => {})
   }
 
-  // Click outside to close
+  function dismissPopup() {
+    setPopupVisible(false)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    onDismissPopup?.()
+  }
+
+  // Click outside to close panel
   useEffect(() => {
     if (!open) return
     function onClickOutside(e) {
@@ -73,7 +84,29 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
 
+  // Show popup toast when new notifications arrive
+  useEffect(() => {
+    if (!newNotifPopup || newNotifPopup.length === 0) {
+      setPopupVisible(false)
+      return
+    }
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setPopupPos({ top: rect.bottom + 10, right: window.innerWidth - rect.right })
+    setPopupVisible(true)
+    setPopupKey(k => k + 1)
+
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      setPopupVisible(false)
+      onDismissPopup?.()
+    }, 30_000)
+
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [newNotifPopup])
+
   const hasUnread = unreadCount > 0
+  const first     = newNotifPopup[0]
+  const extraCount = newNotifPopup.length - 1
 
   return (
     <>
@@ -93,6 +126,44 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
         )}
       </button>
 
+      {/* Popup toast anchored below the bell */}
+      {popupVisible && first && createPortal(
+        <div
+          key={popupKey}
+          className="notif-popup"
+          style={{ top: popupPos.top, right: popupPos.right }}
+        >
+          <div className="notif-popup-header">
+            <span className="notif-popup-label">New Alert</span>
+            {extraCount > 0 && (
+              <span className="notif-popup-extra">+{extraCount} more</span>
+            )}
+            <button className="notif-popup-close" onClick={dismissPopup} aria-label="Dismiss notification">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          <div className="notif-popup-title">{first.title}</div>
+          <div className="notif-popup-msg">{first.message}</div>
+
+          {(first.client_name || first.order_name) && (
+            <div className="notif-popup-meta">
+              {first.client_name && <span className="notif-popup-tag">{first.client_name}</span>}
+              {first.order_name  && <span className="notif-popup-tag">{first.order_name}</span>}
+            </div>
+          )}
+
+          <div className="notif-popup-progress">
+            <div key={popupKey} className="notif-popup-progress-bar" />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Dropdown panel */}
       {open && createPortal(
         <div
           id="notif-panel"
@@ -129,16 +200,9 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
             {!loading && notifications.map(n => (
               <div
                 key={n.id}
-                className={`notif-item${n.is_read ? ' notif-item--read' : ''}`}
-                onClick={() => !n.is_read && handleMarkRead(n.id)}
+                className="notif-item"
+                onClick={() => handleMarkRead(n.id)}
               >
-                <div className="notif-item-icon">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                </div>
                 <div className="notif-item-body">
                   <div className="notif-item-title">{n.title}</div>
                   <div className="notif-item-msg">{n.message}</div>
@@ -150,10 +214,16 @@ export function NotificationBell({ unreadCount, onOpenChange, onRead }) {
                     <span>{timeAgo(n.updated_at)}</span>
                   </div>
                 </div>
-                {!n.is_read && <span className="notif-unread-dot" />}
+                <span className="notif-unread-dot" />
               </div>
             ))}
           </div>
+
+          {!loading && notifications.length > 0 && (
+            <div className="notif-panel-footer">
+              {notifications.length} unread alert{notifications.length !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>,
         document.body
       )}

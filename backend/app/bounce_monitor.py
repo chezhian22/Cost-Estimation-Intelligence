@@ -6,11 +6,12 @@ import imaplib
 import logging
 import re
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from . import crud, models
+from .auth import decrypt_smtp_password
 from .database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -134,14 +135,13 @@ def check_bounces_once(db: Session) -> int:
     updated = 0
     try:
         mail = _IMAP4_SSL_IPv4('imap.gmail.com', 993)
-        mail.login(settings.smtp_user, settings.smtp_password)
+        mail.login(settings.smtp_user, decrypt_smtp_password(settings.smtp_password))
         mail.select('INBOX')
 
-        # Search last 7 days — no UNSEEN filter so we catch bounces the user
-        # already read in the Gmail browser before the monitor ran.
-        # Messages we process are marked \Seen afterwards so they won't be
-        # re-fetched on the next cycle (db query for status='sent' also guards).
-        since = (datetime.utcnow() - timedelta(days=7)).strftime('%d-%b-%Y')
+        # Search only today — bounces for older emails are irrelevant and
+        # scanning the full inbox is slow. Messages we process are marked \Seen
+        # afterwards so they won't be re-fetched on the next cycle.
+        since = datetime.utcnow().strftime('%d-%b-%Y')
         ids: set[bytes] = set()
         for criterion in [
             f'FROM "mailer-daemon@googlemail.com" SINCE {since}',
@@ -181,12 +181,14 @@ def check_bounces_once(db: Session) -> int:
                 logger.info("Bounce monitor: failed recipient identified as %s", failed_email)
                 reason = _extract_reason(msg)
 
-                # Find the most-recent 'sent' log to this address
+                # Find the most-recent 'sent' log to this address sent today
+                today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
                 log = (
                     db.query(models.EmailLog)
                     .filter(
                         models.EmailLog.to_email.ilike(failed_email),
                         models.EmailLog.status == 'sent',
+                        models.EmailLog.sent_at >= today_start,
                     )
                     .order_by(models.EmailLog.sent_at.desc())
                     .first()
@@ -243,7 +245,7 @@ def check_bounces_debug(db: Session) -> dict:
         "error": None,
     }
 
-    since = (datetime.utcnow() - timedelta(days=7)).strftime('%d-%b-%Y')
+    since = datetime.utcnow().strftime('%d-%b-%Y')
     criteria = [
         f'FROM "mailer-daemon@googlemail.com" SINCE {since}',
         f'FROM "mailer-daemon@google.com" SINCE {since}',
@@ -257,7 +259,7 @@ def check_bounces_debug(db: Session) -> dict:
 
     try:
         mail = _IMAP4_SSL_IPv4('imap.gmail.com', 993)
-        mail.login(settings.smtp_user, settings.smtp_password)
+        mail.login(settings.smtp_user, decrypt_smtp_password(settings.smtp_password))
         mail.select('INBOX')
         result["imap_connected"] = True
 

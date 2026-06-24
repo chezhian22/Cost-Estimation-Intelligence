@@ -356,6 +356,21 @@ def update_selected_cylinder(
     return obj
 
 
+def update_selected_tier(
+    db: Session, calc_id: int, selected_tier: str, user_id: int = None
+) -> Optional[models.Calculation]:
+    from datetime import datetime as _dt
+    obj = db.query(models.Calculation).filter(models.Calculation.id == calc_id).first()
+    if not obj:
+        return None
+    obj.selected_tier = selected_tier
+    if user_id: obj.updated_by_id = user_id
+    obj.updated_at = _dt.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
 def list_versions(db: Session, calc_id: int) -> List[models.CalculationVersion]:
     return (
         db.query(models.CalculationVersion)
@@ -481,9 +496,12 @@ def update_company_logo(db: Session, logo_data) -> models.CompanySettings:
 
 def upsert_company_settings(db: Session, data: schemas.CompanySettingsUpdate) -> models.CompanySettings:
     from datetime import datetime as _dt
+    from .auth import encrypt_smtp_password
     obj = get_company_settings(db)
     fields = data.model_dump(exclude_unset=True)
     for key, val in fields.items():
+        if key == "smtp_password" and val:
+            val = encrypt_smtp_password(val)
         setattr(obj, key, val)
     obj.updated_at = _dt.utcnow()
     db.commit()
@@ -643,23 +661,6 @@ def mark_all_notifications_read(db: Session, user_id: int) -> None:
 def upsert_order_notification(
     db: Session, order_id: int, client_id: Optional[int], title: str, message: str
 ) -> models.Notification:
-    from datetime import datetime as _dt
-    existing = (
-        db.query(models.Notification)
-        .filter(
-            models.Notification.order_id == order_id,
-            models.Notification.notification_type == "unconfirmed_quote",
-        )
-        .first()
-    )
-    if existing:
-        existing.updated_at = _dt.utcnow()
-        existing.is_read    = False
-        existing.read_by_id = None
-        existing.read_at    = None
-        db.commit()
-        db.refresh(existing)
-        return existing
     obj = models.Notification(
         title=title,
         message=message,

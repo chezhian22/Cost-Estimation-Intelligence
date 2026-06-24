@@ -1,4 +1,4 @@
-"""Background task: periodically flag orders with no confirmed quotation."""
+﻿"""Background task: periodically flag orders with no confirmed quotation."""
 
 import asyncio
 import logging
@@ -38,8 +38,8 @@ async def _run_check() -> None:
                     db,
                     order_id=order.id,
                     client_id=order.client_id,
-                    title=f"Unconfirmed quotation — {client_name}",
-                    message=f'Order "{order.name}" under {client_name} has no confirmed quotation.',
+                    title=f"Unconfirmed cost estimate — {client_name}",
+                    message=f'Order "{order.name}" under {client_name} has no confirmed cost estimate.',
                 )
     finally:
         db.close()
@@ -56,3 +56,4 @@ def _order_has_confirmed(calcs: list, db) -> bool:
         if ver:
             return True
     return False
+

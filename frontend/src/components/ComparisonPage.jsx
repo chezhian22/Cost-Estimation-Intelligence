@@ -398,37 +398,18 @@ function ResultsTable({ slots, results }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function ComparisonPage() {
+export default function ComparisonPage({ preloadedData = [], onClearPreload, onBack, backLabel }) {
   const [count, setCount]         = useState(2)
   const [slots, setSlots]         = useState(() => Array.from({ length: 2 }, (_, i) => makeSlot(i)))
   const [results, setResults]     = useState(null)
   const [comparing, setComparing] = useState(false)
   const [error, setError]         = useState(null)
 
-  function handleCountChange(n) {
-    setCount(n)
-    setSlots((prev) => {
-      if (n > prev.length) {
-        // append new empty slots
-        return [...prev, ...Array.from({ length: n - prev.length }, (_, i) => makeSlot(prev.length + i))]
-      }
-      // trim slots (keep existing data for lower indices)
-      return prev.slice(0, n)
-    })
-    setResults(null)
-    setError(null)
-  }
-
-  function updateSlot(i, patch) {
-    setSlots((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
-    setResults(null)
-  }
-
-  async function handleCompare() {
+  async function runCompare(slotsToCompare) {
     setComparing(true)
     setError(null)
     try {
-      const res = await Promise.all(slots.map((slot) => {
+      const res = await Promise.all(slotsToCompare.map((slot) => {
         if (slot.quoteResult) return Promise.resolve(slot.quoteResult)
         return api.calculate({
           width:           parseFloat(slot.width)           || 1,
@@ -447,6 +428,61 @@ export default function ComparisonPage() {
     } finally {
       setComparing(false)
     }
+  }
+
+  useEffect(() => {
+    if (!preloadedData || preloadedData.length < 2) return
+    const items = preloadedData.slice(0, 4)
+    setCount(items.length)
+    setResults(null)
+    setError(null)
+    if (onClearPreload) onClearPreload()
+
+    const load = async () => {
+      // Fetch full calc data for items that have an id but no saved result
+      const fullItems = await Promise.all(items.map((item) =>
+        (!item.result && item.id)
+          ? api.getCalculation(item.id).catch(() => item)
+          : Promise.resolve(item)
+      ))
+      const newSlots = fullItems.map((full, i) => ({
+        ...makeSlot(i),
+        label:           full.ref_code || full.order_name || '',
+        width:           full.width,
+        height:          full.height,
+        yield_pct:       full.yield_pct,
+        substrate_name:  full.substrate_name ?? '',
+        substrate_price: full.substrate_price,
+        foil_cost:       full.foil_cost,
+        exchange_rate:   full.exchange_rate,
+        quoteResult:     full.result ?? null,
+        quoteId:         full.id ?? null,
+      }))
+      setSlots(newSlots)
+      runCompare(newSlots)
+    }
+    load()
+  }, [preloadedData])
+
+  function handleCountChange(n) {
+    setCount(n)
+    setSlots((prev) => {
+      if (n > prev.length) {
+        return [...prev, ...Array.from({ length: n - prev.length }, (_, i) => makeSlot(prev.length + i))]
+      }
+      return prev.slice(0, n)
+    })
+    setResults(null)
+    setError(null)
+  }
+
+  function updateSlot(i, patch) {
+    setSlots((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
+    setResults(null)
+  }
+
+  async function handleCompare() {
+    runCompare(slots)
   }
 
   const canCompare = slots.every((s) =>
@@ -501,6 +537,29 @@ export default function ComparisonPage() {
 
   return (
     <div className="cmp-page">
+      {/* ── Back navigation ── */}
+      {onBack && (
+        <div className="cmp-nav-row">
+          <button className={`cmp-back-btn${backLabel ? ' cmp-back-btn--cancel' : ''}`} onClick={onBack}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            {backLabel || 'Estimate Management'}
+          </button>
+          <div className="cmp-breadcrumb">
+            <span className="cmp-breadcrumb-item">Estimating</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', opacity: 0.7, flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <span className="cmp-breadcrumb-item">Estimate Management</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--teal)', opacity: 0.7, flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <span className="cmp-breadcrumb-item cmp-breadcrumb-item--active">Estimate Comparison</span>
+          </div>
+        </div>
+      )}
+
       {/* count picker at top */}
       <section className="card cmp-header-card">
         <div className="card-header">

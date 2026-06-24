@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+﻿import React, { useEffect, useState, useMemo } from 'react'
 import { api } from '../../api'
 import './Dashboard.css'
 import {
@@ -113,7 +113,8 @@ function HorizTooltip({ active, payload, label }) {
   )
 }
 
-export default function Dashboard({ onNavigate }) {
+export default function Dashboard({ onNavigate, currentUser }) {
+  const isAdmin = currentUser?.role === 'admin'
   const [clients, setClients] = useState([])
   const [calcs,   setCalcs]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -225,8 +226,87 @@ export default function Dashboard({ onNavigate }) {
     return `${MONTH_LABELS[start.getMonth()]} – ${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`
   })()
 
+  const quickActions = [
+    {
+      id: 'calculator',
+      label: 'New Estimate',
+      desc: 'Estimate label costs & cylinder fit',
+      color: '#1ABCAB',
+      bg: 'rgba(26,188,171,0.12)',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          <line x1="7" y1="8" x2="7" y2="12"/><line x1="12" y1="6" x2="12" y2="12"/><line x1="17" y1="10" x2="17" y2="12"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'client-orders',
+      label: 'Clients & Orders',
+      desc: 'Manage clients, jobs and quotes',
+      color: '#0ea5e9',
+      bg: 'rgba(14,165,233,0.12)',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'history',
+      label: 'Manage Estimates',
+      desc: 'Browse and review all cost estimates',
+      color: '#f59e0b',
+      bg: 'rgba(245,158,11,0.12)',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+      ),
+    },
+    ...(isAdmin ? [{
+      id: 'notification-management',
+      label: 'Notifications',
+      desc: 'Review and acknowledge alerts',
+      color: '#8b5cf6',
+      bg: 'rgba(139,92,246,0.12)',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      ),
+    }] : []),
+  ]
+
   return (
     <div className="db-page">
+
+      {/* Quick Actions — top strip */}
+      <section className="db-section db-section--flush">
+        <h2 className="db-section-title">Quick Navigation</h2>
+        <div className="db-qa-strip">
+          {quickActions.map(a => (
+            <button key={a.id} className="db-qa-card" onClick={() => onNavigate?.(a.id)}>
+              <span className="db-qa-icon" style={{ background: a.bg, color: a.color }}>{a.icon}</span>
+              <span className="db-qa-text">
+                <span className="db-qa-label">{a.label}</span>
+                <span className="db-qa-desc">{a.desc}</span>
+              </span>
+              <span className="db-qa-arrow" style={{ color: a.color }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Section 1 — KPI Cards */}
       <section className="db-section">
@@ -356,49 +436,9 @@ export default function Dashboard({ onNavigate }) {
         </div>
       </section>
 
-      {/* Section 4 — Quick Actions */}
-      <section className="db-section">
-        <h2 className="db-section-title">Quick Actions</h2>
-        <div className="db-actions-row">
-          <button className="db-action-card db-action-card--wide" onClick={() => onNavigate?.('calculator')}>
-            <span className="db-action-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <line x1="8" y1="21" x2="16" y2="21"/>
-                <line x1="12" y1="17" x2="12" y2="21"/>
-                <line x1="7" y1="8" x2="7" y2="12"/>
-                <line x1="12" y1="6" x2="12" y2="12"/>
-                <line x1="17" y1="10" x2="17" y2="12"/>
-              </svg>
-            </span>
-            <span className="db-action-label">Open Calculator</span>
-          </button>
-          <button className="db-action-card" onClick={() => onNavigate?.('client-orders')}>
-            <span className="db-action-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <line x1="19" y1="8" x2="19" y2="14"/>
-                <line x1="22" y1="11" x2="16" y2="11"/>
-              </svg>
-            </span>
-            <span className="db-action-label">Add Customer</span>
-          </button>
-          <button className="db-action-card" onClick={() => onNavigate?.('client-orders')}>
-            <span className="db-action-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-                <polyline points="10 9 9 9 8 9"/>
-              </svg>
-            </span>
-            <span className="db-action-label">View Orders</span>
-          </button>
-        </div>
-      </section>
-
     </div>
   )
 }
+
+
+

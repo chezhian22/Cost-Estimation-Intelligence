@@ -103,23 +103,53 @@
 .db-activity-sep    { color: var(--text-dim) }
 .db-activity-time   { color: var(--text-dim) }
 
-/* ─── Quick Actions ─── */
-.db-actions-row { display: flex; gap: 1rem; flex-wrap: wrap }
-.db-action-card {
+/* ─── Quick Actions Strip ─── */
+.db-section--flush { padding-top: 0 }
+
+.db-qa-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 520px) { .db-qa-strip { grid-template-columns: 1fr } }
+
+.db-qa-card {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  padding: 1.6rem 2rem;
+  gap: 0.85rem;
+  padding: 0.95rem 1.1rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
   font-family: inherit;
-  min-width: 160px;
-  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
 }
-.db-action-card:hover { border-color: var(--teal); background: rgba(54,229,194,0.06) }
-.db-action-card--wide { min-width: 230px }
-.db-action-icon  { display: flex; align-items: center; justify-content: center; color: var(--teal); transform: scale(1.15) }
-.db-action-label { font-size: 0.84rem; font-weight: 600; color: var(--text-muted) }
+.db-qa-card:hover {
+  border-color: var(--teal);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+.db-qa-card:active { transform: translateY(0) }
+
+.db-qa-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.db-qa-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  flex: 1;
+  min-width: 0;
+}
+.db-qa-label { font-size: 0.88rem; font-weight: 700; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.db-qa-desc  { font-size: 0.74rem; color: var(--text-dim); line-height: 1.4; }
+.db-qa-arrow { display: flex; align-items: center; flex-shrink: 0; opacity: 0; transition: opacity 0.15s, transform 0.15s }
+.db-qa-card:hover .db-qa-arrow { opacity: 1; transform: translateX(2px) }

@@ -239,3 +239,4 @@ VITE_API_BASE=https://api.example.com npm run build
 - `foil_cost` (₹/m²) is added to `substrate_price` before computing the per-label cost, so all rate tiers and final pricing reflect both material costs. Set it to 0 if no foil is used.
 - The calculation logic matches the original Excel formulas — default inputs produce a best match of 63.5 × 146.67 mm at ₹986.118 / 1000 labels.
 - **Edit versions** — any saved quote can be revised to create a new version. Approving a version is shown under the order in the Customers & Orders page.
+ 

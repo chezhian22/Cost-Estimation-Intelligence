@@ -18,7 +18,7 @@ function pasteNumbersOnly(e) {
 export default function InputPanel({
   inputs, substrates, onChange, onSubstrateSelect, onCalculate, loading,
   onClientChange, onOrderChange, fieldErrors = {},
-  initialClientId = null, initialOrderId = null,
+  initialClientId = null, initialOrderId = null, onReset,
 }) {
   return (
     <div className="sidebar-form">

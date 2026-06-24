@@ -7,11 +7,29 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import bcrypt
+from cryptography.fernet import Fernet, InvalidToken
 from jose import JWTError, jwt
 
 SECRET_KEY = os.getenv("SECRET_KEY", "chroma-print-secret-key-2024")
 ALGORITHM  = "HS256"
 TOKEN_EXPIRE_HOURS = 8
+
+# Fernet key derived from SECRET_KEY — used to encrypt SMTP passwords at rest
+_fernet = Fernet(base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest()))
+
+
+def encrypt_smtp_password(plain: str) -> str:
+    return _fernet.encrypt(plain.encode()).decode()
+
+
+def decrypt_smtp_password(stored: str) -> str:
+    """Decrypt a Fernet-encrypted SMTP password. Falls back to plaintext for legacy values."""
+    if not stored:
+        return stored
+    try:
+        return _fernet.decrypt(stored.encode()).decode()
+    except (InvalidToken, Exception):
+        return stored
 
 
 def _prepare(plain: str) -> bytes:

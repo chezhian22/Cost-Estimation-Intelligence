@@ -1,4 +1,4 @@
-// Two PDF generators:
+﻿// Two PDF generators:
 //   generateInvoicePDF  — client-facing invoice (no internal data)
 //   generateQuotationPDF — internal comparison doc (includes costs, both cylinders)
 
@@ -48,12 +48,13 @@ function openWindow(html) {
 // Used by PDFPreview for iframe rendering, and by generateInvoicePDF / generatePDF
 // ─────────────────────────────────────────────────────────────────────────────
 export function buildPDFHtml(
-  { client = {}, order = {}, inputs = {}, approved_cylinder = {}, pricing = {} },
+  { client = {}, order = {}, inputs = {}, approved_cylinder = {}, pricing = {}, quotation_date = null },
   companySettings = {}
 ) {
-  const today   = new Date()
-  const year    = today.getFullYear()
-  const invNo   = `INV-${year}-${Math.floor(1000 + Math.random() * 9000)}`
+  const today    = quotation_date ? new Date(quotation_date) : new Date()
+  const year     = today.getFullYear()
+  const quoteRef = order.ref || `QT-${year}-${Math.floor(1000 + Math.random() * 9000)}`
+
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   const cyl = approved_cylinder
@@ -89,6 +90,15 @@ export function buildPDFHtml(
   const coEmail   = companySettings.email        || 'sales@chromaprintindia.com'
   const coWebsite = companySettings.website      || ''
   const coGst     = companySettings.gst_number   || ''
+  const coHsn     = companySettings.hsn_sac_code || ''
+  const coLut     = companySettings.lut_number   || ''
+  const coBank    = (companySettings.bank_name && companySettings.bank_account_number) ? {
+    name:    companySettings.bank_name,
+    accName: companySettings.bank_account_name   || '',
+    accNo:   companySettings.bank_account_number || '',
+    ifsc:    companySettings.bank_ifsc           || '',
+    branch:  companySettings.bank_branch         || '',
+  } : null
   const coAddrParts = [
     companySettings.address,
     companySettings.location,
@@ -98,13 +108,15 @@ export function buildPDFHtml(
   const coAddr = coAddrParts.length ? coAddrParts.join(', ') : 'Coimbatore – 641 022, India'
   const coMetaLines = [coAddr, [coPhone, coEmail].filter(Boolean).join(' | ')].filter(Boolean)
   if (coGst) coMetaLines.push(`GSTIN: ${coGst}`)
+  if (coHsn) coMetaLines.push(`HSN: ${coHsn}`)
+  if (coLut) coMetaLines.push(`LUT No: ${coLut}`)
   const coLogo = companySettings.logo || ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${invNo}</title>
+<title>Quotation</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1e293b;background:#f0f2f5;
@@ -211,6 +223,12 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:700}
 .footer-terms strong{color:#1e293b;font-size:12px}
 .footer-contact{text-align:right;font-size:11px;color:#2d3748;font-weight:500;line-height:2}
 .footer-contact strong{color:#1abcab;display:block;font-size:13px;font-weight:800;margin-bottom:3px}
+.bank-section{padding:16px 36px;border-top:1px solid #f1f5f9;background:#fafbfc}
+.bank-title{font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;margin-bottom:10px}
+.bank-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0.5rem 1rem}
+.bank-item{display:flex;flex-direction:column;gap:2px}
+.bank-lbl{font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em}
+.bank-val{font-size:12px;font-weight:700;color:#1e293b}
 @media print{body{background:#fff}.invoice{margin:0;box-shadow:none;border-radius:0}.print-bar{display:none}}
 </style>
 </head>
@@ -230,8 +248,8 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:700}
       </div>
     </div>
     <div class="hdr-right">
-      <div class="doc-type">INVOICE</div>
-      <div class="doc-num"># ${invNo}</div>
+      <div class="doc-type">QUOTATION</div>
+
       <div class="doc-date">Date: ${dateStr}</div>
       <div class="doc-valid">Valid: 30 days from issue</div>
     </div>
@@ -243,17 +261,17 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:700}
     <div class="bill-detail">
       ${[client.location, client.email, client.phone].filter(Boolean).join('<br>')}
     </div>
-    ${order.label || order.order_id ? `
+    ${order.label || quoteRef ? `
     <div class="order-ref">
-      ${order.label    ? `<strong>Order:</strong> ${order.label}<br>` : ''}
-      ${order.order_id ? `<strong>Ref:</strong>&nbsp; ${order.order_id}` : ''}
+      ${order.label ? `<strong>Order:</strong> ${order.label}<br>` : ''}
+      <strong>Ref:</strong>&nbsp; ${quoteRef}
     </div>` : ''}
   </div>
   <div class="items-wrap">
     <table class="items">
       <thead>
         <tr>
-          <th style="width:50%">Item</th><th>Qty</th><th>Rate</th><th>Amount</th>
+          <th style="width:50%">Item / Description</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Amount</th>
         </tr>
       </thead>
       <tbody>
@@ -262,6 +280,7 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:700}
             <div class="item-main">Pressure Sensitive Labels</div>
             ${subLine ? `<div class="item-sub">${subLine}</div>` : ''}
           </td>
+          <td style="text-align:center;font-size:12px;color:#50607a">${coHsn || '—'}</td>
           <td>${qty > 0 ? qty.toLocaleString('en-IN') + ' labels' : '—'}</td>
           <td>&#8377;&nbsp;${ratePerLabel.toFixed(4)}&nbsp;/ label</td>
           <td>&#8377;&nbsp;${ind(subtotal)}</td>
@@ -302,6 +321,17 @@ table.items tbody td:not(:first-child){text-align:right;font-weight:700}
       ${!hasTax ? `<p class="gst-note">* GST will be charged as applicable</p>` : ''}
     </div>
   </div>
+  ${coBank ? `
+  <div class="bank-section">
+    <div class="bank-title">Payment / Bank Details</div>
+    <div class="bank-grid">
+      <div class="bank-item"><span class="bank-lbl">Bank</span><span class="bank-val">${coBank.name}</span></div>
+      ${coBank.accName ? `<div class="bank-item"><span class="bank-lbl">Account Name</span><span class="bank-val">${coBank.accName}</span></div>` : ''}
+      <div class="bank-item"><span class="bank-lbl">Account No.</span><span class="bank-val">${coBank.accNo}</span></div>
+      ${coBank.ifsc   ? `<div class="bank-item"><span class="bank-lbl">IFSC</span><span class="bank-val">${coBank.ifsc}</span></div>` : ''}
+      ${coBank.branch ? `<div class="bank-item"><span class="bank-lbl">Branch</span><span class="bank-val">${coBank.branch}</span></div>` : ''}
+    </div>
+  </div>` : ''}
   <div class="inv-footer">
     <div class="footer-terms">
       <strong>Terms &amp; Conditions</strong><br>
@@ -334,7 +364,7 @@ export function generatePDF(payload, companySettings = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT 2 — Internal Quotation Comparison
+// DOCUMENT 2 — Internal Cost Estimate Comparison
 // FOR MANAGER REVIEW ONLY — includes substrate cost, yield, both cylinders.
 // ─────────────────────────────────────────────────────────────────────────────
 export function generateQuotationPDF(
@@ -511,7 +541,7 @@ export function generateQuotationPDF(
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${quoteNo} — Internal Quotation</title>
+<title>${quoteNo} — Internal Cost Estimate</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;background:#f0f2f5;
@@ -631,13 +661,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
       <div class="co-name">${coName}</div>
       <div class="co-sub">Label Printing &amp; Packaging</div>
       <div class="co-meta">${coAddr}<br>${coPhone} &nbsp;|&nbsp; ${coEmail}</div>
-      ${coGst ? `<div class="co-gst">GSTIN: ${coGst}</div>` : ''}
+      ${coGst  ? `<div class="co-gst">GSTIN: ${coGst}</div>` : ''}
     </div>
     <div class="hdr-right">
-      <div class="doc-type">QUOTATION</div>
+      <div class="doc-type">COST ESTIMATE</div>
       <div class="int-badge">INTERNAL — NOT FOR CLIENT</div>
       <div class="doc-num"># ${quoteNo}</div>
-      <div class="doc-meta">Date: ${dateStr}<br>Valid Until: ${validDate}</div>
+      <div class="doc-meta">Date: ${dateStr}</div>
     </div>
   </div>
 
@@ -649,20 +679,17 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
       <div class="meta-head">Bill To</div>
       <div class="client-name">${client.name || 'N/A'}</div>
       ${client.location ? `<div class="client-detail">${client.location}</div>` : ''}
-      ${client.email ? `<div class="client-detail">&#9993; ${client.email}</div>` : ''}
-      ${client.phone ? `<div class="client-detail">&#128222; ${client.phone}</div>` : ''}
-      ${order.label || order.order_id || order.ref ? `
+      ${client.email ? `<div class="client-detail">${client.email}</div>` : ''}
+      ${client.phone ? `<div class="client-detail">${client.phone}</div>` : ''}
+      ${order.label ? `
       <div class="order-ref">
-        ${order.label    ? `<strong>Order:</strong> ${order.label}<br>` : ''}
-        ${order.order_id ? `<strong>Ref:</strong> ${order.order_id}<br>` : ''}
-        ${order.ref      ? `<strong>Version:</strong> ${order.ref}` : ''}
+        ${order.label    ? `<strong>Order:</strong> ${order.label}` : ''}
       </div>` : ''}
     </div>
     <div class="meta-col">
       <div class="meta-head">Quote Details</div>
       <div class="qd-row"><span class="qd-lbl">Quote No.</span><span class="qd-val">${quoteNo}</span></div>
       <div class="qd-row"><span class="qd-lbl">Date Issued</span><span class="qd-val">${dateStr}</span></div>
-      <div class="qd-row"><span class="qd-lbl">Valid Until</span><span class="qd-val">${validDate}</span></div>
       ${preparedBy ? `<div class="qd-row"><span class="qd-lbl">Prepared By</span><span class="qd-val">${preparedBy}</span></div>` : ''}
     </div>
   </div>
@@ -739,3 +766,4 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a2e;backgro
 
   openWindow(html)
 }
+
